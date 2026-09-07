@@ -34,7 +34,7 @@ async function shoot(name) {
 }
 
 async function openAndShoot() {
-  win = new BrowserWindow({ width: 1280, height: 820, show: false, frame: false, backgroundColor: '#F6F4F1', webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') } })
+  win = new BrowserWindow({ width: 1280, height: 820, show: false, frame: false, backgroundColor: '#FAF9F7', webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') } })
   await win.loadURL(CONSOLE_URL)
   // 强制显示免责声明并截图，再点击同意继续
   await win.webContents.executeJavaScript(`localStorage.removeItem('disclaimerAccepted'); location.reload(); true`)

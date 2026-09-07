@@ -2,7 +2,7 @@
  * 控制台 UI（软件主界面）
  *
  * 设计依据：taste-skill（反 AI 味设计）+ impeccable（Operate 模式质量底线）
- * - 色彩：冷灰中性底 + 单一 teal 主强调；成功/错误/警告为语义色
+ * - 色彩：暖白底 + 单一橙色主强调（与软件图标同款 #F78A46）；成功/错误/警告为语义色
  * - 无：渐变文字、玻璃拟态、彩色左边框、等大图标卡墙、眉毛标签、emoji 图标
  * - 图标：内联 SVG，统一 1.5 描边
  * - 动效：克制的 hover 过渡与按压反馈
@@ -341,10 +341,10 @@ export function getConsolePage(status: ConsoleStatus, token: string): string {
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --canvas:#F6F4F1;--surface:#FFFFFF;--surface-2:#F1ECE7;
+  --canvas:#FAF9F7;--surface:#FFFFFF;--surface-2:#F1ECE7;
   --text:#211B17;--text-2:#6B5B51;--text-3:#9A8B80;
   --border:#E9E0D8;
-  --accent:#C24E2E;--accent-strong:#A83F22;--accent-weak:#FBE9E1;
+  --accent:#F78A46;--accent-strong:#E0702A;--accent-weak:#FFF1E5;
   --ok:#178A5B;--err:#D64545;--warn:#B7791F;
   --radius-lg:14px;--radius-sm:9px;
   --font:-apple-system,"Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
@@ -411,10 +411,10 @@ body{font-family:var(--font);background:var(--canvas);color:var(--text);font-siz
 .section-more{font-size:12px;color:var(--text-3)}
 .field-label{font-size:12.5px;font-weight:600;color:var(--text-2)}
 .field-input{height:38px;padding:0 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;color:var(--text);background:#fff;outline:none;transition:border-color .12s ease,box-shadow .12s ease;box-sizing:border-box}
-.field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,78,46,.13)}
+.field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(247,138,70,.13)}
 .field-hint{font-size:12px;color:var(--text-3);line-height:1.7;margin:0}
 .cfg-msg{font-size:12.5px;font-weight:600}
-.drag-mask{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;background:rgba(194,78,46,.07);pointer-events:none}
+.drag-mask{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;background:rgba(247,138,70,.07);pointer-events:none}
 .drag-mask.show{display:flex}
 .drag-box{border:2px dashed var(--accent);border-radius:16px;background:var(--surface);padding:36px 60px;text-align:center;color:var(--accent);font-size:15px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.12)}
 .drag-box small{display:block;margin-top:6px;font-size:12px;font-weight:400;color:var(--text-2)}
@@ -490,11 +490,11 @@ tr:hover td{background:#FCFAF8}
 .disclaimer-scroll::-webkit-scrollbar{width:10px}
 .disclaimer-scroll::-webkit-scrollbar-thumb{background:#D8CFC6;border-radius:5px}
 .disclaimer-scroll h3{font-size:15.5px;font-weight:700;margin:0 0 10px;color:var(--text-1)}
-.disclaimer-scroll h4{font-size:13.5px;font-weight:600;margin:14px 0 6px;color:var(--accent-deep,#B45309)}
+.disclaimer-scroll h4{font-size:13.5px;font-weight:600;margin:14px 0 6px;color:var(--accent-deep,#C2601F)}
 .disclaimer-scroll p{margin:4px 0;text-align:justify}
 /* ===== 检查更新弹窗 ===== */
 .update-modal{max-width:540px;width:min(540px,92vw)}
-.spinner{width:15px;height:15px;border:2px solid rgba(0,0,0,0.14);border-top-color:var(--accent,#E8873A);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+.spinner{width:15px;height:15px;border:2px solid rgba(0,0,0,0.14);border-top-color:var(--accent,#F78A46);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* ===== 二维码签到弹窗 ===== */
 .modal-mask{position:fixed;inset:0;z-index:990;display:flex;align-items:center;justify-content:center;background:rgba(33,27,23,.42)}
@@ -507,7 +507,7 @@ tr:hover td{background:#FCFAF8}
 .modal-close:hover{background:var(--surface-2);color:var(--text)}
 .modal-body{padding:20px 18px}
 .qr-drop{border:2px dashed var(--accent);border-radius:14px;background:var(--accent-weak);padding:30px 20px;text-align:center;color:var(--accent);transition:background .12s ease}
-.qr-drop.drag{border-color:var(--accent-strong);background:#F8DCCD}
+.qr-drop.drag{border-color:var(--accent-strong);background:#FBE3CE}
 .qr-drop>svg{width:44px;height:44px;margin-bottom:10px}
 .qr-drop-text{font-size:14.5px;font-weight:600;color:var(--text)}
 .qr-drop-sub{font-size:12.5px;color:var(--text-2);margin-top:5px}
@@ -526,7 +526,7 @@ tr:hover td{background:#FCFAF8}
 .content::-webkit-scrollbar{width:10px}
 .content::-webkit-scrollbar-thumb{background:#DCD0C6;border-radius:5px;border:2px solid var(--canvas)}
 .content::-webkit-scrollbar-thumb:hover{background:#C8B8AC}
-::selection{background:rgba(194,78,46,.15)}
+::selection{background:rgba(247,138,70,.15)}
 
 /* ===== 签到趋势 ===== */
 #trendChart svg{display:block;width:100%;max-height:180px}
@@ -841,7 +841,7 @@ tr:hover td{background:#FCFAF8}
       <div id="updateBody" style="font-size:13px;color:var(--text-1);line-height:1.8"></div>
       <div id="updateBar" style="display:none;margin-top:14px">
         <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
-          <div id="updateBarFill" style="height:100%;width:0%;background:var(--accent,#E8873A);transition:width .2s"></div>
+          <div id="updateBarFill" style="height:100%;width:0%;background:var(--accent,#F78A46);transition:width .2s"></div>
         </div>
         <div id="updateBarText" style="font-size:12px;color:var(--text-3);margin-top:6px">正在下载安装包…</div>
       </div>
