@@ -1,5 +1,15 @@
 # 学习通自动签到助手（ChaoXing Auto Sign）
 
+<div align="center">
+
+[![Release](https://custom-icon-badges.demolab.com/github/v/release/liixnglinb/superstar-checkin?style=flat-square&logo=tag&label=%E6%9C%80%E6%96%B0%E7%89%88&labelColor=0d1117&color=2da44e)](https://github.com/liixnglinb/superstar-checkin/releases)
+[![License](https://custom-icon-badges.demolab.com/github/license/liixnglinb/superstar-checkin?style=flat-square&logo=law&labelColor=0d1117&color=8250df)](LICENSE)
+[![Stars](https://custom-icon-badges.demolab.com/github/stars/liixnglinb/superstar-checkin?style=flat-square&logo=star&labelColor=0d1117&color=f4a340)](https://github.com/liixnglinb/superstar-checkin/stargazers)
+[![Last Commit](https://custom-icon-badges.demolab.com/github/last-commit/liixnglinb/superstar-checkin?style=flat-square&logo=git&labelColor=0d1117&color=5898ff)](https://github.com/liixnglinb/superstar-checkin/commits)
+
+</div>
+
+
 > 一款面向学生的学习通（超星）自动签到桌面软件。安装后常驻系统托盘，自动监听课程签到活动，支持普通 / 位置 / 二维码三种签到，内置智能轮询、漏签预警、签到二次核对、多账号管理、课表可视化等丰富功能。
 
 ---
