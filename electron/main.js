@@ -189,32 +189,34 @@ app.whenReady().then(() => {
     return urls
   }
 
-  // 测速：并发下载前 128KB，计算每个源的实际速度，选最快
+  // 测速：并发下载前 128KB，计算每个源的实际速度，选最快（Electron net 栈，兼容系统 CA）
   function testSourceSpeed(url, timeoutMs = 8000) {
     return new Promise((resolve) => {
-      const axios = require('axios')
       const start = Date.now()
       let loaded = 0
       let done = false
-      const source = axios.CancelToken.source()
+      let req = null
       const finish = (ok) => {
         if (done) return
         done = true
-        try { source.cancel('speedtest') } catch (_) {}
+        try { req && req.abort() } catch (_) {}
         const elapsed = Math.max(0.1, (Date.now() - start) / 1000)
         resolve({ url, speedBps: ok ? loaded / elapsed : 0, ok, loaded })
       }
-      axios.get(url, {
+      netRequestRaw({
+        url,
         headers: Object.assign({ Range: 'bytes=0-131071' }, UA),
-        proxy: getUpdateProxy(),
-        timeout: timeoutMs,
-        responseType: 'stream',
-        cancelToken: source.token,
-        onDownloadProgress: (evt) => {
-          loaded = evt.loaded || loaded
+        timeoutMs: 0, // 测速超时由下方 setTimeout 控制
+      }).then(({ stream, req: r }) => {
+        req = r
+        stream.on('data', (chunk) => {
+          loaded += chunk.length
           if (loaded >= 131072) finish(true)
-        },
-      }).then(() => finish(true)).catch(() => finish(loaded > 1024))
+        })
+        stream.on('end', () => finish(loaded > 1024))
+        stream.on('error', () => finish(loaded > 1024))
+      }).catch(() => finish(loaded > 1024))
+      setTimeout(() => finish(false), timeoutMs)
     })
   }
 
@@ -255,37 +257,99 @@ app.whenReady().then(() => {
     return false
   }
 
-  async function fetchLatestRelease() {
-    const axios = require('axios')
-    const res = await axios.get(REPO_LATEST, {
-      headers: Object.assign({ Accept: 'application/vnd.github+json' }, UA),
-      proxy: getUpdateProxy(),
-      timeout: 20000,
-      validateStatus: (s) => s < 500,
+  // 更新请求网络栈：使用 Electron net（Chromium 网络栈，自动信任 Windows 系统 CA）。
+  // 解决部分网络环境（企业代理/安全软件/代理残留）下 Node 内置 CA 无法验证 GitHub 证书、
+  // axios 报 "unable to verify the first certificate" 导致无法检查/下载更新的问题。
+  let updateNetSession = null
+  async function getUpdateNetSession() {
+    if (updateNetSession) return updateNetSession
+    const { session } = require('electron')
+    updateNetSession = session.fromPartition('persist:update-check')
+    try {
+      const p = getUpdateProxy()
+      if (p) {
+        await updateNetSession.setProxy({ mode: 'fixed', proxyRules: `${p.protocol}://${p.host}:${p.port}` })
+      } else {
+        await updateNetSession.setProxy({ mode: 'system' })
+      }
+    } catch (e) { console.error('设置更新代理失败:', e.message) }
+    return updateNetSession
+  }
+
+  // 通用：发起一次 net.request，支持超时与取消，返回 {status, headers, dataStream|body}
+  function netRequestRaw({ url, method = 'GET', headers = {}, timeoutMs = 300000 }) {
+    return new Promise((resolve, reject) => {
+      getUpdateNetSession().then((ses) => {
+        const { net } = require('electron')
+        const req = net.request({ url, method, session: ses })
+        Object.keys(headers).forEach((k) => req.setHeader(k, headers[k]))
+        let timer = null
+        req.on('response', (res) => {
+          if (timer) clearTimeout(timer)
+          resolve({ status: res.statusCode, headers: res.headers, stream: res, req })
+        })
+        req.on('error', (e) => {
+          if (timer) clearTimeout(timer)
+          reject(e)
+        })
+        if (timeoutMs > 0) {
+          timer = setTimeout(() => {
+            try { req.abort() } catch (_) {}
+            reject(new Error('请求超时'))
+          }, timeoutMs)
+        }
+        req.end()
+      }).catch(reject)
     })
-    if (res.status === 404) throw new Error('HTTP 404')
-    if (res.status !== 200) throw new Error('HTTP ' + res.status)
-    return res.data
+  }
+
+  // 拉取 GitHub Release 信息（JSON）
+  async function fetchLatestRelease() {
+    const { status, stream, req } = await netRequestRaw({
+      url: REPO_LATEST,
+      headers: Object.assign({ Accept: 'application/vnd.github+json' }, UA),
+      timeoutMs: 20000,
+    })
+    let body = ''
+    return new Promise((resolve, reject) => {
+      stream.on('data', (chunk) => { body += chunk.toString('utf8') })
+      stream.on('end', () => {
+        try { req.abort() } catch (_) {}
+        if (status === 404) return reject(new Error('HTTP 404'))
+        if (status !== 200) return reject(new Error('HTTP ' + status))
+        try { resolve(JSON.parse(body)) } catch (e) { reject(new Error('响应解析失败')) }
+      })
+      stream.on('error', reject)
+    })
   }
 
   function downloadFile(url, filePath, onProgress) {
     return new Promise((resolve, reject) => {
       const fs = require('fs')
-      const axios = require('axios')
-      axios.get(url, {
-        headers: UA,
-        proxy: getUpdateProxy(),
-        timeout: 300000,
-        responseType: 'stream',
-        onDownloadProgress: (evt) => {
-          const total = evt.total || 0
-          onProgress && onProgress(total ? Math.min(100, Math.round((evt.loaded / total) * 100)) : 0, evt.loaded, total)
-        },
-      }).then((res) => {
+      netRequestRaw({ url, headers: UA, timeoutMs: 300000 }).then(({ status, stream, req }) => {
+        if (status !== 200) {
+          try { req.abort() } catch (_) {}
+          return reject(new Error('HTTP ' + status))
+        }
+        const total = Number(stream.headers['content-length'] || 0)
+        let loaded = 0
+        let settled = false
+        const finish = (fn, arg) => {
+          if (settled) return
+          settled = true
+          fn(arg)
+        }
         const out = fs.createWriteStream(filePath)
-        res.data.pipe(out)
-        out.on('finish', () => { out.close(); resolve(filePath) })
-        out.on('error', reject)
+        out.on('error', (e) => { try { req.abort() } catch (_) {}; finish(reject, e) })
+        stream.on('data', (chunk) => {
+          loaded += chunk.length
+          onProgress && onProgress(total ? Math.min(100, Math.round((loaded / total) * 100)) : 0, loaded, total)
+        })
+        stream.on('error', (e) => { try { out.destroy() } catch (_) {}; finish(reject, e) })
+        stream.on('end', () => {
+          out.end(() => { out.close(); finish(resolve, filePath) })
+        })
+        stream.pipe(out)
       }).catch(reject)
     })
   }
