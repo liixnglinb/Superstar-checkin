@@ -1,0 +1,113 @@
+name: Build & Release
+
+# 触发方式
+#   1) 推送形如 v3.2.0 的标签  -> 自动构建 + 发布到同名 Release
+#   2) 手动触发（Actions 页 Run workflow）-> 输入版本号，效果相同
+#
+# 产物命名规则（务必保持）：
+#   下载页 https://lxlrwxs.top/checkin/ 使用 fixed 名
+#   releases/latest/download/SuperstarCheckin-Setup.exe ，
+#   软件内自动更新则取 Release 中第一个 .exe 资产。
+#   因此每次发布必须同时上传下面两个文件，且内容完全一致：
+#     SuperstarCheckin-Setup-<版本>.exe   带版本号，供存档/直链
+#     SuperstarCheckin-Setup.exe          固定名，供 latest 链接使用
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号，不含 v 前缀（例：3.2.0），需与 package.json 的 version 一致'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: 构建 Windows 安装包
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 解析并校验版本号
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME}"
+          fi
+          V="${V#v}"
+          if [ -z "$V" ]; then
+            echo "::error::未能解析出版本号"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          PKG=$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+          echo "发布版本：$V"
+          echo "package.json：$PKG"
+          if [ "$PKG" != "$V" ]; then
+            echo "::warning title=版本号不一致::package.json 为 $PKG，发布版本为 $V；安装包文件名与内部版本号以 package.json 为准"
+          fi
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 编译 TypeScript
+        run: npm run build
+
+      - name: 打包 NSIS 安装程序
+        run: npx electron-builder --win nsis --x64
+
+      - name: 规范化安装包文件名
+        shell: bash
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          SRC=$(find dist-electron -maxdepth 1 -name '*.exe' -print -quit)
+          if [ -z "$SRC" ]; then
+            echo "::error::未在 dist-electron/ 找到打包产物"
+            exit 1
+          fi
+          echo "原始产物：$SRC"
+          cp "$SRC" "dist-electron/SuperstarCheckin-Setup-${V}.exe"
+          cp "$SRC" "dist-electron/SuperstarCheckin-Setup.exe"
+          echo "--- 待上传资产 ---"
+          ls -lh dist-electron/*.exe
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: 学习通自动签到 v${{ steps.ver.outputs.version }}
+          files: |
+            dist-electron/SuperstarCheckin-Setup-${{ steps.ver.outputs.version }}.exe
+            dist-electron/SuperstarCheckin-Setup.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+      - name: 输出摘要
+        shell: bash
+        run: |
+          {
+            echo "### 构建完成"
+            echo ""
+            echo "- 版本：v${{ steps.ver.outputs.version }}"
+            echo "- 下载页固定链接：https://github.com/liixnglinb/Superstar-checkin/releases/latest/download/SuperstarCheckin-Setup.exe"
+            echo "- 国内镜像链接：https://gh-proxy.com/https://github.com/liixnglinb/Superstar-checkin/releases/latest/download/SuperstarCheckin-Setup.exe"
+          } >> "$GITHUB_STEP_SUMMARY"

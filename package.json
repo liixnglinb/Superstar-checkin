@@ -7,7 +7,6 @@
     "dev": "ts-node src/index.ts",
     "build": "tsc && node -e \"var fs=require('fs'),p=require('path');var s='src/sdk',d='build/sdk';fs.mkdirSync(d,{recursive:true});if(fs.existsSync(s))fs.readdirSync(s).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)))\" && node embed-config.js",
     "start": "node build/index.js",
-    "docker-start": "node build/index.js",
     "typecheck": "tsc --noEmit",
     "pack": "node build-sea.js"
   },
