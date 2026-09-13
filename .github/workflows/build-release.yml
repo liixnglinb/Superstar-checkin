@@ -66,6 +66,16 @@ jobs:
             echo "::warning title=版本号不一致::package.json 为 $PKG，发布版本为 $V；安装包文件名与内部版本号以 package.json 为准"
           fi
 
+      - name: 缓存 Electron 与 electron-builder 二进制
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-bin-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-bin-
+
       - name: 安装依赖
         run: npm ci
 
@@ -73,7 +83,9 @@ jobs:
         run: npm run build
 
       - name: 打包 NSIS 安装程序
-        run: npx electron-builder --win nsis --x64
+        # --publish never：electron-builder 检测到 CI 环境会自动触发隐式发布，
+        # 因无 GH_TOKEN 而失败（实测 v26）。发布统一交给下方 action-gh-release 步骤。
+        run: npx electron-builder --win nsis --x64 --publish never
 
       - name: 规范化安装包文件名
         shell: bash
