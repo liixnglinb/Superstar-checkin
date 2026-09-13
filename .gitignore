@@ -305,3 +305,6 @@ skills-study/
 # 安装版运行解包产物
 chaoxing-auto-sign/
 dist-electron/
+
+# 智能体工作区数据（本地记忆等，不入库）
+.workbuddy/

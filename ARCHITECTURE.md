@@ -183,8 +183,6 @@ SIGNIN:aid=12345678&enc=ABCDEF1234567890
 | 课程列表 | ❌ | ✅ | 自动获取本学期所有课程 |
 | 轮询模式 | ❌ | ✅ | IM 不可用时的备选方案 |
 | 历史查询 | 文件存储 | 内存 + 文件 + CLI 命令 | `历史` 命令即时查看 |
-| Docker | 单阶段 | 多阶段构建 | 镜像更小 |
-| docker-compose | ❌ | ✅ | 一键部署 |
 
 #### 3.3 你做的改进（值得保留）
 
@@ -240,24 +238,7 @@ npm run build
 npm start
 ```
 
-#### 4.2 Docker 部署
-
-```bash
-# 1. 准备配置文件
-cp config.example.yaml config.yaml
-# 编辑 config.yaml
-
-# 2. 一键启动
-docker compose up -d
-
-# 3. 查看日志
-docker compose logs -f
-
-# 4. 停止
-docker compose down
-```
-
-#### 4.3 配置要点
+#### 4.2 配置要点
 
 - **accounts**: 至少填一个学习通账号（手机号+密码）
 - **listener.mode**: 推荐 `im`（实时性最好），如果 IM 不稳定改用 `hybrid`
