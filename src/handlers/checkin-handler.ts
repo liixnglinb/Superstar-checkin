@@ -5,6 +5,7 @@ import { retry } from '../utils/retry'
 import { DEFAULTS } from '../constants'
 import type { AccountMetaData, CheckinInfo, CheckinResult, AppConfig } from '../types'
 import type { AccountManager } from '../providers/account-manager'
+import * as storage from '../providers/storage'
 
 /** 统一成功判定：成功 / 签到成功 / 您已签到（重复提交但已签过，视同成功） */
 function isSuccessMessage(result: string): boolean {
@@ -24,9 +25,10 @@ export class CheckinHandler {
   constructor(config: AppConfig, accountManager: AccountManager) {
     this.config = config
     this.accountManager = accountManager
+    this.history = storage.get<CheckinResult[]>('checkinHistory') || []
     this.verifyEnabled = config.checkin.verify?.enabled !== false
     // 根据配置启用 UA 轮换（防检测增强）
-    CheckinEngine.useragentRotation = config.checkin.antiDetect.useragentRotation
+    CheckinEngine.useragentRotation = config.checkin.antiDetect.enabled && config.checkin.antiDetect.useragentRotation
   }
 
   /**
@@ -78,7 +80,7 @@ export class CheckinHandler {
     const results: CheckinResult[] = []
 
     // 随机延迟（防检测）
-    if (this.config.checkin.antiDetect.randomDelay) {
+    if (this.config.checkin.antiDetect.enabled && this.config.checkin.antiDetect.randomDelay) {
       const { min, max } = this.config.checkin.delay
       logger.info(`随机延迟 ${min}~${max} 秒后签到...`)
       await randomDelay(min, max)
@@ -117,6 +119,7 @@ export class CheckinHandler {
         if (this.history.length > DEFAULTS.MAX_HISTORY) {
           this.history = this.history.slice(-DEFAULTS.MAX_HISTORY)
         }
+        storage.set('checkinHistory', this.history)
         logger.info(`${meta.name}: ${cr.success ? '成功' : cr.message}`)
       } catch (e: any) {
         const cr: CheckinResult = {
@@ -132,6 +135,12 @@ export class CheckinHandler {
         results.push(cr)
         logger.error(`${meta.name} 签到失败: ${e.message}`)
       }
+    }
+
+    if (results.length) {
+      this.history.push(...results)
+      if (this.history.length > DEFAULTS.MAX_HISTORY) this.history = this.history.slice(-DEFAULTS.MAX_HISTORY)
+      storage.set('checkinHistory', this.history)
     }
 
     return results
@@ -152,6 +161,7 @@ export class CheckinHandler {
           this.config.geo.locations,
           this.config.geo.providers,
           this.config.geo.locationRadius,
+          { gpsDrift: this.config.checkin.antiDetect.enabled && this.config.checkin.antiDetect.gpsDrift },
         )
 
       case 'qr':
@@ -172,7 +182,14 @@ export class CheckinHandler {
     for (const account of this.accountManager.getAccounts()) {
       const meta = this.accountManager.getMeta(account.username)
       try {
-        const result = await CheckinEngine.qrCheckin(meta, aid, enc)
+        const result = await retry(
+          () => CheckinEngine.qrCheckin(meta, aid, enc),
+          {
+            maxAttempts: this.config.checkin.retry.maxAttempts,
+            delayMs: Math.min(this.config.checkin.retry.delayMs, 3000),
+            label: `二维码签到 ${meta.name}`,
+          },
+        )
         const finalMsg = await this.verifyAfterCheckin(meta, aid, 0, 0, { type: 'qr' } as CheckinInfo, enc, result)
         results.push({
           account: account.username,
@@ -199,6 +216,60 @@ export class CheckinHandler {
     return results
   }
 
+  /**
+   * 处理拍照签到（照片必须由用户配置/上传，软件不生成伪造照片）
+   */
+  async handlePhoto(
+    aid: string,
+    photoPath: string,
+    info: { courseName: string; courseId: number; classId: number },
+  ): Promise<CheckinResult[]> {
+    const results: CheckinResult[] = []
+
+    for (const account of this.accountManager.getAccounts()) {
+      const meta = this.accountManager.getMeta(account.username)
+      try {
+        const result = await retry(
+          () => CheckinEngine.photoCheckin(meta, aid, photoPath, { courseId: info.courseId, classId: info.classId }),
+          {
+            maxAttempts: this.config.checkin.retry.maxAttempts,
+            delayMs: this.config.checkin.retry.delayMs,
+            label: `拍照签到 ${meta.name}`,
+          },
+        )
+        const finalMsg = await this.verifyAfterCheckin(meta, aid, info.courseId, info.classId, { type: 'photo' } as CheckinInfo, '', result)
+        results.push({
+          account: account.username,
+          accountName: meta.name,
+          success: isSuccessMessage(result),
+          message: finalMsg,
+          type: 'photo',
+          courseName: info.courseName,
+          aid,
+          timestamp: Date.now(),
+        })
+      } catch (e: any) {
+        results.push({
+          account: account.username,
+          accountName: meta.name,
+          success: false,
+          message: e.message,
+          type: 'photo',
+          courseName: info.courseName,
+          aid,
+          timestamp: Date.now(),
+        })
+      }
+    }
+
+    if (results.length) {
+      this.history.push(...results)
+      if (this.history.length > DEFAULTS.MAX_HISTORY) this.history = this.history.slice(-DEFAULTS.MAX_HISTORY)
+      storage.set('checkinHistory', this.history)
+    }
+    return results
+  }
+
   getHistory(): CheckinResult[] {
     return [...this.history].reverse()
   }
@@ -206,6 +277,7 @@ export class CheckinHandler {
   /** 清空签到历史（软件内「清空记录」用） */
   clearHistory(): void {
     this.history = []
+    storage.set('checkinHistory', this.history)
     logger.info('签到历史已清空')
   }
 }

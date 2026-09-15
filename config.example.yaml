@@ -90,9 +90,34 @@ notify:
         password: "SMTP授权码"
         to: "接收邮箱@qq.com"
 
+    # Telegram Bot
+    - type: telegram
+      enabled: false
+      config:
+        botToken: ''
+        chatId: ''
+
+    # 飞书机器人
+    - type: feishu
+      enabled: false
+      config:
+        webhook: ''
+
+    # 企业微信群机器人
+    - type: wecom
+      enabled: false
+      config:
+        webhook: ''
+
+    # Server酱
+    - type: serverchan
+      enabled: false
+      config:
+        sendKey: ''
+
 # ---- OCR 二维码识别（可选）----
 ocr:
-  provider: zxing   # tencent = 腾讯云OCR | zxing = 本地解码
+  provider: local    # local = 本地 jsQR 解码 | tencent = 腾讯云 OCR
   tencent:
     secretId: ""
     secretKey: ""
@@ -103,7 +128,6 @@ ocr:
 #   - notify.channels 的 dingtalk = 群机器人 webhook → 用来【收】那条带上传链接的通知消息
 #   - 本节点的 dingtalk            = 企业内部应用     → 用来【起上传页】+【收你直接发的图】
 dingtalk:
-  port: 3456            # 上传页 / 回调服务端口（必填：只要想用上传页就填，服务才会启动）
   publicUrl: ""         # 必填（手机可用）：电脑在局域网/公网的访问地址，如 http://192.168.1.100:3456
                         # 不填则默认 http://127.0.0.1:3456 —— 只能在本机浏览器打开，手机点链接打不开！
   appSecret: ""         # 选填：企业内部应用 AppSecret（仅「直接发图给机器人」高级方式需要）
@@ -112,6 +136,9 @@ dingtalk:
 # ---- Web API（可选，用于远程二维码签到）----
 web:
   port: 3456
+  # 上传页 / 控制台 / API 统一使用该端口
+  host: 127.0.0.1     # 默认只允许本机访问；改为 0.0.0.0 时请确保 token 保密
+  watchClipboard: false # 复制/截图含签到二维码的图片后自动识别
   token: ""           # Bearer Token 认证，留空则不启动
   allowedOrigin: "http://localhost"
 

@@ -7,6 +7,7 @@ import { logger } from '../utils/logger'
 import { getProxyConfig, getProxy, setProxy } from '../providers/runtime-config'
 import { encryptPassword } from '../utils/crypto'
 import { getConsolePage, ConsoleStatus } from './console-ui'
+import { writeFileAtomic } from '../utils/fs'
 
 export interface DingTalkMessage {
   msgtype: string
@@ -20,6 +21,7 @@ export interface DingTalkMessage {
 }
 
 type ImageHandler = (imageBuffer: Buffer) => Promise<void>
+type PhotoHandler = (imageBuffer: Buffer) => Promise<void>
 
 /** 控制台首页数据提供者（每次请求时实时获取） */
 export type StatusProvider = () => Record<string, any>
@@ -59,6 +61,8 @@ export interface DingTalkServerOptions {
 export class DingTalkServer {
   private server: http.Server | null = null
   private imageHandler: ImageHandler | null = null
+  private photoHandler: PhotoHandler | null = null
+  private rateBuckets = new Map<string, { count: number; resetAt: number }>()
   private appSecret: string
   private appKey?: string
   private token?: string
@@ -96,12 +100,75 @@ export class DingTalkServer {
     this.imageHandler = handler
   }
 
+  onPhoto(handler: PhotoHandler) {
+    this.photoHandler = handler
+  }
+
+  private clientKey(req: http.IncomingMessage): string {
+    return req.socket.remoteAddress || 'unknown'
+  }
+
+  private allowRequest(req: http.IncomingMessage, limit: number, windowMs: number): boolean {
+    const key = `${this.clientKey(req)}:${req.url?.split('?')[0] || ''}`
+    const now = Date.now()
+    if (this.rateBuckets.size > 1000) {
+      for (const [bucketKey, bucket] of this.rateBuckets) {
+        if (bucket.resetAt <= now) this.rateBuckets.delete(bucketKey)
+      }
+    }
+    const bucket = this.rateBuckets.get(key)
+    if (!bucket || bucket.resetAt <= now) {
+      this.rateBuckets.set(key, { count: 1, resetAt: now + windowMs })
+      return true
+    }
+    bucket.count++
+    return bucket.count <= limit
+  }
+
+  private extractToken(req: http.IncomingMessage): string {
+    const header = String(req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
+    if (header) return header
+    const custom = String(req.headers['x-web-token'] || '')
+    if (custom) return custom
+    try {
+      return new URL(req.url || '/', `http://localhost:${this.port}`).searchParams.get('token') || ''
+    } catch {
+      return ''
+    }
+  }
+
+  private authorize(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+    const path = (req.url || '').split('?')[0]
+    const protectedPath =
+      path.startsWith('/api/') ||
+      path === '/' ||
+      path === '/console' ||
+      path === '/upload' ||
+      path.startsWith('/upload/image') ||
+      path.startsWith('/dingtalk/callback')
+    if (!protectedPath) return true
+
+    const provided = this.extractToken(req)
+    const expected = this.token || ''
+    const ok = !!expected && !!provided &&
+      provided.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
+    if (ok) return true
+
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ ok: false, error: '未授权，请在 URL 或 Authorization 头中提供控制台 token' }))
+    return false
+  }
+
   /**
    * 启动 HTTP 服务器
    */
   start() {
     this.server = http.createServer(async (req, res) => {
       this.applyCors(res)
+
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Referrer-Policy', 'no-referrer')
 
       // CORS 预检请求：浏览器在跨域 POST 前会先发 OPTIONS，必须直接返回
       if (req.method === 'OPTIONS') {
@@ -110,13 +177,18 @@ export class DingTalkServer {
         return
       }
 
+      // 所有数据和状态修改接口必须带 token；控制台页面本身不包含业务数据。
+      if (!this.authorize(req, res)) return
+
+      const routePath = (req.url || '').split('?')[0]
+
       // 图标静态资源（软件界面 logo 用）
-      if (req.method === 'GET' && (req.url === '/assets/app-icon.png' || req.url === '/icon.png')) {
+      if (req.method === 'GET' && (routePath === '/assets/app-icon.png' || routePath === '/icon.png' || routePath === '/favicon.ico')) {
         try {
           const iconPath = require('path').join(__dirname, '..', '..', 'assets', 'app-icon.png')
           if (fs.existsSync(iconPath)) {
             const data = fs.readFileSync(iconPath)
-            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' })
+          res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' })
             res.end(data)
           } else {
             res.writeHead(404); res.end()
@@ -126,21 +198,22 @@ export class DingTalkServer {
       }
 
     // 健康检查
-      if (req.method === 'GET' && req.url === '/health') {
+      if (req.method === 'GET' && routePath === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }))
         return
       }
 
+
       // 状态 API（控制台数据）
-      if (req.method === 'GET' && req.url === '/api/status') {
+      if (req.method === 'GET' && routePath === '/api/status') {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify(this.getStatus()))
         return
       }
 
       // 账号保存/添加（首次运行引导；已存在同账号则更新密码，否则追加 → 支持多账号）
-      if (req.method === 'POST' && req.url === '/api/config') {
+      if (req.method === 'POST' && routePath === '/api/config') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const username = String(body.username || '').trim()
@@ -166,7 +239,7 @@ export class DingTalkServer {
             accounts.push({ username, password: encPwd })
           }
           existing.accounts = accounts
-          fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info(`账号已${action}到 ${cfgFile}（用户名: ${username}），当前共 ${accounts.length} 个账号，重启后生效`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: `账号已${action}（当前 ${accounts.length} 个），重启后生效` }))
@@ -179,7 +252,7 @@ export class DingTalkServer {
       }
 
       // 删除账号
-      if (req.method === 'POST' && req.url === '/api/accounts/remove') {
+      if (req.method === 'POST' && routePath === '/api/accounts/remove') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const username = String(body.username || '').trim()
@@ -200,7 +273,7 @@ export class DingTalkServer {
             res.end(JSON.stringify({ ok: false, message: '未找到该账号' }))
             return
           }
-          fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info(`账号已删除: ${username}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '账号已删除，重启后生效' }))
@@ -213,7 +286,7 @@ export class DingTalkServer {
       }
 
       // 设为主账号（移到数组首位 = 课程轮询监听使用该账号）
-      if (req.method === 'POST' && req.url === '/api/accounts/primary') {
+      if (req.method === 'POST' && routePath === '/api/accounts/primary') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const username = String(body.username || '').trim()
@@ -231,7 +304,7 @@ export class DingTalkServer {
           const [acc] = accounts.splice(idx, 1)
           accounts.unshift(acc)
           existing.accounts = accounts
-          fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info(`主账号已切换为: ${username}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: `已将 ${username} 设为主账号，重启后生效` }))
@@ -244,7 +317,7 @@ export class DingTalkServer {
       }
 
       // 运行设置（轮询间隔 / 桌面通知 / 免打扰时段 → 写 config.yaml → 重启生效）
-      if (req.method === 'POST' && req.url === '/api/settings') {
+      if (req.method === 'POST' && routePath === '/api/settings') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
@@ -350,7 +423,7 @@ export class DingTalkServer {
               waitSeconds: body.confirmBeforeWait !== undefined && body.confirmBeforeWait !== null && body.confirmBeforeWait !== '' ? Math.max(3, Number(body.confirmBeforeWait) || 10) : ((existing.checkin.confirmBefore || {}).waitSeconds || 10),
             }
           }
-          fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info('运行设置已保存，重启后生效')
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '设置已保存，重启后生效' }))
@@ -363,7 +436,7 @@ export class DingTalkServer {
       }
 
       // 历史记录：导出 CSV
-      if (req.method === 'GET' && req.url === '/api/history/export') {
+      if (req.method === 'GET' && routePath === '/api/history/export') {
         const rows = this.historyProvider ? this.historyProvider() : []
         let csv = '\uFEFF时间,课程,类型,结果,账号\n'
         for (const r of rows) {
@@ -379,7 +452,7 @@ export class DingTalkServer {
       }
 
       // 历史记录：清空
-      if (req.method === 'POST' && req.url === '/api/history/clear') {
+      if (req.method === 'POST' && routePath === '/api/history/clear') {
         try {
           if (this.clearHistory) this.clearHistory()
           logger.info('签到历史已清空')
@@ -394,9 +467,9 @@ export class DingTalkServer {
       }
 
       // 运行日志（软件内查看，默认最近 200 行）
-      if (req.method === 'GET' && req.url?.startsWith('/api/logs')) {
+      if (req.method === 'GET' && routePath.startsWith('/api/logs')) {
         try {
-          const url = new URL(req.url, `http://localhost:${this.port}`)
+          const url = new URL(req.url || '/', `http://localhost:${this.port}`)
           const want = Math.min(Number(url.searchParams.get('lines') || 200) || 200, 1000)
           const file = this.getLogFile ? this.getLogFile() : ''
           if (!file || !fs.existsSync(file)) {
@@ -416,13 +489,27 @@ export class DingTalkServer {
       }
 
       // 配置导出
-      if (req.method === 'GET' && req.url === '/api/config/export') {
+      if (req.method === 'GET' && routePath === '/api/config/export') {
         try {
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const raw = YAML.parse(fs.readFileSync(cfgFile, 'utf-8'))
           const safe = JSON.parse(JSON.stringify(raw))
-          if (safe.accounts) for (const acc of safe.accounts) delete acc.password
-          if (safe.dingtalk) { delete safe.dingtalk.appSecret; delete safe.dingtalk.token }
+          const SENSITIVE_KEYS = new Set([
+            'password', 'cookie', 'token', 'secret', 'secretId', 'secretKey',
+            'appSecret', 'webhook', 'key', 'smtpPass', 'smtpPassword', 'accessKey',
+            'botToken', 'sendKey',
+          ])
+          const scrub = (value: any) => {
+            if (Array.isArray(value)) return value.map(scrub)
+            if (value && typeof value === 'object') {
+              for (const [key, child] of Object.entries(value)) {
+                if (SENSITIVE_KEYS.has(key)) delete value[key]
+                else value[key] = scrub(child)
+              }
+            }
+            return value
+          }
+          scrub(safe)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="checkin-config.json"' })
           res.end(JSON.stringify(safe, null, 2))
         } catch (e: any) {
@@ -433,31 +520,29 @@ export class DingTalkServer {
       }
 
       // 配置导入
-      if (req.method === 'POST' && req.url === '/api/config/import') {
+      if (req.method === 'POST' && routePath === '/api/config/import') {
         const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-        let bodyStr = ''
-        req.on('data', (c) => { bodyStr += c })
-        req.on('end', () => {
-          try {
-            const imported = JSON.parse(bodyStr)
-            const existing = YAML.parse(fs.readFileSync(cfgFile, 'utf-8'))
-            const merged = { ...existing, ...imported }
-            if (existing.accounts) merged.accounts = existing.accounts
-            if (existing.dingtalk?.appSecret) merged.dingtalk = { ...merged.dingtalk, appSecret: existing.dingtalk.appSecret }
-            if (existing.dingtalk?.token) merged.dingtalk = { ...merged.dingtalk, token: existing.dingtalk.token }
-            fs.writeFileSync(cfgFile, YAML.stringify(merged), 'utf-8')
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: true, message: '配置已导入，重启后生效' }))
-          } catch (e: any) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, message: '导入失败: ' + e.message }))
-          }
-        })
+        try {
+          const imported = JSON.parse(await this.readBody(req))
+          const existing = YAML.parse(fs.readFileSync(cfgFile, 'utf-8'))
+          const merged = { ...existing, ...imported }
+          if (existing.accounts) merged.accounts = existing.accounts
+          if (existing.dingtalk?.appSecret) merged.dingtalk = { ...merged.dingtalk, appSecret: existing.dingtalk.appSecret }
+          if (existing.web?.token) merged.web = { ...merged.web, token: existing.web.token }
+          if (existing.notify?.channels) merged.notify = { ...merged.notify, channels: existing.notify.channels }
+          if (existing.ocr) merged.ocr = existing.ocr
+          writeFileAtomic(cfgFile, YAML.stringify(merged))
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, message: '配置已导入，重启后生效' }))
+        } catch (e: any) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: '导入失败: ' + e.message }))
+        }
         return
       }
 
       // 课表数据
-      if (req.method === 'GET' && req.url === '/api/schedule') {
+      if (req.method === 'GET' && routePath === '/api/schedule') {
         try {
           const status = this.statusProvider ? this.statusProvider() : {}
           const courses = (status as any).courses || []
@@ -482,7 +567,7 @@ export class DingTalkServer {
       }
 
       // 取消签到：用户点击通知里的取消链接
-      if (req.method === 'GET' && (req.url||'').startsWith('/api/confirm/cancel')) {
+      if (req.method === 'GET' && routePath.startsWith('/api/confirm/cancel')) {
         try {
           const u = new URL(req.url || '', 'http://localhost')
           const aid = u.searchParams.get('aid') || ''
@@ -501,7 +586,7 @@ export class DingTalkServer {
       }
 
       // 课程备注：获取
-      if (req.method === 'GET' && req.url === '/api/course-notes') {
+      if (req.method === 'GET' && routePath === '/api/course-notes') {
         try {
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
@@ -515,7 +600,7 @@ export class DingTalkServer {
       }
 
       // 课程备注：保存
-      if (req.method === 'POST' && req.url === '/api/course-notes') {
+      if (req.method === 'POST' && routePath === '/api/course-notes') {
         let bodyStr = ''
         req.on('data', (c) => { bodyStr += c })
         req.on('end', () => {
@@ -527,7 +612,7 @@ export class DingTalkServer {
             for (const k of Object.keys(existing.courseNotes)) {
               if (!existing.courseNotes[k] || String(existing.courseNotes[k]).trim() === '') delete existing.courseNotes[k]
             }
-            fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+            writeFileAtomic(cfgFile, YAML.stringify(existing))
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
             res.end(JSON.stringify({ ok: true, message: '备注已保存' }))
           } catch (e: any) {
@@ -538,51 +623,8 @@ export class DingTalkServer {
         return
       }
 
-      // 位置收藏：获取
-      if (req.method === 'GET' && req.url === '/api/geo-favorites') {
-        try {
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, favorites: (existing.geo && existing.geo.favorites) || [] }))
-        } catch (e: any) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: e.message }))
-        }
-        return
-      }
-
-      // 位置收藏：保存/删除
-      if (req.method === 'POST' && req.url === '/api/geo-favorites') {
-        let bodyStr = ''
-        req.on('data', (c) => { bodyStr += c })
-        req.on('end', () => {
-          try {
-            const body = JSON.parse(bodyStr)
-            const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-            const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
-            existing.geo = existing.geo || {}
-            if (body.action === 'delete') {
-              existing.geo.favorites = (existing.geo.favorites || []).filter((f: any) => f.name !== body.name)
-            } else {
-              existing.geo.favorites = existing.geo.favorites || []
-              const idx = existing.geo.favorites.findIndex((f: any) => f.name === body.name)
-              if (idx >= 0) existing.geo.favorites[idx] = { name: body.name, lat: Number(body.lat), lng: Number(body.lng) }
-              else existing.geo.favorites.push({ name: body.name, lat: Number(body.lat), lng: Number(body.lng) })
-            }
-            fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: true, favorites: existing.geo.favorites }))
-          } catch (e: any) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, message: e.message }))
-          }
-        })
-        return
-      }
-
       // 课程签到详情：获取某门课的所有签到记录
-      if (req.method === 'GET' && (req.url||'').startsWith('/api/course-detail')) {
+      if (req.method === 'GET' && routePath.startsWith('/api/course-detail')) {
         try {
           const u = new URL(req.url || '', 'http://localhost')
           const courseName = decodeURIComponent(u.searchParams.get('course') || '')
@@ -606,7 +648,7 @@ export class DingTalkServer {
       }
 
       // 日志导出（设置页「导出日志」：下载完整 app.log）
-      if (req.method === 'GET' && req.url === '/api/logs/export') {
+      if (req.method === 'GET' && routePath === '/api/logs/export') {
         try {
           const file = this.getLogFile ? this.getLogFile() : ''
           const content = file && fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : '(暂无日志内容)'
@@ -623,7 +665,7 @@ export class DingTalkServer {
       }
 
       // 一键网络诊断：依次检测各关键接口连通性，失败给原因与建议
-      if (req.method === 'GET' && req.url === '/api/diag') {
+      if (req.method === 'GET' && routePath === '/api/diag') {
         try {
           const cookie = this.getPrimaryCookie ? this.getPrimaryCookie() : ''
           const proxyCfg = getProxyConfig()
@@ -665,7 +707,7 @@ export class DingTalkServer {
       }
 
       // 代理配置：读取当前值
-      if (req.method === 'GET' && req.url === '/api/proxy') {
+      if (req.method === 'GET' && routePath === '/api/proxy') {
         const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
         const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
         const pv = String(existing.proxy || '')
@@ -675,14 +717,14 @@ export class DingTalkServer {
       }
 
       // 代理配置：保存（写 config.yaml + 运行时立即生效，无需重启）
-      if (req.method === 'POST' && req.url === '/api/proxy') {
+      if (req.method === 'POST' && routePath === '/api/proxy') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const pv = String(body.proxy || '').trim()
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
           existing.proxy = pv
-          fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
           setProxy(pv)
           logger.info('代理配置已保存并立即生效: ' + (pv || '(直连)'))
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -695,7 +737,7 @@ export class DingTalkServer {
       }
 
       // 代理配置：测试连通性（不改变当前代理设置）
-      if (req.method === 'POST' && req.url === '/api/proxy/test') {
+      if (req.method === 'POST' && routePath === '/api/proxy/test') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const raw = String(body.proxy || '').trim()
@@ -720,9 +762,9 @@ export class DingTalkServer {
       }
 
       // 签到日历：?month=YYYY-MM 返回当月每日签到统计（历史记录月历视图）
-      if (req.method === 'GET' && req.url?.startsWith('/api/calendar')) {
+      if (req.method === 'GET' && routePath.startsWith('/api/calendar')) {
         try {
-          const url = new URL(req.url, 'http://localhost:' + this.port)
+          const url = new URL(req.url || '/', 'http://localhost:' + this.port)
           const month = url.searchParams.get('month') || ''
           const m = /^(\d{4})-(\d{2})$/.exec(month)
           if (!m) {
@@ -757,7 +799,7 @@ export class DingTalkServer {
       }
 
       // 测试通知
-      if (req.method === 'POST' && req.url === '/api/notify/test') {
+      if (req.method === 'POST' && routePath === '/api/notify/test') {
         try {
           if (this.sendTestNotify) await this.sendTestNotify()
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -771,7 +813,7 @@ export class DingTalkServer {
       }
 
       // 重新拉取课程列表（解决小课程/新课程未出现的问题）
-      if (req.method === 'POST' && req.url === '/api/courses/refresh') {
+      if (req.method === 'POST' && routePath === '/api/courses/refresh') {
         try {
           if (!this.refreshCourses) {
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -790,7 +832,7 @@ export class DingTalkServer {
       }
 
       // 监听课程设置（勾选要监控的课程 → 写 config.yaml → 重启生效）
-      if (req.method === 'POST' && req.url === '/api/watch') {
+      if (req.method === 'POST' && routePath === '/api/watch') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const watchCourses: string[] = Array.isArray(body.watchCourses)
@@ -801,7 +843,7 @@ export class DingTalkServer {
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
             : {}
           existing.watchCourses = watchCourses
-          fs.writeFileSync(cfgFile, YAML.stringify(existing), 'utf-8')
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info(`监听课程设置已保存（${watchCourses.length} 门），重启后生效`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: watchCourses.length ? `已保存，将只监听 ${watchCourses.length} 门课程，重启后生效` : '已保存，将监听全部课程，重启后生效' }))
@@ -814,17 +856,19 @@ export class DingTalkServer {
       }
 
       // 控制台首页（软件主界面）
-      if (req.method === 'GET' && (req.url === '/' || req.url === '/console')) {
+      if (req.method === 'GET' && (routePath === '/' || routePath === '/console')) {
+        const scriptNonce = crypto.randomBytes(18).toString('base64url')
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'",
+          'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-${scriptNonce}'; connect-src 'self'`,
+          'X-Frame-Options': 'DENY',
         })
-        res.end(getConsolePage(this.getStatus(), this.token || ''))
+        res.end(getConsolePage(this.getStatus(), this.token || '', { scriptNonce }))
         return
       }
 
       // 钉钉回调
-      if (req.method === 'POST' && req.url?.startsWith('/dingtalk/callback')) {
+      if (req.method === 'POST' && routePath.startsWith('/dingtalk/callback')) {
         try {
           const body = await this.readBody(req)
           const data = JSON.parse(body) as DingTalkMessage
@@ -856,34 +900,65 @@ export class DingTalkServer {
       }
 
       // 上传页面（手机端，二维码签到上传；?type=photo 已随拍照签到一并移除）
-      if (req.method === 'GET' && req.url?.startsWith('/upload')) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(this.getUploadPage())
+      if (req.method === 'GET' && routePath.startsWith('/upload')) {
+        if (!this.allowRequest(req, 30, 60000)) {
+          res.writeHead(429, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '请求过于频繁' }))
+          return
+        }
+        const uploadType = new URL(req.url || '/', `http://localhost:${this.port}`).searchParams.get('type') === 'photo' ? 'photo' : 'qr'
+        const scriptNonce = crypto.randomBytes(18).toString('base64url')
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'nonce-${scriptNonce}'; connect-src 'self'`,
+          'X-Frame-Options': 'DENY',
+        })
+        res.end(this.getUploadPage(uploadType, scriptNonce))
         return
       }
 
       // 二维码图片上传接口
-      if (req.method === 'POST' && req.url?.startsWith('/upload/image')) {
-        // 可选 token 鉴权：优先读 Authorization header，兼容旧上传页的 ?token=
-        if (this.token) {
-          const url = new URL(req.url, `http://localhost:${this.port}`)
-          const headerToken = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
-          const queryToken = url.searchParams.get('token') || ''
-          if (headerToken !== this.token && queryToken !== this.token) {
-            res.writeHead(403, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: 'token 校验失败' }))
-            return
-          }
+      if (req.method === 'POST' && routePath.startsWith('/upload/image')) {
+        if (!this.allowRequest(req, 10, 60000)) {
+          res.writeHead(429, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '上传过于频繁' }))
+          return
+        }
+        const contentLength = Number(req.headers['content-length'] || 0)
+        if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > 15 * 1024 * 1024) {
+          res.writeHead(413, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '图片必须小于 15MB' }))
+          return
         }
 
         try {
           const chunks: Buffer[] = []
-          req.on('data', (chunk: Buffer) => chunks.push(chunk))
-          await new Promise(r => req.on('end', r))
+          let received = 0
+          await new Promise((resolve, reject) => {
+            req.on('data', (chunk: Buffer) => {
+              received += chunk.length
+              if (received > 15 * 1024 * 1024) {
+                req.destroy()
+                reject(new Error('图片超过 15MB 限制'))
+                return
+              }
+              chunks.push(chunk)
+            })
+            req.on('end', resolve)
+            req.on('error', reject)
+          })
           const buffer = Buffer.concat(chunks)
+          if (!this.isSupportedImage(buffer)) {
+            res.writeHead(415, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: '仅支持 PNG、JPEG、BMP 或 WebP 图片' }))
+            return
+          }
 
-          if (this.imageHandler && buffer.length > 0) {
-            // 所有上传统一按二维码签到处理（拍照签到已移除）
+          const uploadType = new URL(req.url || '/', `http://localhost:${this.port}`).searchParams.get('type') || 'qr'
+          if (uploadType === 'photo' && this.photoHandler && buffer.length > 0) {
+            await this.photoHandler(buffer)
+          } else if (this.imageHandler && buffer.length > 0) {
+            // 默认按二维码处理，保持旧客户端兼容
             await this.imageHandler(buffer)
           }
 
@@ -901,9 +976,10 @@ export class DingTalkServer {
       res.end('not found')
     })
 
-    this.server.listen(this.port, () => {
-      logger.success(`钉钉回调服务器已启动: http://0.0.0.0:${this.port}`)
-      logger.info(`消息回调: POST /dingtalk/callback`)
+    const host = process.env.WEB_HOST || '127.0.0.1'
+    this.server.listen(this.port, host, () => {
+      logger.success(`本地服务已启动: http://${host}:${this.port}`)
+      logger.info(`消息回调: POST /dingtalk/callback${this.token ? ' （需 token）' : ''}`)
       logger.info(`手机上传: GET  /upload${this.token ? ' （已开启 token 鉴权）' : ''}`)
       logger.info(`健康检查: GET  /health`)
     })
@@ -959,27 +1035,46 @@ export class DingTalkServer {
     if (this.allowedOrigin) {
       res.setHeader('Access-Control-Allow-Origin', this.allowedOrigin)
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Web-Token')
     }
   }
 
   private readBody(req: http.IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
       const chunks: string[] = []
-      req.on('data', (chunk: string) => chunks.push(chunk))
+      let size = 0
+      req.on('data', (chunk: string) => {
+        size += Buffer.byteLength(chunk)
+        if (size > 1024 * 1024) {
+          req.destroy()
+          reject(new Error('请求体超过 1MB 限制'))
+          return
+        }
+        chunks.push(chunk)
+      })
       req.on('end', () => resolve(chunks.join('')))
       req.on('error', reject)
     })
   }
 
+  private isSupportedImage(buffer: Buffer): boolean {
+    if (buffer.length < 12) return false
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return true
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return true
+    if (buffer[0] === 0x42 && buffer[1] === 0x4d) return true
+    return buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP'
+  }
+
   /**
    * 手机端上传页面（二维码签到专用，自动携带 token）
    */
-  private getUploadPage(): string {
+  private getUploadPage(type: 'qr' | 'photo' = 'qr', scriptNonce = ''): string {
     const token = this.token || ''
-    const title = '学习通签到 - 二维码上传'
-    const tip = '拍一张教室里的签到二维码，点击上传（软件会自动识别并完成签到）'
-    const placeholder = '📷 点击拍照或选择图片'
+    const title = type === 'photo' ? '学习通签到 - 拍照上传' : '学习通签到 - 二维码上传'
+    const tip = type === 'photo'
+      ? '拍一张可用于签到的照片，点击上传（软件会自动提交）'
+      : '拍一张教室里的签到二维码，点击上传（软件会自动识别并完成签到）'
+    const placeholder = type === 'photo' ? '📷 点击拍照上传' : '📷 点击拍照或选择图片'
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -988,19 +1083,21 @@ export class DingTalkServer {
 <title>${title}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f0f2f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.card{background:#fff;border-radius:16px;padding:32px;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
-h1{font-size:20px;text-align:center;margin-bottom:8px;color:#1a1a1a}
-p{font-size:14px;color:#666;text-align:center;margin-bottom:24px}
-.upload-area{border:2px dashed #d9d9d9;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s}
-.upload-area:hover,.upload-area.drag{border-color:#1677ff;background:#f0f5ff}
-.upload-area img{max-width:100%;max-height:200px;border-radius:8px;margin-top:12px}
-.btn{display:block;width:100%;padding:14px;background:#1677ff;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;margin-top:20px}
-.btn:disabled{background:#ccc;cursor:not-allowed}
-.status{text-align:center;margin-top:16px;font-size:14px;padding:8px;border-radius:8px}
-.status.ok{background:#f6ffed;color:#52c41a}
-.status.err{background:#fff2f0;color:#ff4d4f}
-.status.loading{background:#e6f4ff;color:#1677ff}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",sans-serif;background:radial-gradient(circle at 84% -6%,rgba(242,123,52,.12),transparent 24rem),#f6f7f4;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#1d1a16}
+.card{background:rgba(255,255,255,.9);border:1px solid #e7e4de;border-radius:20px;padding:30px;width:100%;max-width:410px;box-shadow:0 18px 44px rgba(28,25,21,.09);backdrop-filter:blur(18px)}
+h1{font-size:20px;text-align:center;margin-bottom:8px;color:#1d1a16;letter-spacing:-.02em}
+p{font-size:14px;color:#635b52;text-align:center;margin-bottom:24px;line-height:1.55}
+.upload-area{border:2px dashed #f0b07c;border-radius:14px;padding:42px 20px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s,transform .18s;background:#fff0e4}
+.upload-area:hover,.upload-area.drag{border-color:#db641c;background:#fbe0c8;transform:scale(1.01)}
+.upload-area img{max-width:100%;max-height:200px;border-radius:10px;margin-top:12px}
+.btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#f98a44,#e56920);color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;margin-top:20px;box-shadow:0 10px 22px rgba(229,105,32,.18);transition:filter .18s,transform .12s}
+.btn:hover:not(:disabled){filter:brightness(.97)}
+.btn:active{transform:scale(.99)}
+.btn:disabled{background:#d9d5cd;color:#8d857c;cursor:not-allowed;box-shadow:none}
+.status{text-align:center;margin-top:16px;font-size:14px;padding:10px;border-radius:10px;font-weight:600}
+.status.ok{background:#e5f4ec;color:#16855a}
+.status.err{background:#fcecec;color:#d24343}
+.status.loading{background:#fff0e4;color:#b95a18}
 input[type=file]{display:none}
 </style>
 </head>
@@ -1008,16 +1105,17 @@ input[type=file]{display:none}
 <div class="card">
   <h1>${title}</h1>
   <p>${tip}</p>
-  <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+  <div class="upload-area" id="dropZone">
     <div id="placeholder">${placeholder}</div>
     <img id="preview" style="display:none">
   </div>
   <input type="file" id="fileInput" accept="image/*" capture="environment">
-  <button class="btn" id="submitBtn" disabled onclick="upload()">上传并签到</button>
+  <button class="btn" id="submitBtn" disabled>上传并签到</button>
   <div id="status"></div>
 </div>
-<script>
+<script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
 const UPLOAD_TOKEN = ${JSON.stringify(token)}
+const UPLOAD_TYPE = ${JSON.stringify(type)}
 const fileInput=document.getElementById('fileInput')
 const preview=document.getElementById('preview')
 const placeholder=document.getElementById('placeholder')
@@ -1025,6 +1123,9 @@ const submitBtn=document.getElementById('submitBtn')
 const dropZone=document.getElementById('dropZone')
 const status=document.getElementById('status')
 let selectedFile=null
+
+dropZone.addEventListener('click',()=>fileInput.click())
+submitBtn.addEventListener('click',upload)
 
 fileInput.addEventListener('change',e=>{
   const file=e.target.files[0]
@@ -1048,7 +1149,7 @@ async function upload(){
   status.textContent='正在上传识别中...'
   try{
     const qs = UPLOAD_TOKEN ? ('?token=' + encodeURIComponent(UPLOAD_TOKEN)) : ''
-    const resp=await fetch('/upload/image' + qs,{method:'POST',body:selectedFile,headers:{'Content-Type':selectedFile.type}})
+    const resp=await fetch('/upload/image?type=' + encodeURIComponent(UPLOAD_TYPE) + qs,{method:'POST',body:selectedFile,headers:{'Content-Type':selectedFile.type}})
     const data=await resp.json()
     if(data.success){status.className='status ok';status.textContent='✅ '+data.message}
     else{status.className='status err';status.textContent='❌ '+(data.error||'未知错误')}

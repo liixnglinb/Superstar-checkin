@@ -3,7 +3,7 @@
 process.env.NO_OPEN_BROWSER = '1' // 禁止服务层调用系统浏览器
 
 const path = require('path')
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard } = require('electron')
 
 // 单实例：防止重复启动
 if (!app.requestSingleInstanceLock()) {
@@ -12,7 +12,72 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const ICON = path.join(__dirname, '..', 'assets', 'app-icon.ico')
-const CONSOLE_URL = 'http://127.0.0.1:3456/'
+
+function consoleUrl() {
+  const service = serviceConfig()
+  const base = `http://${service.host}:${service.port}/`
+  return service.token ? `${base}?token=${encodeURIComponent(service.token)}` : base
+}
+
+function serviceConfig() {
+  try {
+    const fs = require('fs')
+    const YAML = require('yaml')
+    const file = process.env.CONFIG_FILE || path.join(process.cwd(), 'config.yaml')
+    const web = YAML.parse(fs.readFileSync(file, 'utf8'))?.web || {}
+    const host = String(web.host || '127.0.0.1')
+    return {
+      host: host === '0.0.0.0' ? '127.0.0.1' : host,
+      port: Number(web.port || 3456),
+      token: String(web.token || ''),
+    }
+  } catch (_) {
+    return { host: '127.0.0.1', port: 3456, token: '' }
+  }
+}
+
+function apiUrl(pathname) {
+  const service = serviceConfig()
+  const token = service.token
+  return `http://${service.host}:${service.port}${pathname}${token ? (pathname.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token) : ''}`
+}
+
+let clipboardWatcher = null
+let lastClipboardImageHash = ''
+
+async function uploadClipboardImage(buffer) {
+  const service = serviceConfig()
+  if (!service.token) return
+  try {
+    await fetch(`http://${service.host}:${service.port}/upload/image?type=qr`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/png' },
+      body: buffer,
+    })
+  } catch (e) { console.warn('剪贴板二维码上传失败:', e.message) }
+}
+
+function startClipboardWatcher() {
+  try {
+    const fs = require('fs')
+    const YAML = require('yaml')
+    const file = process.env.CONFIG_FILE || path.join(process.cwd(), 'config.yaml')
+    const cfg = YAML.parse(fs.readFileSync(file, 'utf8'))
+    if (!cfg?.web?.watchClipboard) return
+  } catch (_) { return }
+  if (clipboardWatcher) return
+  clipboardWatcher = setInterval(() => {
+    try {
+      const image = clipboard.readImage()
+      if (image.isEmpty()) return
+      const buffer = image.toPNG()
+      const hash = require('crypto').createHash('sha256').update(buffer).digest('hex')
+      if (hash === lastClipboardImageHash) return
+      lastClipboardImageHash = hash
+      uploadClipboardImage(buffer)
+    } catch (_) { /* 剪贴板可能暂不可读 */ }
+  }, 2000)
+}
 
 let mainWindow = null
 let tray = null
@@ -22,7 +87,7 @@ let serviceReady = false
 // 服务就绪探测：等业务模块初始化完成（课程/账号数据可用）再打开窗口，保证首屏完整
 function waitForService(retries) {
   const http = require('http')
-  const req = http.get('http://127.0.0.1:3456/api/status', (res) => {
+  const req = http.get(apiUrl('/api/status'), (res) => {
     let body = ''
     res.on('data', (d) => { body += d })
     res.on('end', () => {
@@ -70,10 +135,10 @@ function openWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
-  mainWindow.loadURL(CONSOLE_URL)
+  mainWindow.loadURL(consoleUrl())
   // 安全防护：阻止页面导航离开本机控制台（含拖拽文件误触发的跳转）
   mainWindow.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('http://127.0.0.1:3456')) e.preventDefault()
+    if (!url.startsWith(consoleUrl().split('?')[0])) e.preventDefault()
   })
   mainWindow.on('close', (e) => {
     // 关闭窗口 = 最小化到托盘（后台继续签到监控）
@@ -98,7 +163,7 @@ function createTray() {
 
 function refreshTrayStats() {
   const http = require('http')
-  const req = http.get('http://127.0.0.1:3456/api/status', (res) => {
+  const req = http.get(apiUrl('/api/status'), (res) => {
     let body = ''
     res.on('data', (d) => { body += d })
     res.on('end', () => {
@@ -444,6 +509,7 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error('签到服务启动失败:', err)
   }
+  startClipboardWatcher()
   createTray()
   waitForService(60)
   app.on('activate', () => openWindow())

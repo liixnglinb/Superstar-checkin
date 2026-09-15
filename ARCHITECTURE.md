@@ -149,7 +149,7 @@ Params: name, address, activeId, uid, clientip, latitude, longitude, fid, appTyp
 SIGNIN:aid=12345678&enc=ABCDEF1234567890
 ```
 
-从二维码中提取 `aid`（活动ID）和 `enc`（加密参数），提交到 stuSignajax 时带上 `enc` 参数即可完成签到。解码方式可选腾讯云 OCR 或本地 ZXing 库。
+从二维码中提取 `aid`（活动ID）和 `enc`（加密参数），提交到 stuSignajax 时带上 `enc` 参数即可完成签到。解码默认使用本地 jsQR（纯 JS，无需联网、无外部依赖），也可配置为腾讯云 OCR。
 
 ---
 
@@ -174,7 +174,7 @@ SIGNIN:aid=12345678&enc=ABCDEF1234567890
 | 手势签到 | ⚠️ 降级为普通 | ⚠️ 降级为普通 | 手势轨迹无法自动完成 |
 | 二维码签到 | ✅ | ✅ | 新增本地 ZXing 解码选项 |
 | 位置签到 | ✅ | ✅ | 相同三角定位算法 |
-| 拍照签到 | ⚠️ 需手动上传图片 | ⚠️ 同 | 需要额外实现图片上传 |
+| 拍照签到 | ⚠️ 需手动上传图片 | ✅ 支持自动上传 | 照片由用户提供，上传至超星云盘换取 objectId 后提交 |
 | 多账号 | ✅ 串行 | ✅ **并发** | Promise.all 并行签到更快 |
 | 通知渠道 | PushPlus + QQ | PushPlus + Bark + 钉钉 + 邮件 | 4 通道可选 |
 | 日志 | console.log | 分级 + 文件持久化 | debug/info/warn/error |
@@ -244,7 +244,9 @@ npm start
 - **listener.mode**: 推荐 `im`（实时性最好），如果 IM 不稳定改用 `hybrid`
 - **geo.locations**: 位置签到必须配置，用百度地图坐标拾取工具查经纬度
 - **notify.channels**: 至少启用一个通知渠道，否则只能看终端输出
-- **ocr**: 如果需要自动识别二维码签到，需配置腾讯云 OCR 密钥
+- **ocr**: 默认 `local`（本地 jsQR 解码，无需任何配置）；如需腾讯云 OCR，改为 `provider: tencent` 并填密钥
+- **photo**: 拍照签到可预置常用照片路径；留空则每次通过上传页索取
+- **web.host**: 默认 `127.0.0.1` 仅本机可访问；改为 `0.0.0.0` 供局域网/手机访问时，务必同时配置 `web.token`
 
 ---
 
