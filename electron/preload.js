@@ -18,6 +18,6 @@ contextBridge.exposeInMainWorld('appCtl', {
 contextBridge.exposeInMainWorld('updateCtl', {
   check: () => ipcRenderer.invoke('update-check'),
   download: () => ipcRenderer.invoke('update-download'),
-  install: (file) => ipcRenderer.invoke('update-install', file),
+  install: () => ipcRenderer.invoke('update-install'),
   onProgress: (cb) => ipcRenderer.on('update-progress', (_e, d) => cb(d)),
 })

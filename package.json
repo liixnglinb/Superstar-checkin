@@ -1,6 +1,6 @@
 {
   "name": "chaoxing-auto-sign",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "Chaoxing (学习通) Auto Check-in System v3",
   "main": "electron/main.js",
   "scripts": {
@@ -23,6 +23,7 @@
     "axios-cookiejar-support": "^5.0.0",
     "chalk": "4",
     "cheerio": "1.0.0-rc.12",
+    "electron-updater": "^6.8.9",
     "jpeg-js": "^0.4.4",
     "jsdom": "^24.0.0",
     "jsqr": "^1.4.0",
@@ -91,7 +92,7 @@
           ]
         }
       ],
-      "artifactName": "学习通自动签到-安装版-${version}.${ext}"
+      "artifactName": "SuperstarCheckin-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -102,11 +103,18 @@
       "shortcutName": "学习通自动签到",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "学习通自动签到-安装版-${version}.${ext}"
+      "artifactName": "SuperstarCheckin-Setup-${version}.${ext}"
     },
     "asarUnpack": [
       "node_modules/**/*.node"
     ],
-    "compression": "maximum"
+    "compression": "normal",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "liixnglinb",
+        "repo": "Superstar-checkin"
+      }
+    ]
   }
 }

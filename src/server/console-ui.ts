@@ -993,7 +993,7 @@ tr:hover td{background:#FBFBF9}
   })
   ensureDisclaimer()
 
-  // ===== 检查更新（设置页「检查更新」按钮 → GitHub Releases） =====
+  // ===== 检查更新（electron-updater：差分下载 + 静默安装） =====
   var updateCheckBtn=document.getElementById('updateCheckBtn')
   var updateModal=document.getElementById('updateModal')
   var updateBody=document.getElementById('updateBody')
@@ -1002,29 +1002,39 @@ tr:hover td{background:#FBFBF9}
   var updateBar=document.getElementById('updateBar')
   var updateBarFill=document.getElementById('updateBarFill')
   var updateBarText=document.getElementById('updateBarText')
-  var updateState={file:''}
+  var updateState={downloaded:false}
+  function fmtSize(b){
+    if(!b||b<0)return ''
+    if(b<1048576)return Math.round(b/1024)+'KB'
+    return (b/1048576).toFixed(b<10485760?1:0)+'MB'
+  }
   if(updateGo)updateGo.addEventListener('click',function(){
-    if(updateState.file){
-      // 已下载：立即安装（启动安装向导后软件自动退出）
-      updateGo.disabled=true;updateGo.textContent='正在启动安装…'
-      window.updateCtl.install(updateState.file).then(function(r){
-        if(!r||!r.ok){updateGo.disabled=false;updateGo.textContent='立即安装'
-        if(r&&r.source){updateBarText.textContent='下载完成（'+r.source+'），点击立即安装'};updateBody.innerHTML='<div class="cell-empty">安装启动失败：'+(r&&r.message?esc(r.message):'未知错误')+'</div>'}
-      }).catch(function(){updateGo.disabled=false;updateGo.textContent='立即安装';updateBody.innerHTML='<div class="cell-empty">安装启动失败，请稍后重试</div>'})
+    // 更新包已就绪：重启并静默安装（不弹安装向导）
+    if(updateState.downloaded){
+      updateGo.disabled=true;updateGo.textContent='正在重启…'
+      window.updateCtl.install().then(function(r){
+        if(!r||!r.ok){
+          updateGo.disabled=false;updateGo.textContent='重启并更新'
+          updateBody.innerHTML='<div class="cell-empty">安装启动失败：'+(r&&r.message?esc(r.message):'未知错误')+'，可稍后重试</div>'
+        }
+      }).catch(function(){
+        updateGo.disabled=false;updateGo.textContent='重启并更新'
+        updateBody.innerHTML='<div class="cell-empty">安装启动失败，请稍后重试</div>'
+      })
       return
     }
-    // 未下载：开始下载
+    // 开始下载：electron-updater 自动差分，只下载发生变化的块
     if(!window.updateCtl){updateBody.innerHTML='<div class="cell-empty">更新组件不可用（请使用安装版）</div>';return}
     updateGo.disabled=true;updateGo.textContent='下载中…'
     updateBar.style.display=''
     updateBarFill.style.width='0%'
-    updateBarText.textContent='正在下载安装包… 0%'
+    updateBarText.textContent='正在准备下载…'
     window.updateCtl.download().then(function(r){
       if(r&&r.ok){
-        updateState.file=r.file
+        updateState.downloaded=true
         updateBar.style.display='none'
-        updateBody.innerHTML='<div style="padding:6px 0"><b>下载完成</b><br><span style="color:var(--text-3);font-size:12.5px">安装包已保存到本地，点击「立即安装」启动安装向导，也可以稍后手动安装。</span></div>'
-        updateGo.disabled=false;updateGo.textContent='立即安装'
+        updateBody.innerHTML='<div style="padding:6px 0"><b>更新包已就绪</b><br><span style="color:var(--text-3);font-size:12.5px">点击「重启并更新」，软件会自动完成安装并重新打开，无需重走安装向导。</span></div>'
+        updateGo.disabled=false;updateGo.textContent='重启并更新'
         updateLater.textContent='稍后再说'
       }else{
         updateBar.style.display='none'
@@ -1041,7 +1051,7 @@ tr:hover td{background:#FBFBF9}
     if(updateModal)updateModal.style.display='none'
     updateLater.textContent='以后再说'
   })
-  // 下载进度（仅注册一次）
+  // 下载进度（仅注册一次）：展示已下载量 / 总量 / 速度，便于确认差分生效
   if(window.updateCtl&&window.updateCtl.onProgress){
     window.updateCtl.onProgress(function(d){
       if(!d)return
@@ -1051,14 +1061,20 @@ tr:hover td{background:#FBFBF9}
       }else if(d.phase==='downloading'&&updateBarFill){
         var pct=d.pct||0
         updateBarFill.style.width=pct+'%'
-        var src=d.source?('（'+d.source+'）'):''
-        updateBarText.textContent='正在下载安装包… '+pct+'% '+src
+        var extra=[]
+        if(d.transferred&&d.total)extra.push(fmtSize(d.transferred)+' / '+fmtSize(d.total))
+        if(d.speedBps)extra.push((d.speedBps/1048576).toFixed(1)+'MB/s')
+        updateBarText.textContent='正在下载更新… '+pct+'%'+(extra.length?'（'+extra.join(' · ')+'）':'')
+      }else if(d.phase==='error'&&d.message){
+        updateBar.style.display='none'
+        if(updateGo){updateGo.disabled=false;updateGo.textContent='重新下载'}
+        updateBody.innerHTML='<div class="cell-empty">下载出错：'+esc(d.message)+'</div>'
       }
     })
   }
   if(updateCheckBtn)updateCheckBtn.addEventListener('click',function(){
     if(!window.updateCtl){return}
-    updateState.file=''
+    updateState.downloaded=false
     if(updateModal)updateModal.style.display='flex'
     updateGo.style.display='none'
     updateLater.textContent='以后再说'
@@ -1078,8 +1094,9 @@ tr:hover td{background:#FBFBF9}
         return
       }
       updateGo.style.display=''
-      updateGo.disabled=false;updateGo.textContent='立即下载安装'
-      updateBody.innerHTML='<div style="padding:4px 0"><div style="font-size:14px;font-weight:600;margin-bottom:8px">发现新版本 <b>v'+esc(r.latest)+'</b>（当前 v'+esc(r.current)+'）</div><div style="max-height:220px;overflow-y:auto;white-space:pre-wrap;background:var(--bg2,#FBF9F7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--text-2)">'+(r.body?esc(r.body):'暂无更新说明')+'</div></div>'
+      updateGo.disabled=false;updateGo.textContent='下载更新'
+      var srcLine=r.source?'<div style="font-size:12px;color:var(--text-3);margin-top:8px">下载源：'+esc(r.source)+'（自动差分，只下载变化的文件块）</div>':''
+      updateBody.innerHTML='<div style="padding:4px 0"><div style="font-size:14px;font-weight:600;margin-bottom:8px">发现新版本 <b>v'+esc(r.latest)+'</b>（当前 v'+esc(r.current)+'）</div><div style="max-height:220px;overflow-y:auto;white-space:pre-wrap;background:var(--bg2,#FBF9F7);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--text-2)">'+(r.body?esc(r.body):'暂无更新说明')+'</div>'+srcLine+'</div>'
     }).catch(function(){
       updateGo.style.display='none'
       updateLater.textContent='知道了'
