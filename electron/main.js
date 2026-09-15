@@ -236,274 +236,159 @@ app.whenReady().then(() => {
     app.quit()
   })
 
-  // ===== 检查更新（GitHub Releases：软件内「检查更新」按钮） =====
-  const REPO_LATEST = process.env.UPDATE_URL || 'https://api.github.com/repos/liixnglinb/superstar-checkin/releases/latest'
-  const UA = { 'User-Agent': 'superstar-checkin-desktop' }
-  // GitHub 下载加速镜像源（2026-09-15 实测校准）
-  // 实测速度（20MB 样本 / 106MB 安装包全量）：gh-proxy.com ≈1.39MB/s、ghfast.top ≈1.25MB/s
-  // ⚠️ 已剔除三个失效源：mirror.ghproxy.com / github.moeyy.xyz / gh.api.99988866.xyz（连接失败，只会拖慢测速）
-  // 下方按优先级排序，运行时会并发测速后自动选用最快可用源
-  const DOWNLOAD_MIRRORS = [
-    'https://gh-proxy.com/',
-    'https://ghfast.top/',
-    'https://ghproxy.net/',
+  // ===== 自动更新（electron-updater：差分下载 + 静默安装） =====
+  // 机制：electron-builder 会随包生成 latest.yml（版本清单）与 .exe.blockmap（块指纹）；
+  //      electron-updater 比对块指纹后只下载发生变化的块，再以 NSIS「更新模式」静默安装并自动重启，
+  //      用户无需重走安装向导。注意：≤3.2.1 的旧版本仍是整包下载，升到本版起才享受差分。
+  const { autoUpdater } = require('electron-updater')
+  const { net } = require('electron')
+  const GH_OWNER = 'liixnglinb'
+  const GH_REPO = 'Superstar-checkin'
+  // 下载源：优先国内镜像代理（实测直连 GitHub 国内约 0.03MB/s，镜像约 1.3MB/s）
+  const FEED_MIRRORS = [
+    'https://gh-proxy.com/https://github.com/' + GH_OWNER + '/' + GH_REPO + '/releases/latest/download',
+    'https://ghfast.top/https://github.com/' + GH_OWNER + '/' + GH_REPO + '/releases/latest/download',
   ]
-  // 生成带镜像前缀的下载 URL 列表（镜像优先，原始 URL 兜底）
-  function getDownloadUrls(originalUrl) {
-    const urls = DOWNLOAD_MIRRORS.map((m) => m + originalUrl)
-    urls.push(originalUrl) // 原始 URL 放最后兜底
-    return urls
-  }
 
-  // 测速：并发下载前 128KB，计算每个源的实际速度，选最快（Electron net 栈，兼容系统 CA）
-  function testSourceSpeed(url, timeoutMs = 8000) {
-    return new Promise((resolve) => {
-      const start = Date.now()
-      let loaded = 0
-      let done = false
-      let req = null
-      const finish = (ok) => {
-        if (done) return
-        done = true
-        try { req && req.abort() } catch (_) {}
-        const elapsed = Math.max(0.1, (Date.now() - start) / 1000)
-        resolve({ url, speedBps: ok ? loaded / elapsed : 0, ok, loaded })
-      }
-      netRequestRaw({
-        url,
-        headers: Object.assign({ Range: 'bytes=0-131071' }, UA),
-        timeoutMs: 0, // 测速超时由下方 setTimeout 控制
-      }).then(({ stream, req: r }) => {
-        req = r
-        stream.on('data', (chunk) => {
-          loaded += chunk.length
-          if (loaded >= 131072) finish(true)
-        })
-        stream.on('end', () => finish(loaded > 1024))
-        stream.on('error', () => finish(loaded > 1024))
-      }).catch(() => finish(loaded > 1024))
-      setTimeout(() => finish(false), timeoutMs)
-    })
-  }
+  let updateSender = null
+  let currentFeedLabel = 'GitHub 官方'
+  const silentLogger = { info() {}, warn() {}, error() {}, debug() {} }
 
-  async function rankSourcesBySpeed(urls, event) {
-    event.sender.send('update-progress', { phase: 'testing', source: '正在测速，自动选择最快下载源…' })
-    const results = await Promise.all(urls.map((u) => testSourceSpeed(u)))
-    const ok = results.filter((r) => r.ok && r.speedBps > 0).sort((a, b) => b.speedBps - a.speedBps)
-    const fail = results.filter((r) => !r.ok)
-    return ok.concat(fail)
-  }
+  autoUpdater.autoDownload = false          // 由用户点击触发下载
+  autoUpdater.autoInstallOnAppQuit = true   // 已下载未安装时，退出软件兜底安装
+  autoUpdater.logger = silentLogger
 
-  function compareVersions(a, b) {
+  autoUpdater.on('download-progress', (p) => {
+    if (updateSender && !updateSender.isDestroyed()) {
+      updateSender.send('update-progress', {
+        phase: 'downloading',
+        pct: Math.round(p.percent || 0),
+        transferred: p.transferred || 0,
+        total: p.total || 0,
+        speedBps: p.bytesPerSecond || 0,
+        source: currentFeedLabel,
+      })
+    }
+  })
+  autoUpdater.on('error', (e) => {
+    if (updateSender && !updateSender.isDestroyed()) {
+      updateSender.send('update-progress', { phase: 'error', source: currentFeedLabel, message: friendlyUpdateError(e) })
+    }
+  })
+
+  /** 语义化版本比较：a 是否比 b 新 */
+  function isNewerVersion(a, b) {
     const pa = String(a || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
     const pb = String(b || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-      const x = pa[i] || 0
-      const y = pb[i] || 0
-      if (x > y) return 1
-      if (x < y) return -1
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return true
+      if ((pa[i] || 0) < (pb[i] || 0)) return false
     }
-    return 0
-  }
-
-  // GitHub API 请求（axios + 支持软件配置的代理）
-  function getUpdateProxy() {
-    try {
-      const cfgFile = path.join(process.cwd(), 'config.yaml')
-      const fs = require('fs')
-      if (fs.existsSync(cfgFile)) {
-        const YAML = require('yaml')
-        const cfg = YAML.parse(fs.readFileSync(cfgFile, 'utf8'))
-        if (cfg && typeof cfg.proxy === 'string' && cfg.proxy.trim()) {
-          const u = new URL(cfg.proxy.trim())
-          return { protocol: u.protocol.replace(':', ''), host: u.hostname, port: Number(u.port || 80) }
-        }
-      }
-    } catch (e) { /* 无代理配置 */ }
     return false
   }
 
-  // 更新请求网络栈：使用 Electron net（Chromium 网络栈，自动信任 Windows 系统 CA）。
-  // 解决部分网络环境（企业代理/安全软件/代理残留）下 Node 内置 CA 无法验证 GitHub 证书、
-  // axios 报 "unable to verify the first certificate" 导致无法检查/下载更新的问题。
-  let updateNetSession = null
-  async function getUpdateNetSession() {
-    if (updateNetSession) return updateNetSession
-    const { session } = require('electron')
-    updateNetSession = session.fromPartition('persist:update-check')
-    try {
-      const p = getUpdateProxy()
-      if (p) {
-        await updateNetSession.setProxy({ mode: 'fixed', proxyRules: `${p.protocol}://${p.host}:${p.port}` })
-      } else {
-        await updateNetSession.setProxy({ mode: 'system' })
+  /** 探测镜像是否真能取到更新清单，避免把更新源指向已失效的镜像 */
+  function probeFeed(base, timeoutMs = 5000) {
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (ok) => { if (!settled) { settled = true; resolve(ok) } }
+      let request = null
+      const timer = setTimeout(() => finish(false), timeoutMs)
+      try {
+        request = net.request({ method: 'HEAD', url: base + '/latest.yml' })
+        request.on('response', (res) => {
+          clearTimeout(timer)
+          finish(res.statusCode >= 200 && res.statusCode < 400)
+          try { request.abort() } catch (_) {}
+        })
+        request.on('error', () => { clearTimeout(timer); finish(false) })
+        request.end()
+      } catch (_) {
+        clearTimeout(timer)
+        finish(false)
       }
-    } catch (e) { console.error('设置更新代理失败:', e.message) }
-    return updateNetSession
-  }
-
-  // 通用：发起一次 net.request，支持超时与取消，返回 {status, headers, dataStream|body}
-  function netRequestRaw({ url, method = 'GET', headers = {}, timeoutMs = 300000 }) {
-    return new Promise((resolve, reject) => {
-      getUpdateNetSession().then((ses) => {
-        const { net } = require('electron')
-        const req = net.request({ url, method, session: ses })
-        Object.keys(headers).forEach((k) => req.setHeader(k, headers[k]))
-        let timer = null
-        req.on('response', (res) => {
-          if (timer) clearTimeout(timer)
-          resolve({ status: res.statusCode, headers: res.headers, stream: res, req })
-        })
-        req.on('error', (e) => {
-          if (timer) clearTimeout(timer)
-          reject(e)
-        })
-        if (timeoutMs > 0) {
-          timer = setTimeout(() => {
-            try { req.abort() } catch (_) {}
-            reject(new Error('请求超时'))
-          }, timeoutMs)
-        }
-        req.end()
-      }).catch(reject)
     })
   }
 
-  // 拉取 GitHub Release 信息（JSON）
-  async function fetchLatestRelease() {
-    const { status, stream, req } = await netRequestRaw({
-      url: REPO_LATEST,
-      headers: Object.assign({ Accept: 'application/vnd.github+json' }, UA),
-      timeoutMs: 20000,
-    })
-    let body = ''
-    return new Promise((resolve, reject) => {
-      stream.on('data', (chunk) => { body += chunk.toString('utf8') })
-      stream.on('end', () => {
-        try { req.abort() } catch (_) {}
-        if (status === 404) return reject(new Error('HTTP 404'))
-        if (status !== 200) return reject(new Error('HTTP ' + status))
-        try { resolve(JSON.parse(body)) } catch (e) { reject(new Error('响应解析失败')) }
-      })
-      stream.on('error', reject)
-    })
+  /** 依次探测可用下载源：镜像优先，全部不可用时回退 GitHub 官方 */
+  async function pickFeed() {
+    for (const base of FEED_MIRRORS) {
+      if (await probeFeed(base)) {
+        return { feed: { provider: 'generic', url: base }, label: '国内镜像 ' + base.split('/')[2] }
+      }
+    }
+    return { feed: { provider: 'github', owner: GH_OWNER, repo: GH_REPO }, label: 'GitHub 官方' }
   }
 
-  function downloadFile(url, filePath, onProgress) {
-    return new Promise((resolve, reject) => {
-      const fs = require('fs')
-      netRequestRaw({ url, headers: UA, timeoutMs: 300000 }).then(({ status, stream, req }) => {
-        if (status !== 200) {
-          try { req.abort() } catch (_) {}
-          return reject(new Error('HTTP ' + status))
-        }
-        const total = Number(stream.headers['content-length'] || 0)
-        let loaded = 0
-        let settled = false
-        const finish = (fn, arg) => {
-          if (settled) return
-          settled = true
-          fn(arg)
-        }
-        const out = fs.createWriteStream(filePath)
-        out.on('error', (e) => { try { req.abort() } catch (_) {}; finish(reject, e) })
-        stream.on('data', (chunk) => {
-          loaded += chunk.length
-          onProgress && onProgress(total ? Math.min(100, Math.round((loaded / total) * 100)) : 0, loaded, total)
-        })
-        stream.on('error', (e) => { try { out.destroy() } catch (_) {}; finish(reject, e) })
-        stream.on('end', () => {
-          out.end(() => { out.close(); finish(resolve, filePath) })
-        })
-        stream.pipe(out)
-      }).catch(reject)
-    })
+  /** 把底层异常翻译成用户看得懂的话 */
+  function friendlyUpdateError(e) {
+    const s = String((e && e.message) || e)
+    if (/net::|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|timeout|socket hang up/i.test(s)) {
+      return '网络连接失败，请检查网络，或在 config.yaml 配置 proxy 代理后重试'
+    }
+    if (/latest\.yml|Cannot find|No such file/i.test(s)) {
+      return '未找到更新清单 latest.yml —— 请确认该 Release 已附带 latest.yml 与 .blockmap 文件'
+    }
+    if (/sha512|checksum|integrity/i.test(s)) {
+      return '安装包校验失败，请重新下载（可在 config.yaml 配置 proxy 后重试）'
+    }
+    if (/404/.test(s)) {
+      return '未找到可用的更新资产，请确认该版本已完整发布'
+    }
+    return s
   }
 
+  // 检查更新：设置页「检查更新」按钮
   ipcMain.handle('update-check', async () => {
     try {
-      const rel = await fetchLatestRelease()
-      const latest = String(rel.tag_name || '').replace(/^v/i, '')
+      const picked = await pickFeed()
+      currentFeedLabel = picked.label
+      autoUpdater.setFeedURL(picked.feed)
+      const result = await autoUpdater.checkForUpdates()
+      const info = result && result.updateInfo
+      if (!info || !info.version) {
+        return { ok: false, message: '未获取到版本信息，请确认已在 GitHub Releases 发布新版本' }
+      }
       const current = app.getVersion()
-      const hasUpdate = !!latest && compareVersions(latest, current) > 0
-      const asset = (rel.assets || []).find((a) => /\.exe$/.test(a.name || ''))
       return {
         ok: true,
-        hasUpdate: !!hasUpdate,
+        hasUpdate: isNewerVersion(info.version, current),
         current,
-        latest: latest || String(rel.tag_name || ''),
-        name: rel.name || '',
-        body: String(rel.body || '').slice(0, 800),
-        url: asset ? asset.browser_download_url : '',
-        size: asset ? asset.size : 0,
+        latest: String(info.version).replace(/^v/i, ''),
+        body: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
+        source: currentFeedLabel,
       }
     } catch (e) {
-      const msg = String((e && e.message) || e)
-      const is404 = /404/.test(msg)
-      return {
-        ok: false,
-        hasUpdate: false,
-        message: is404 ? '暂无已发布的更新版本（请先在 GitHub Releases 发布）' : '检查更新失败：无法连接 GitHub，请检查网络，或在 config.yaml 配置 proxy 代理后重试',
-      }
+      return { ok: false, message: friendlyUpdateError(e) }
     }
   })
 
+  // 下载更新：electron-updater 自动做差分，仅下载变化的块
   ipcMain.handle('update-download', async (event) => {
+    updateSender = event.sender
     try {
-      const rel = await fetchLatestRelease()
-      const asset = (rel.assets || []).find((a) => /\.exe$/.test(a.name || ''))
-      if (!asset || !asset.browser_download_url) throw new Error('安装包不存在')
-      const target = path.join(app.getPath('temp'), asset.name || '学习通自动签到-更新.exe')
-      const urls = getDownloadUrls(asset.browser_download_url)
-      // 先测速，按速度从快到慢排序（自动匹配最快下载源）
-      const ranked = await rankSourcesBySpeed(urls, event)
-      let lastError = null
-      for (let i = 0; i < ranked.length; i++) {
-        const item = ranked[i]
-        const url = item.url
-        const isMirror = !url.startsWith('https://github.com/')
-        const mirrorIdx = isMirror ? DOWNLOAD_MIRRORS.findIndex((m) => url.startsWith(m)) : -1
-        const sourceName = isMirror
-          ? (mirrorIdx >= 0 ? ('镜像' + (mirrorIdx + 1) + ' (' + DOWNLOAD_MIRRORS[mirrorIdx].replace('https://', '').replace('/', '') + ')') : '镜像')
-          : 'GitHub 直连'
-        const speedText = item.ok && item.speedBps > 0 ? (' · 测速 ' + (item.speedBps / 1024 / 1024).toFixed(1) + 'MB/s') : ''
-        event.sender.send('update-progress', { phase: 'connecting', source: sourceName + speedText, mirrorIndex: mirrorIdx })
-        try {
-          await downloadFile(url, target, (pct) => {
-            event.sender.send('update-progress', { phase: 'downloading', pct, source: sourceName, mirrorIndex: mirrorIdx })
-          })
-          return { ok: true, file: target, source: sourceName, mirrorUsed: isMirror, speedBps: item.speedBps }
-        } catch (e) {
-          lastError = e
-          // 清理不完整的下载文件
-          try { if (fs.existsSync(target)) fs.unlinkSync(target) } catch (_) {}
-        }
-      }
-      throw lastError || new Error('所有下载源均失败')
+      event.sender.send('update-progress', { phase: 'connecting', source: currentFeedLabel })
+      await autoUpdater.downloadUpdate()
+      return { ok: true, source: currentFeedLabel }
     } catch (e) {
-      return { ok: false, message: String((e && e.message) || e) }
+      return { ok: false, message: friendlyUpdateError(e) }
     }
   })
 
-  ipcMain.handle('update-install', async (_e, file) => {
+  // 安装更新：NSIS 更新模式 —— 不弹安装向导，装完自动启动
+  ipcMain.handle('update-install', async () => {
     try {
-      // 安全校验：只允许打开 .exe 安装包，且文件必须真实存在，防止任意文件打开
-      if (typeof file !== 'string' || !/\.exe$/i.test(file)) {
-        return { ok: false, message: '无效的安装包文件类型' }
-      }
-      const fs = require('fs')
-      if (!fs.existsSync(file)) {
-        return { ok: false, message: '安装包文件不存在，请重新下载' }
-      }
-      const err = await shell.openPath(file)
-      if (err) return { ok: false, message: err }
-      // 启动安装向导后退出当前应用，避免安装时文件占用导致失败
-      setTimeout(() => { quitting = true; app.quit() }, 1500)
+      quitting = true
+      // isSilent=false 走 NSIS 的 --updated 流程（无向导）；isForceRunAfter=true 装完自动重启
+      setImmediate(() => {
+        try { autoUpdater.quitAndInstall(false, true) } catch (_) {}
+      })
       return { ok: true }
     } catch (e) {
       return { ok: false, message: String((e && e.message) || e) }
     }
   })
+
   // 启动签到服务（构建产物，与窗口同进程）
   try {
     require(path.join(__dirname, '..', 'build', 'index.js'))

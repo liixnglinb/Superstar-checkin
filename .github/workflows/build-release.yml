@@ -87,20 +87,31 @@ jobs:
         # 因无 GH_TOKEN 而失败（实测 v26）。发布统一交给下方 action-gh-release 步骤。
         run: npx electron-builder --win nsis --x64 --publish never
 
-      - name: 规范化安装包文件名
+      - name: 准备发布资产
         shell: bash
         run: |
           V="${{ steps.ver.outputs.version }}"
-          SRC=$(find dist-electron -maxdepth 1 -name '*.exe' -print -quit)
-          if [ -z "$SRC" ]; then
-            echo "::error::未在 dist-electron/ 找到打包产物"
+          SRC="dist-electron/SuperstarCheckin-Setup-${V}.exe"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::未找到打包产物 $SRC（artifactName 已改为 ASCII，请检查 package.json）"
+            ls -lh dist-electron/ || true
             exit 1
           fi
-          echo "原始产物：$SRC"
-          cp "$SRC" "dist-electron/SuperstarCheckin-Setup-${V}.exe"
+          # 固定名副本：下载页 https://lxlrwxs.top/checkin/ 使用
+          # releases/latest/download/SuperstarCheckin-Setup.exe
           cp "$SRC" "dist-electron/SuperstarCheckin-Setup.exe"
+          # latest.yml（版本清单）与 .blockmap（块指纹）是 electron-updater
+          # 差分更新的必需品，缺任一都会导致软件内更新失败
+          if [ ! -f "dist-electron/latest.yml" ]; then
+            echo "::error::缺少 latest.yml —— electron-updater 将无法工作"
+            exit 1
+          fi
+          if ! ls dist-electron/*.blockmap >/dev/null 2>&1; then
+            echo "::error::缺少 .blockmap —— 差分更新将退化为整包下载"
+            exit 1
+          fi
           echo "--- 待上传资产 ---"
-          ls -lh dist-electron/*.exe
+          ls -lh dist-electron/*.exe dist-electron/latest.yml dist-electron/*.blockmap
 
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
@@ -110,6 +121,8 @@ jobs:
           files: |
             dist-electron/SuperstarCheckin-Setup-${{ steps.ver.outputs.version }}.exe
             dist-electron/SuperstarCheckin-Setup.exe
+            dist-electron/latest.yml
+            dist-electron/SuperstarCheckin-Setup-${{ steps.ver.outputs.version }}.exe.blockmap
           fail_on_unmatched_files: true
           generate_release_notes: true
 
