@@ -239,13 +239,14 @@ app.whenReady().then(() => {
   // ===== 检查更新（GitHub Releases：软件内「检查更新」按钮） =====
   const REPO_LATEST = process.env.UPDATE_URL || 'https://api.github.com/repos/liixnglinb/superstar-checkin/releases/latest'
   const UA = { 'User-Agent': 'superstar-checkin-desktop' }
-  // GitHub 下载加速镜像源（国内访问快），按优先级排序，自动尝试直到成功
+  // GitHub 下载加速镜像源（2026-09-15 实测校准）
+  // 实测速度（20MB 样本 / 106MB 安装包全量）：gh-proxy.com ≈1.39MB/s、ghfast.top ≈1.25MB/s
+  // ⚠️ 已剔除三个失效源：mirror.ghproxy.com / github.moeyy.xyz / gh.api.99988866.xyz（连接失败，只会拖慢测速）
+  // 下方按优先级排序，运行时会并发测速后自动选用最快可用源
   const DOWNLOAD_MIRRORS = [
     'https://gh-proxy.com/',
-    'https://mirror.ghproxy.com/',
+    'https://ghfast.top/',
     'https://ghproxy.net/',
-    'https://github.moeyy.xyz/',
-    'https://gh.api.99988866.xyz/',
   ]
   // 生成带镜像前缀的下载 URL 列表（镜像优先，原始 URL 兜底）
   function getDownloadUrls(originalUrl) {
