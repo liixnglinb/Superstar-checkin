@@ -1,6 +1,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { logger } from '../utils/logger'
+import { writeFileAtomic } from '../utils/fs'
+import { decryptPassword, encryptPassword, isEncrypted } from '../utils/crypto'
 
 let data: Record<string, any> = {}
 let filePath = ''
@@ -23,10 +25,19 @@ export function initStorage(dataDir: string) {
 }
 
 export function get<T>(key: string): T | null {
-  return data[key] ?? null
+  const value = data[key]
+  if (key.startsWith('cookie_') && typeof value === 'string' && isEncrypted(value)) {
+    const plain = decryptPassword(value)
+    return (plain || '') as unknown as T
+  }
+  return value ?? null
 }
 
 export function set<T>(key: string, value: T) {
+  if (key.startsWith('cookie_') && typeof value === 'string' && value && !isEncrypted(value)) {
+    const encrypted = encryptPassword(value)
+    if (encrypted) value = encrypted as unknown as T
+  }
   data[key] = value
   schedulePersist()
 }
@@ -37,7 +48,10 @@ export function remove(key: string) {
 }
 
 export function getAll(): Record<string, any> {
-  return { ...data }
+  return Object.fromEntries(Object.entries(data).map(([key, value]) => [
+    key,
+    key.startsWith('cookie_') ? '[REDACTED]' : value,
+  ]))
 }
 
 /** 防抖落盘：1 秒内多次写入只实际写一次，避免频繁 IO 阻塞事件循环 */
@@ -56,7 +70,7 @@ function persist() {
   }
   if (!filePath) return
   try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2))
+    writeFileAtomic(filePath, JSON.stringify(data, null, 2))
   } catch (e) {
     logger.error('保存数据文件失败', e)
   }

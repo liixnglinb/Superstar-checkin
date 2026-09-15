@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import YAML from 'yaml'
+import { writeFileAtomic } from '../utils/fs'
 import type { AppConfig } from '../types'
 import { DEFAULTS } from '../constants'
 import { logger } from '../utils/logger'
@@ -38,7 +39,6 @@ const DEFAULT_CONFIG: Partial<AppConfig> = {
     locations: [],
     providers: {},
     locationRadius: DEFAULTS.GEO_RADIUS,
-    favorites: [],
   },
   notify: {
     channels: [],
@@ -49,13 +49,9 @@ const DEFAULT_CONFIG: Partial<AppConfig> = {
   courseNotes: {},
   preCheck: { enabled: true, hour: 7 },
   smartPoll: { enabled: true, dayStart: 8, dayEnd: 22, nightMultiplier: 3 },
-  dingtalk: {
-    appKey: '',
-    appSecret: '',
-    port: 3456,
-  },
   web: {
     port: 3456,
+    host: '127.0.0.1',
     openBrowser: true,
   },
   storage: { dataDir: './data' },
@@ -116,7 +112,7 @@ export function loadConfig(filePath?: string): AppConfig {
           if (enc) ra.password = enc
         }
       }
-      fs.writeFileSync(file, YAML.stringify(raw), 'utf-8')
+      writeFileAtomic(file, YAML.stringify(raw))
       logger.info('config.yaml 已更新（密码加密存储）')
     } catch (e: any) {
       logger.warn(`密码加密写回失败: ${e.message}`)
@@ -163,7 +159,7 @@ function bootstrapConfig(filePath: string): AppConfig {
   const merged = deepMerge(DEFAULT_CONFIG, embedded || {}) as AppConfig
   if (!merged.accounts) merged.accounts = []
 
-  fs.writeFileSync(filePath, YAML.stringify(merged), 'utf-8')
+  writeFileAtomic(filePath, YAML.stringify(merged))
   return merged
 }
 

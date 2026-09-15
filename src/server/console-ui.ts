@@ -114,13 +114,14 @@ function typeText(t: string): string {
 }
 
 /** 生成完整控制台单页界面 */
-export function getConsolePage(status: ConsoleStatus, token: string): string {
+export function getConsolePage(status: ConsoleStatus, token: string, options?: { scriptNonce?: string }): string {
   const accounts = status.accounts || []
   const courses = status.courses || []
   const watchSet = new Set((status.watchCourses || []).map((c: any) => String(c)))
   const recent = status.recent || []
   const mode = status.mode || '-'
   const qs = token ? '?token=' + encodeURIComponent(token) : ''
+  const scriptNonce = options?.scriptNonce || ''
 
   const accountRows = accounts.length
     ? accounts.map(a => `
@@ -341,19 +342,27 @@ export function getConsolePage(status: ConsoleStatus, token: string): string {
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --canvas:#FAF9F7;--surface:#FFFFFF;--surface-2:#F1ECE7;
-  --text:#211B17;--text-2:#6B5B51;--text-3:#9A8B80;
-  --border:#E9E0D8;
-  --accent:#F78A46;--accent-strong:#E0702A;--accent-weak:#FFF1E5;
-  --ok:#178A5B;--err:#D64545;--warn:#B7791F;
-  --radius-lg:14px;--radius-sm:9px;
+  --canvas:#F6F7F4;--surface:#FFFFFF;--surface-2:#F4F4F1;--surface-3:#EDEEEA;
+  --text:#1D1A16;--text-2:#635B52;--text-3:#8D857C;
+  --border:#E7E4DE;--border-strong:#D9D5CD;
+  --accent:#F27B34;--accent-strong:#DB641C;--accent-deep:#B95A18;--accent-weak:#FFF0E4;
+  --ok:#16855A;--ok-weak:#E5F4EC;--err:#D24343;--err-weak:#FCECEC;--warn:#B37216;--warn-weak:#FAF1DE;
+  --radius-lg:18px;--radius:14px;--radius-sm:10px;
   --font:-apple-system,"Segoe UI Variable","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  --shadow-sm:0 1px 2px rgba(28,25,21,.05),0 1px 1px rgba(28,25,21,.03);
+  --shadow:0 10px 28px rgba(28,25,21,.07);
+  --shadow-lg:0 22px 64px rgba(28,25,21,.15);
+  --focus:0 0 0 3px rgba(242,123,52,.18);
 }
 html,body{height:100%}
-body{font-family:var(--font);background:var(--canvas);color:var(--text);font-size:14px;line-height:1.5;overflow:hidden}
+body{font-family:var(--font);background:
+  radial-gradient(circle at 82% -8%, rgba(242,123,52,.09), transparent 28rem),
+  radial-gradient(circle at -8% 72%, rgba(22,133,90,.06), transparent 28rem),
+  var(--canvas);
+  color:var(--text);font-size:14px;line-height:1.55;overflow:hidden;-webkit-font-smoothing:antialiased}
 .shell{display:flex;flex-direction:column;height:100vh}
 /* ===== 自绘标题栏（替代系统深色标题栏） ===== */
-.titlebar{height:38px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none}
+.titlebar{height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.78);border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none;backdrop-filter:blur(18px)}
 .titlebar-title{display:flex;align-items:center;gap:8px;padding-left:14px;font-size:12.5px;font-weight:500;color:var(--text-2);letter-spacing:.01em}
 .titlebar-title svg{width:14px;height:14px;color:var(--accent)}
 .titlebar-controls{display:flex;height:100%;-webkit-app-region:no-drag}
@@ -362,56 +371,58 @@ body{font-family:var(--font);background:var(--canvas);color:var(--text);font-siz
 .win-btn:hover{background:var(--surface-2);color:var(--text)}
 .win-close:hover{background:#E5484D;color:#fff}
 /* 键盘焦点可见（可访问性） */
-.btn:focus-visible,.watch-toggle:focus-visible,.switch:focus-visible,.nav-item:focus-visible,.win-btn:focus-visible,.modal-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn:focus-visible,.watch-toggle:focus-visible,.switch:focus-visible,.nav-item:focus-visible,.win-btn:focus-visible,.modal-close:focus-visible,.field-input:focus-visible{outline:none;box-shadow:var(--focus)}
 .app{flex:1;display:flex;min-height:0}
 /* ===== 左侧栏 ===== */
-.side{width:224px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px}
+.side{width:232px;flex-shrink:0;background:rgba(255,255,255,.82);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px;backdrop-filter:blur(18px)}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 16px}
-.brand-logo{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.brand-logo{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:var(--shadow-sm)}
 .brand-logo svg{width:22px;height:22px}
 .brand-logo-img{width:100%;height:100%;border-radius:9px;object-fit:cover;display:block}
 .titlebar-icon{width:18px;height:18px;border-radius:5px;object-fit:cover;display:inline-block;vertical-align:middle;margin-right:6px}
 .brand-name{font-size:15px;font-weight:600;letter-spacing:-.01em}
 .brand-ver{font-size:11px;color:var(--text-3);margin-top:1px}
 .nav{display:flex;flex-direction:column;gap:2px;flex:1}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13.5px;cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .12s ease,color .12s ease}
+.nav-item{position:relative;display:flex;align-items:center;gap:10px;padding:10px 10px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13.5px;cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .16s ease,color .16s ease,transform .16s ease}
 .nav-item svg{width:17px;height:17px;flex-shrink:0}
-.nav-item:hover{background:var(--surface-2);color:var(--text)}
-.nav-item.active{background:var(--accent-weak);color:var(--accent);font-weight:600}
+.nav-item:hover{background:var(--surface-2);color:var(--text);transform:translateX(1px)}
+.nav-item.active{background:var(--accent-weak);color:var(--accent);font-weight:650}
+.nav-item.active::after{content:'';position:absolute;left:-12px;top:50%;width:3px;height:18px;border-radius:0 3px 3px 0;background:var(--accent);transform:translateY(-50%)}
 .side-foot{border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
 .foot-row{display:flex;align-items:center;gap:8px;padding:2px 8px;font-size:12px;color:var(--text-2)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0}
 .foot-port{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text-3)}
 /* ===== 主区 ===== */
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:var(--surface);border-bottom:1px solid var(--border)}
-.page-title{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.topbar{height:64px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 30px;background:rgba(255,255,255,.72);border-bottom:1px solid var(--border);backdrop-filter:blur(18px)}
+.page-title{font-size:18px;font-weight:650;letter-spacing:-.02em}
 .top-actions{display:flex;gap:10px}
-.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--radius-sm);border:none;font-size:13px;font-weight:600;cursor:pointer;transition:transform .08s ease,background .12s ease,opacity .12s ease;font-family:var(--font)}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:var(--radius-sm);border:none;font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s ease,background .16s ease,box-shadow .16s ease,opacity .16s ease;font-family:var(--font)}
 .btn svg{width:15px;height:15px}
 .btn:active{transform:scale(.97)}
-.btn-primary{background:var(--accent);color:#fff}
-.btn-primary:hover{background:var(--accent-strong)}
-.btn-ghost{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn-primary{background:linear-gradient(135deg,#F98A44,#E56920);color:#fff;box-shadow:0 8px 18px rgba(229,105,32,.18)}
+.btn-primary:hover{filter:brightness(.97);box-shadow:0 10px 22px rgba(229,105,32,.22)}
+.btn-ghost{background:rgba(255,255,255,.82);color:var(--text);border:1px solid var(--border-strong);box-shadow:var(--shadow-sm)}
 .btn-ghost:hover{background:var(--surface-2)}
-.content{flex:1;overflow-y:auto;padding:24px 28px}
+.content{flex:1;overflow-y:auto;padding:28px 30px}
 .view{display:none;animation:fadeIn .16s ease}
 .view.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 /* ===== 总览 ===== */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;gap:2px}
+.stat-card{background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow-sm);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.stat-card:hover{transform:translateY(-2px);border-color:#F2C39F;box-shadow:var(--shadow)}
 .stat-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
 .stat-ico svg{width:17px;height:17px}
 .stat-num{font-size:24px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .stat-label{font-size:12.5px;color:var(--text-2)}
-.section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden}
-.section-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
-.section-title{font-size:14px;font-weight:600}
+.section{background:rgba(255,255,255,.9);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:18px;overflow:hidden;box-shadow:var(--shadow-sm)}
+.section-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.section-title{font-size:14.5px;font-weight:650}
 .section-more{font-size:12px;color:var(--text-3)}
 .field-label{font-size:12.5px;font-weight:600;color:var(--text-2)}
-.field-input{height:38px;padding:0 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;color:var(--text);background:#fff;outline:none;transition:border-color .12s ease,box-shadow .12s ease;box-sizing:border-box}
-.field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(247,138,70,.13)}
+.field-input{height:40px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:13.5px;color:var(--text);background:#fff;outline:none;transition:border-color .16s ease,box-shadow .16s ease;box-sizing:border-box}
+.field-input:focus{border-color:var(--accent);box-shadow:var(--focus)}
 .field-hint{font-size:12px;color:var(--text-3);line-height:1.7;margin:0}
 .cfg-msg{font-size:12.5px;font-weight:600}
 .drag-mask{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;background:rgba(247,138,70,.07);pointer-events:none}
@@ -423,17 +434,17 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}
 th{text-align:left;padding:10px 18px;font-size:12px;font-weight:600;color:var(--text-2);border-bottom:1px solid var(--border);background:var(--surface-2);letter-spacing:.02em}
 td{padding:11px 18px;border-bottom:1px solid var(--border);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:#FCFAF8}
+tr:hover td{background:#FBFBF9}
 .cell-main{font-weight:500}
 .cell-sub{color:var(--text-2);font-size:13px}
 .cell-mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--text-2);font-variant-numeric:tabular-nums}
 .cell-empty{text-align:center;color:var(--text-3);padding:32px 0}
 /* ===== 徽章/药丸 ===== */
-.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .pill::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
-.pill-ok{color:var(--ok);background:#E4F4EC}
-.pill-err{color:var(--err);background:#FBEBEB}
-.pill-warn{color:var(--warn);background:#FBF3E2}
+.pill-ok{color:var(--ok);background:var(--ok-weak)}
+.pill-err{color:var(--err);background:var(--err-weak)}
+.pill-warn{color:var(--warn);background:var(--warn-weak)}
 /* ===== 账号 ===== */
 .acct-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border)}
 .acct-row:last-child{border-bottom:none}
@@ -497,8 +508,8 @@ tr:hover td{background:#FCFAF8}
 .spinner{width:15px;height:15px;border:2px solid rgba(0,0,0,0.14);border-top-color:var(--accent,#F78A46);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* ===== 二维码签到弹窗 ===== */
-.modal-mask{position:fixed;inset:0;z-index:990;display:flex;align-items:center;justify-content:center;background:rgba(33,27,23,.42)}
-.modal{width:440px;max-width:92vw;background:var(--surface);border-radius:16px;box-shadow:0 18px 48px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;animation:modalIn .16s ease}
+.modal-mask{position:fixed;inset:0;z-index:990;display:flex;align-items:center;justify-content:center;background:rgba(29,26,22,.46);backdrop-filter:blur(3px)}
+.modal{width:460px;max-width:92vw;background:var(--surface);border:1px solid rgba(255,255,255,.38);border-radius:20px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden;animation:modalIn .18s cubic-bezier(.2,.8,.2,1)}
 @keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(6px)}to{opacity:1;transform:none}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
 .modal-title{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600}
@@ -506,8 +517,8 @@ tr:hover td{background:#FCFAF8}
 .modal-close{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:none;background:none;border-radius:8px;color:var(--text-2);cursor:pointer}
 .modal-close:hover{background:var(--surface-2);color:var(--text)}
 .modal-body{padding:20px 18px}
-.qr-drop{border:2px dashed var(--accent);border-radius:14px;background:var(--accent-weak);padding:30px 20px;text-align:center;color:var(--accent);transition:background .12s ease}
-.qr-drop.drag{border-color:var(--accent-strong);background:#FBE3CE}
+.qr-drop{border:2px dashed #F0B07C;border-radius:var(--radius);background:var(--accent-weak);padding:32px 22px;text-align:center;color:var(--accent);transition:border-color .16s ease,background .16s ease,transform .16s ease}
+.qr-drop.drag{border-color:var(--accent-strong);background:#FBE0C8;transform:scale(1.01)}
 .qr-drop>svg{width:44px;height:44px;margin-bottom:10px}
 .qr-drop-text{font-size:14.5px;font-weight:600;color:var(--text)}
 .qr-drop-sub{font-size:12.5px;color:var(--text-2);margin-top:5px}
@@ -559,12 +570,13 @@ tr:hover td{background:#FCFAF8}
 
 /* 课表页 */
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;padding:16px 18px}
-.stat-card{background:var(--surface-2);border-radius:var(--radius);padding:14px 12px;text-align:center;border:1px solid var(--border)}
+.stat-card{background:rgba(255,255,255,.88);border-radius:var(--radius);padding:16px 12px;text-align:center;border:1px solid var(--border);box-shadow:var(--shadow-sm);transition:transform .18s ease,box-shadow .18s ease}
+.stat-row .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
 .stat-num{font-size:24px;font-weight:700;color:var(--accent);line-height:1.2}
 .stat-label{font-size:12px;color:var(--text-3);margin-top:4px}
 .course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:14px 18px}
-.course-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s;position:relative}
-.course-card:hover{border-color:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.course-card{background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;position:relative;box-shadow:var(--shadow-sm)}
+.course-card:hover{border-color:#F0B07C;box-shadow:var(--shadow);transform:translateY(-2px)}
 .course-card.watching{border-left:3px solid var(--accent)}
 .course-card.retired{opacity:.55;border-left:3px solid var(--text-3)}
 .course-card-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;line-height:1.3}
@@ -579,25 +591,41 @@ tr:hover td{background:#FCFAF8}
 .grid-empty{grid-column:1/-1;text-align:center;color:var(--text-3);padding:40px 0;font-size:13px}
 .course-note{font-size:11px;color:var(--accent);background:var(--accent-weak);padding:3px 8px;border-radius:6px;margin:6px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .course-note:hover{background:var(--accent);color:#fff}
-.detail-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center}
-.detail-modal-box{background:var(--surface);border-radius:12px;width:90%;max-width:600px;max-height:80vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.detail-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(29,26,22,.46);backdrop-filter:blur(3px);z-index:1000;align-items:center;justify-content:center}
+.detail-modal-box{background:var(--surface);border-radius:20px;width:90%;max-width:600px;max-height:80vh;overflow:hidden;box-shadow:var(--shadow-lg)}
 .detail-modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
 .detail-modal-title{font-size:15px;font-weight:600;color:var(--text)}
 .detail-modal-close{background:none;border:none;font-size:20px;color:var(--text-3);cursor:pointer;padding:4px 8px}
 .detail-modal-body{padding:14px 18px;overflow-y:auto;max-height:calc(80vh - 60px)}
-.fav-list{display:flex;flex-direction:column;gap:8px;padding:8px 0}
-.fav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)}
-.fav-name{font-size:13px;font-weight:600;color:var(--text);flex:1}
-.fav-coord{font-size:11px;color:var(--text-3);font-family:monospace}
-.fav-del{background:none;border:none;color:#d45050;cursor:pointer;font-size:12px;padding:2px 6px}
-.fav-add-form{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.fav-add-form input{padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px}
 /* 多账号统计 */
 .acct-stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:12px 18px}
 .acct-stat-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
 .acct-stat-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px}
 .acct-stat-meta{font-size:11px;color:var(--text-3);margin-bottom:8px}
 .acct-stat-nums{display:flex;gap:14px;font-size:12px}
+@media (max-width:960px){
+  .side{width:188px;padding:14px 9px}
+  .content,.topbar{padding-left:20px;padding-right:20px}
+  .stat-grid,.acct-stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cal-cell{min-height:50px}
+}
+@media (max-width:720px){
+  .app{flex-direction:column}
+  .side{width:100%;flex-direction:row;align-items:center;gap:10px;border-right:0;border-bottom:1px solid var(--border);padding:10px 14px;overflow-x:auto}
+  .brand{padding:0}
+  .brand-name{font-size:13px;white-space:nowrap}
+  .brand-ver{display:none}
+  .nav{flex-direction:row;gap:4px}
+  .nav-item{width:auto;white-space:nowrap;padding:8px 10px}
+  .nav-item.active::after{display:none}
+  .side-foot{border-top:0;padding-top:0;margin-top:0;margin-left:auto}
+  .content,.topbar{padding-left:14px;padding-right:14px}
+  .content{padding-top:18px}
+  .stat-grid,.acct-stat-row{grid-template-columns:1fr}
+  th,td{padding-left:12px;padding-right:12px}
+  .modal,.disclaimer-modal{max-width:94vw}
+  .drag-box{padding:28px 30px}
+}
 </style>
 </head>
 <body>
@@ -916,8 +944,9 @@ tr:hover td{background:#FCFAF8}
   </div>
 </div>
 
-<script>
+<script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
 (function(){
+  const API_TOKEN = ${JSON.stringify(token)}
   var views=['overview','courses','schedule','history','logs','settings']
   var titles={overview:'总览',courses:'课程',schedule:'课表',history:'历史记录',logs:'运行日志',settings:'设置'}
   function show(v){
@@ -1155,7 +1184,12 @@ tr:hover td{background:#FCFAF8}
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
   function fmtTime(ts){if(!ts)return '—';var d=new Date(ts),n=new Date();var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');if(d.toDateString()===n.toDateString())return '今天 '+hm;var y=new Date(n.getTime()-86400000);if(d.toDateString()===y.toDateString())return '昨天 '+hm;return (d.getMonth()+1)+'月'+d.getDate()+'日 '+hm}
   function typeText(t){var m={normal:'普通',gesture:'手势',qr:'二维码',location:'位置',photo:'拍照'};return m[t]||t}
-  function poll(){fetch('/api/status').then(function(r){return r.json()}).then(render).catch(function(){})}
+  function apiFetch(url, options){
+    options=options||{}
+    options.headers=Object.assign({},options.headers||{},{Authorization:'Bearer '+API_TOKEN})
+    return fetch(url,options)
+  }
+  function poll(){apiFetch('/api/status').then(function(r){return r.json()}).then(render).catch(function(){})}
   if(location.hash&&views.indexOf(location.hash.slice(1))>=0)show(location.hash.slice(1))
   window.addEventListener('hashchange',function(){var v=location.hash.slice(1);if(views.indexOf(v)>=0)show(v)})
   // 二维码图片拖拽签到：任意签到码拖入窗口即解析并签到（二维码更新后拖新码即可）
@@ -1182,7 +1216,7 @@ tr:hover td{background:#FCFAF8}
     if(!f)return
     if(f.type.indexOf('image/')!==0){showToast('请拖入二维码图片文件');return}
     showToast('二维码图片已接收，正在识别签到…')
-    fetch('/upload/image?type=qr',{method:'POST',body:f,headers:{'Content-Type':f.type}})
+    apiFetch('/upload/image?type=qr',{method:'POST',body:f,headers:{'Content-Type':f.type}})
       .then(function(r){return r.json()})
       .then(function(d){
         if(d.success){showToast('✅ '+d.message);setTimeout(function(){location.reload()},1500)}
@@ -1197,7 +1231,7 @@ tr:hover td{background:#FCFAF8}
     var msg=document.getElementById('cfgMsg')
     if(!u||!p){msg.textContent='账号和密码不能为空';msg.style.color='#B42318';return}
     saveBtn.disabled=true;saveBtn.textContent='保存中…'
-    fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
+    apiFetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
       .then(function(r){return r.json()})
       .then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||(d.ok?'已保存':'保存失败'))
@@ -1239,7 +1273,7 @@ tr:hover td{background:#FCFAF8}
       var cur=btn.classList.contains('on')
       watchLocal[cid]=!cur
       // 重绘课程表以同步状态列与按钮
-      fetch('/api/status').then(function(r){return r.json()}).then(function(s){
+      apiFetch('/api/status').then(function(r){return r.json()}).then(function(s){
         var cb=document.getElementById('coursesBody')
         var cs2=s.courses||[],ws2=(s.watchCourses||[]).map(String)
         var wset2={};ws2.forEach(function(id){wset2[id]=true})
@@ -1271,7 +1305,7 @@ tr:hover td{background:#FCFAF8}
     })
     var msg=document.getElementById('watchMsg')
     watchSaveBtn.disabled=true;watchSaveBtn.textContent='保存中…'
-    fetch('/api/watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({watchCourses:allOn?[]:onList})})
+    apiFetch('/api/watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({watchCourses:allOn?[]:onList})})
       .then(function(r){return r.json()})
       .then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'保存失败')
@@ -1291,7 +1325,7 @@ tr:hover td{background:#FCFAF8}
     if(pBtn){
       var un=pBtn.getAttribute('data-primary')
       pBtn.disabled=true
-      fetch('/api/accounts/primary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un})})
+      apiFetch('/api/accounts/primary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un})})
         .then(function(r){return r.json()})
         .then(function(d){
           msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
@@ -1305,7 +1339,7 @@ tr:hover td{background:#FCFAF8}
       var un2=dBtn.getAttribute('data-remove')
       if(!confirm('确定删除账号 '+un2+' 吗？'))return
       dBtn.disabled=true
-      fetch('/api/accounts/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un2})})
+      apiFetch('/api/accounts/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un2})})
         .then(function(r){return r.json()})
         .then(function(d){
           msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
@@ -1322,7 +1356,7 @@ tr:hover td{background:#FCFAF8}
     if(!confirm('确定清空全部签到记录吗？此操作不可恢复。'))return
     var msg=document.getElementById('historyMsg')
     clearHistoryBtn.disabled=true
-    fetch('/api/history/clear',{method:'POST'})
+    apiFetch('/api/history/clear',{method:'POST'})
       .then(function(r){return r.json()})
       .then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
@@ -1349,7 +1383,7 @@ tr:hover td{background:#FCFAF8}
     var verify=document.getElementById('setVerify').classList.contains('on')
     var msg=document.getElementById('settingsMsg')
     settingsSaveBtn.disabled=true;settingsSaveBtn.textContent='保存中…'
-    fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    apiFetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       pollInterval:poll,pollJitter:jitter,retryMaxAttempts:retry,retryDelayMs:retryDelay*1000,
       locationRadius:radius,desktop:desktop,quietEnabled:quietOn,quietStart:qs,quietEnd:qe,
 
@@ -1384,7 +1418,7 @@ tr:hover td{background:#FCFAF8}
     var f=cfgFileInput.files[0];if(!f)return
     var reader=new FileReader()
     reader.onload=function(){
-      fetch('/api/config/import',{method:'POST',headers:{'Content-Type':'application/json'},body:reader.result})
+      apiFetch('/api/config/import',{method:'POST',headers:{'Content-Type':'application/json'},body:reader.result})
         .then(function(r){return r.json()})
         .then(function(d){
           var msg=document.getElementById('cfgMsg')
@@ -1405,7 +1439,7 @@ tr:hover td{background:#FCFAF8}
     var y=calState.y,m=calState.m
     var t=document.getElementById('calTitle')
     if(t)t.textContent=y+' 年 '+m+' 月'
-    fetch('/api/calendar?month='+y+'-'+String(m).padStart(2,'0')).then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/calendar?month='+y+'-'+String(m).padStart(2,'0')).then(function(r){return r.json()}).then(function(d){
       calState.data=d.days||{}
       var first=new Date(y,m-1,1)
       var startDay=(first.getDay()+6)%7
@@ -1459,11 +1493,11 @@ tr:hover td{background:#FCFAF8}
   // ===== 网络与代理 =====
   var proxyInput=document.getElementById('proxyInput')
   var proxyMsg=document.getElementById('proxyMsg')
-  if(proxyInput)fetch('/api/proxy').then(function(r){return r.json()}).then(function(d){proxyInput.value=d.proxy||''}).catch(function(){})
+  if(proxyInput)apiFetch('/api/proxy').then(function(r){return r.json()}).then(function(d){proxyInput.value=d.proxy||''}).catch(function(){})
   var proxySaveBtn=document.getElementById('proxySaveBtn')
   if(proxySaveBtn)proxySaveBtn.addEventListener('click',function(){
     proxySaveBtn.disabled=true;proxyMsg.textContent='保存中…';proxyMsg.style.color='#0E7C66'
-    fetch('/api/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy:proxyInput.value.trim()})})
+    apiFetch('/api/proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy:proxyInput.value.trim()})})
       .then(function(r){return r.json()})
       .then(function(d){
         proxyMsg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'保存失败')
@@ -1475,7 +1509,7 @@ tr:hover td{background:#FCFAF8}
   var proxyTestBtn=document.getElementById('proxyTestBtn')
   if(proxyTestBtn)proxyTestBtn.addEventListener('click',function(){
     proxyTestBtn.disabled=true;proxyMsg.textContent='测试中…';proxyMsg.style.color='#0E7C66'
-    fetch('/api/proxy/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy:proxyInput.value.trim()})})
+    apiFetch('/api/proxy/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy:proxyInput.value.trim()})})
       .then(function(r){return r.json()})
       .then(function(d){
         proxyMsg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'测试失败')
@@ -1489,7 +1523,7 @@ tr:hover td{background:#FCFAF8}
     diagBtn.disabled=true;diagBtn.textContent='诊断中…'
     diagResult.style.display='block'
     diagResult.innerHTML='<div class="cell-empty" style="padding:20px 0">正在逐项检测，约需 5~15 秒…</div>'
-    fetch('/api/diag').then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/diag').then(function(r){return r.json()}).then(function(d){
       var head=''
       if(d.cookie===false)head='<div class="diag-item"><span class="diag-name">提示</span><span class="diag-detail">未配置账号或 Cookie 为空，课程 / 签到接口检测结果仅供参考</span></div>'
       if(d.proxy)head+='<div class="diag-item"><span class="diag-name">当前代理</span><span class="diag-detail cell-mono">'+esc(d.proxy)+'</span></div>'
@@ -1509,7 +1543,7 @@ tr:hover td{background:#FCFAF8}
   if(notifyTestBtn)notifyTestBtn.addEventListener('click',function(){
     var msg=document.getElementById('settingsMsg')
     msg.textContent='正在发送…';msg.style.color='#0E7C66'
-    fetch('/api/notify/test',{method:'POST'})
+    apiFetch('/api/notify/test',{method:'POST'})
       .then(function(r){return r.json()})
       .then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'发送失败')
@@ -1540,7 +1574,7 @@ tr:hover td{background:#FCFAF8}
   if(refreshCoursesBtn)refreshCoursesBtn.addEventListener('click',function(){
     var msg=document.getElementById('watchMsg')
     refreshCoursesBtn.disabled=true;refreshCoursesBtn.textContent='正在拉取…'
-    fetch('/api/courses/refresh',{method:'POST'})
+    apiFetch('/api/courses/refresh',{method:'POST'})
       .then(function(r){return r.json()})
       .then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'刷新失败')
@@ -1555,7 +1589,7 @@ tr:hover td{background:#FCFAF8}
   function loadSchedule(){
     var grid=document.getElementById('scheduleGrid');if(!grid)return
     grid.innerHTML='<div class="grid-empty">加载中...</div>'
-    Promise.all([fetch('/api/schedule').then(function(r){return r.json()}),fetch('/api/course-notes').then(function(r){return r.json()}).catch(function(){return{notes:{}}})]).then(function(results){
+    Promise.all([apiFetch('/api/schedule').then(function(r){return r.json()}),apiFetch('/api/course-notes').then(function(r){return r.json()}).catch(function(){return{notes:{}}})]).then(function(results){
       var d=results[0],notesData=results[1]
       if(!d.ok||!d.schedule){grid.innerHTML='<div class="grid-empty">加载失败</div>';return}
       var list=d.schedule
@@ -1585,7 +1619,7 @@ tr:hover td{background:#FCFAF8}
           var val=prompt(cname+' 的备注：',cur)
           if(val!==null){
             var payload={};payload[cid]=val.trim()
-            fetch('/api/course-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(){loadSchedule()})
+            apiFetch('/api/course-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(){loadSchedule()})
           }
         })
       })
@@ -1616,7 +1650,7 @@ tr:hover td{background:#FCFAF8}
     modal.style.display='flex'
     document.getElementById('detailTitle').textContent=courseName+' - 签到记录'
     document.getElementById('detailBody').innerHTML='<div style="text-align:center;padding:30px;color:var(--text-3)">加载中...</div>'
-    fetch('/api/course-detail?course='+encodeURIComponent(courseName)).then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/course-detail?course='+encodeURIComponent(courseName)).then(function(r){return r.json()}).then(function(d){
       if(!d.ok||!d.records||d.records.length===0){
         document.getElementById('detailBody').innerHTML='<div style="text-align:center;padding:30px;color:var(--text-3)">暂无签到记录</div>'
         return
@@ -1632,7 +1666,7 @@ tr:hover td{background:#FCFAF8}
 function loadLogs(){
     var box=document.getElementById('logBox')
     if(!box)return
-    fetch('/api/logs?lines=200')
+    apiFetch('/api/logs?lines=200')
       .then(function(r){return r.json()})
       .then(function(d){
         if(!d.ok||!d.lines){box.innerHTML='<div class="log-empty">'+esc(d.message||'暂无日志')+'</div>';return}
@@ -1668,7 +1702,7 @@ function loadLogs(){
     if(!file)return
     if(file.type.indexOf('image/')!==0){qrStatus.textContent='请选择图片文件';qrStatus.className='qr-status err';return}
     qrStatus.textContent='正在识别签到…';qrStatus.className='qr-status'
-    fetch('/upload/image?type=qr',{method:'POST',body:file,headers:{'Content-Type':file.type}})
+    apiFetch('/upload/image?type=qr',{method:'POST',body:file,headers:{'Content-Type':file.type}})
       .then(function(r){return r.json()})
       .then(function(d){
         if(d.success){qrStatus.textContent='✅ '+d.message;qrStatus.className='qr-status ok'}

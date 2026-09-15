@@ -161,8 +161,6 @@ export interface AppConfig {
     }
     /** 位置签到半径（米）：以老师发布坐标为中心生成签到点，默认 10 */
     locationRadius?: number
-    /** 常用位置收藏：位置签到时一键切换 */
-    favorites?: Array<{ name: string; lat: number; lng: number }>
   }
   notify: {
     channels: NotifyChannel[]
@@ -206,17 +204,18 @@ export interface AppConfig {
   dingtalk?: {
     appKey: string
     appSecret: string
-    port: number
     publicUrl?: string
-    /** 上传页/回调的可选鉴权 token */
-    token?: string
   }
   ocr?: {
-    provider: 'tencent' | 'zxing'
+    provider: 'tencent' | 'local'
     tencent?: { secretId: string; secretKey: string }
   }
   web?: {
     port: number
+    /** 服务监听地址；默认 127.0.0.1，设置为 0.0.0.0 时必须通过 token 访问 */
+    host?: string
+    /** 监听剪贴板中的二维码图片，复制截图后自动识别签到 */
+    watchClipboard?: boolean
     token?: string
     allowedOrigin?: string
     /** 启动成功后自动在浏览器打开控制台首页（默认 true） */
@@ -238,7 +237,7 @@ export interface AppConfig {
 }
 
 export interface NotifyChannel {
-  type: 'pushplus' | 'bark' | 'dingtalk' | 'email'
+  type: 'pushplus' | 'bark' | 'dingtalk' | 'email' | 'telegram' | 'feishu' | 'wecom' | 'serverchan'
   enabled: boolean
   config: Record<string, any>
 }

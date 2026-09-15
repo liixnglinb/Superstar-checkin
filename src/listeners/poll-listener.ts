@@ -115,7 +115,7 @@ export class PollListener {
 
   stop() {
     if (this.timer) {
-      clearInterval(this.timer)
+      clearTimeout(this.timer)
       this.timer = null
       logger.info('轮询监听已停止')
     }

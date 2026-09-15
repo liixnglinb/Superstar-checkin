@@ -7,7 +7,7 @@ import { PollListener } from './listeners/poll-listener'
 import { CheckinHandler } from './handlers/checkin-handler'
 import { NotificationManager } from './notifiers'
 import { CheckinEngine } from './core/checkin-engine'
-import { getCourseList } from './core/course'
+import { getCourseList, type CourseInfo } from './core/course'
 import { initLocationStore } from './utils/location'
 import { DingTalkServer } from './server/dingtalk-server'
 import { decodeQrFromBuffer } from './utils/qr-decoder'
@@ -19,18 +19,25 @@ import {
   clearFail,
   shouldRetryFail,
   setPendingQr,
+  initSignState,
   takeLatestPendingQr,
   hasPendingQr,
+  setPendingPhoto,
+  takeLatestPendingPhoto,
+  hasPendingPhoto,
 } from './providers/sign-state'
 import type { ImMessage, CheckinInfo } from './types'
 import { DEFAULTS } from './constants'
 import YAML from 'yaml'
 import axios from 'axios'
 import { encryptPassword, isEncrypted } from './utils/crypto'
+import * as storage from './providers/storage'
 
 import * as readline from 'readline'
 import * as fs from 'fs'
 import * as path from 'path'
+import * as crypto from 'crypto'
+import { writeFileAtomic } from './utils/fs'
 
 // 全局错误兜底
 process.on('unhandledRejection', (reason) => logger.error('未处理的 Promise 拒绝:', reason))
@@ -78,15 +85,33 @@ async function main() {
           acc.password = encryptPassword(acc.password)
         }
       }
-      fs.writeFileSync('config.yaml', YAML.stringify(toSave), 'utf-8')
+      writeFileAtomic(process.env.CONFIG_FILE || 'config.yaml', YAML.stringify(toSave))
       logger.info('配置已保存到 config.yaml')
     } catch (e: any) {
       logger.error('保存配置失败: ' + e.message)
     }
   }
 
+  if (!config.web?.token) {
+    config.web = {
+      ...config.web,
+      port: config.web?.port || 3456,
+      token: crypto.randomBytes(24).toString('base64url'),
+    }
+    saveConfig(config)
+    logger.info('已生成本地控制台访问 token，外部访问需携带该 token')
+  }
+
   initStorage(config.storage.dataDir)
+  initSignState(config.storage.dataDir)
   initLocationStore(config.storage.dataDir)
+  const photoDir = path.join(config.storage.dataDir, 'photos')
+  fs.mkdirSync(photoDir, { recursive: true })
+  const savePhotoBuffer = (buffer: Buffer) => {
+    const photoPath = path.join(photoDir, `upload_${Date.now()}.jpg`)
+    fs.writeFileSync(photoPath, buffer)
+    return photoPath
+  }
   setProxy(config.proxy) // 代理全局生效（登录/签到请求均可走）
 
   // 控制台状态数据提供者（每次请求实时计算；闭包引用后续初始化的模块）
@@ -96,7 +121,7 @@ async function main() {
       version: '3.1',
       mode: config.listener.mode,
       pollInterval: config.listener.pollInterval,
-      port: config.dingtalk?.port || 3456,
+      port: config.web?.port || 3456,
       uptime: process.uptime(),
     }
     try {
@@ -209,7 +234,18 @@ async function main() {
       return { ok: false, count: 0, message: '未配置账号，无法刷新课程列表' }
     }
     try {
-      const fresh = await getCourseList(primaryMeta.cookie)
+      const freshResults = await Promise.allSettled(
+        configuredMetas.filter(meta => meta.cookie).map(meta => getCourseList(meta.cookie)),
+      )
+      const refreshMap = new Map<string, CourseInfo>()
+      for (const result of freshResults) {
+        if (result.status !== 'fulfilled') {
+          logger.warn(`刷新账号课程失败: ${result.reason?.message || result.reason}`)
+          continue
+        }
+        for (const course of result.value) refreshMap.set(`${course.courseId}:${course.classId}`, course)
+      }
+      const fresh = Array.from(refreshMap.values())
       courses = fresh
       // 结课自动停用：已退休课程从监听列表移除，避免无效轮询和误报
       const retiredIds = fresh.filter(c => c.isRetired).map(c => String(c.courseId))
@@ -222,16 +258,20 @@ async function main() {
         }
       }
       applyWatchFilter()
-      if (pollListener) pollListener.stop()
+      for (const listener of pollListeners) listener.stop()
+      pollListeners.length = 0
       if (config.listener.mode === 'poll' || config.listener.mode === 'hybrid') {
-        const pl = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
-        pl.onActivity((aid, courseId, classId, courseName) => {
-          watchdog.lastActivityAt = Date.now()
-          processCheckin(aid, courseId, classId, courseName)
-        })
-        attachHealth(pl)
-        pl.start(primaryMeta.cookie, watchedCourses)
-        pollListener = pl
+        for (const meta of configuredMetas.filter(item => item.cookie)) {
+          const pl = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
+          pl.onActivity((aid, courseId, classId, courseName) => {
+            watchdog.lastActivityAt = Date.now()
+            processCheckin(aid, courseId, classId, courseName)
+          })
+          attachHealth(pl)
+          pl.start(meta.cookie, watchedCourses)
+          pollListeners.push(pl)
+        }
+        pollListener = pollListeners[0] || null
       }
       logger.success(`课程列表已刷新: ${fresh.length} 门，监听 ${watchedCourses.length} 门`)
       return { ok: true, count: fresh.length, message: `已刷新课程列表（${fresh.length} 门），监听 ${watchedCourses.length} 门` }
@@ -243,24 +283,23 @@ async function main() {
 
   // 上传页服务：独立于登录，先启动，保证 3456 随时可用（不受代理/登录成败影响）
   let dtServer: DingTalkServer | null = null
-  if (config.dingtalk?.port) {
-    const dtPort = config.dingtalk.port || 3456
-    dtServer = new DingTalkServer(dtPort, config.dingtalk.appSecret, {
-      appKey: config.dingtalk.appKey,
-      token: config.web?.token,
-      allowedOrigin: config.web?.allowedOrigin,
-      statusProvider: getConsoleStatus,
-      historyProvider: () => checkinHandler.getHistory(),
-      clearHistory: () => checkinHandler.clearHistory(),
-      sendTestNotify: () =>
-        notifier.notify('✅ 测试通知', '通知通道工作正常\n（免打扰时段内桌面通知不会弹出）').catch(() => {}),
-      refreshCourses,
-      getLogFile: () => config.log.file || '',
-      getPrimaryCookie: () => primaryMeta.cookie || '',
-    })
-    dtServer.start()
-    logger.info(`上传页服务已启动: http://0.0.0.0:${dtPort}`)
-  }
+  process.env.WEB_HOST = config.web?.host || '127.0.0.1'
+  const dtPort = config.web?.port || 3456
+  dtServer = new DingTalkServer(dtPort, config.dingtalk?.appSecret || '', {
+    appKey: config.dingtalk?.appKey || '',
+    token: config.web?.token,
+    allowedOrigin: config.web?.allowedOrigin,
+    statusProvider: getConsoleStatus,
+    historyProvider: () => checkinHandler.getHistory(),
+    clearHistory: () => checkinHandler.clearHistory(),
+    sendTestNotify: () =>
+      notifier.notify('✅ 测试通知', '通知通道工作正常\n（免打扰时段内桌面通知不会弹出）').catch(() => {}),
+    refreshCourses,
+    getLogFile: () => config.log.file || '',
+    getPrimaryCookie: () => primaryMeta.cookie || '',
+  })
+  dtServer.start()
+  logger.info(`上传页服务已启动: http://${config.web?.host || '127.0.0.1'}:${dtPort}`)
 
   // 3. 通知管理器（先初始化，供账号刷新失败等回调引用，避免 TDZ）
   const notifier = new NotificationManager(config.notify.channels, {
@@ -291,15 +330,23 @@ async function main() {
   const checkinHandler = new CheckinHandler(config, accountManager)
 
   // 6. 获取课程列表（courses/watchedCourses 可被「重新拉取课程列表」运行时刷新）
-  const primaryMeta = config.accounts.length
-    ? accountManager.getMeta(config.accounts[0].username)
-    : { cookie: '', name: '', schoolname: '', uid: 0, fid: '' }
-  let courses = config.accounts.length
-    ? await getCourseList(primaryMeta.cookie).catch((e: any) => {
-        logger.error(`获取课程列表失败（不影响上传页）: ${e.message}`)
-        return []
-      })
-    : []
+  const configuredMetas = config.accounts.map(a => accountManager.getMeta(a.username))
+  const primaryMeta = configuredMetas.find(meta => meta.cookie) ||
+    { cookie: '', name: '', schoolname: '', uid: 0, fid: 0 }
+  const courseResults = await Promise.allSettled(
+    configuredMetas.filter(meta => meta.cookie).map(meta => getCourseList(meta.cookie)),
+  )
+  const courseMap = new Map<string, CourseInfo>()
+  for (const result of courseResults) {
+    if (result.status !== 'fulfilled') {
+      logger.error(`获取课程列表失败（不影响上传页）: ${result.reason?.message || result.reason}`)
+      continue
+    }
+    for (const course of result.value) {
+      courseMap.set(`${course.courseId}:${course.classId}`, course)
+    }
+  }
+  let courses = Array.from(courseMap.values())
 
   // 按「监听课程」配置过滤：watchCourses 为空 = 监听全部；否则只监听勾选的课程
   let watchedCourses: typeof courses = []
@@ -335,7 +382,18 @@ async function main() {
     }
 
     try {
-      const checkinInfo: CheckinInfo = await CheckinEngine.getDetail(primaryMeta.cookie, aid)
+      const detailMetas = configuredMetas.filter(meta => meta.cookie)
+      let checkinInfo: CheckinInfo | null = null
+      let detailError: Error | null = null
+      for (const meta of detailMetas) {
+        try {
+          checkinInfo = await CheckinEngine.getDetail(meta.cookie, aid)
+          break
+        } catch (e: any) {
+          detailError = e
+        }
+      }
+      if (!checkinInfo) throw detailError || new Error('无法读取签到详情')
       logger.info(`签到类型: ${checkinInfo.type}`)
 
       if (checkinInfo.type === 'qr') {
@@ -343,7 +401,7 @@ async function main() {
         clearFail(aid)
         logger.warn(`${courseName} 是二维码签到，等待上传图片`)
 
-        const baseUrl = config.dingtalk?.publicUrl || `http://127.0.0.1:${config.dingtalk?.port || 3456}`
+        const baseUrl = config.dingtalk?.publicUrl || `http://127.0.0.1:${config.web?.port || 3456}`
         const uploadUrl = `${baseUrl}/upload?type=qr${config.web?.token ? `&token=${encodeURIComponent(config.web.token)}` : ''}`
 
         await notifier.notify(
@@ -353,13 +411,33 @@ async function main() {
         return
       }
 
-      if (checkinInfo.type === 'photo' || checkinInfo.type === 'gesture') {
-        // 本软件已移除拍照/手势自动签到：检测到仅提示，不尝试自动提交
-        const typeName = checkinInfo.type === 'photo' ? '拍照' : '手势'
-        logger.warn(`${courseName} 是${typeName}签到，本软件已移除该类型自动签到，请在学习通中手动完成`)
+      if (checkinInfo.type === 'photo') {
+        const configuredPhoto = String(storage.get<string>('currentPhoto') || config.photo?.path || '')
+        if (configuredPhoto && fs.existsSync(configuredPhoto)) {
+          logger.info(`${courseName} 是拍照签到，使用照片: ${configuredPhoto}`)
+          const results = await checkinHandler.handlePhoto(aid, configuredPhoto, { courseName, courseId, classId })
+          const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
+          await notifier.notify(`✅ ${courseName} 拍照签到结果`, summary)
+          if (results.length && results.every(r => !r.success)) allowRetryOnFailure(aid)
+          else clearFail(aid)
+          return
+        }
+
+        setPendingPhoto(aid, { courseName, courseId, classId })
+        const baseUrl = config.dingtalk?.publicUrl || `http://127.0.0.1:${config.web?.port || 3456}`
+        const uploadUrl = `${baseUrl}/upload?type=photo${config.web?.token ? `&token=${encodeURIComponent(config.web.token)}` : ''}`
         await notifier.notify(
-          `⚠️ ${courseName} - ${typeName}签到`,
-          `本软件不支持${typeName}签到自动完成，请在学习通 APP 中手动签到\naid: ${aid}`,
+          `⚠️ ${courseName} - 拍照签到`,
+          `请上传一张照片完成签到\naid: ${aid}\n\n手机上传: ${uploadUrl}`,
+        )
+        return
+      }
+
+      if (checkinInfo.type === 'gesture') {
+        logger.warn(`${courseName} 是手势签到，请在学习通中手动完成`)
+        await notifier.notify(
+          `⚠️ ${courseName} - 手势签到`,
+          '手势轨迹无法由本软件自动完成，请在学习通 APP 中手动签到\naid: ' + aid,
         )
         return
       }
@@ -368,7 +446,8 @@ async function main() {
       let confirmed = true
       if (config.checkin.confirmBefore?.enabled) {
         const waitSec = Math.max(3, config.checkin.confirmBefore.waitSeconds || 10)
-        const cancelUrl = (config.dingtalk?.publicUrl || `http://127.0.0.1:${config.dingtalk?.port || 3456}`) + '/api/confirm/cancel?aid=' + encodeURIComponent(aid)
+        const cancelUrl = (config.dingtalk?.publicUrl || `http://127.0.0.1:${config.web?.port || 3456}`) + '/api/confirm/cancel?aid=' + encodeURIComponent(aid) +
+          (config.web?.token ? `&token=${encodeURIComponent(config.web.token)}` : '')
         cancelledAids.delete(aid)
         await notifier.notify(
           `⏳ ${courseName} - 即将自动签到`,
@@ -398,9 +477,9 @@ async function main() {
       const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
       await notifier.notify(`✅ ${courseName} 签到结果`, summary)
 
-      // 失败重试：全部账号失败则撤销标记，允许下一轮重试（有次数上限）
-      const allFailed = results.length > 0 && results.every(r => !r.success)
-      if (allFailed) allowRetryOnFailure(aid)
+      // 失败重试：任一账号失败都允许下一轮重试；已成功账号重复提交通常会返回“已签到”
+      const anyFailed = results.some(r => !r.success)
+      if (anyFailed) allowRetryOnFailure(aid)
       else clearFail(aid)
     } catch (e: any) {
       logger.error(`处理签到失败: ${e.message}`)
@@ -471,27 +550,53 @@ async function main() {
   }
 
   let pollListener: PollListener | null = null
+  const pollListeners: PollListener[] = []
   if (config.listener.mode === 'poll' || config.listener.mode === 'hybrid') {
     if (courses.length === 0) {
       logger.error('课程列表为空，轮询监听器将以空列表启动（无法发现任何签到），请检查登录/Cookie 是否正常')
       await notifier.notify('⚠️ 轮询监听异常', '课程列表为空，轮询无法发现签到活动，请检查登录状态')
         .catch(() => {})
     }
-    pollListener = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
-    pollListener.onActivity((aid, courseId, classId, courseName) => {
-      watchdog.lastActivityAt = Date.now()
-      processCheckin(aid, courseId, classId, courseName)
-    })
-    attachHealth(pollListener)
-    try {
-      pollListener.start(primaryMeta.cookie, watchedCourses)
-    } catch (e: any) {
-      logger.error(`轮询监听器启动失败（不影响上传页）: ${e.message}`)
+    for (const meta of configuredMetas.filter(item => item.cookie)) {
+      const pl = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
+      pl.onActivity((aid, courseId, classId, courseName) => {
+        watchdog.lastActivityAt = Date.now()
+        processCheckin(aid, courseId, classId, courseName)
+      })
+      attachHealth(pl)
+      try {
+        pl.start(meta.cookie, watchedCourses)
+        pollListeners.push(pl)
+      } catch (e: any) {
+        logger.error(`轮询监听器启动失败（不影响上传页）: ${e.message}`)
+      }
+    }
+    pollListener = pollListeners[0] || null
+    if (pollListeners.length === 0) {
+      logger.error('没有可用账号启动轮询监听，请检查登录状态')
+      await notifier.notify('⚠️ 轮询监听异常', '没有可用账号启动轮询监听，请检查登录状态').catch(() => {})
     }
   }
 
   // 9. 钉钉回调服务器图片处理（服务已在启动早期创建并启动，这里仅绑定 onImage 回调）
   if (dtServer) {
+    dtServer.onPhoto(async (imageBuffer: Buffer) => {
+      const savedPath = savePhotoBuffer(imageBuffer)
+      storage.set('currentPhoto', savedPath)
+      const pending = hasPendingPhoto() ? takeLatestPendingPhoto() : null
+      if (!pending) {
+        logger.info(`已保存默认拍照签到照片: ${savedPath}`)
+        await notifier.notify('📷 默认照片已更新', savedPath).catch(() => {})
+        return
+      }
+      logger.info(`收到拍照签到照片，开始签到: ${pending.aid}`)
+      const results = await checkinHandler.handlePhoto(pending.aid, savedPath, pending.info)
+      const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
+      await notifier.notify('✅ 拍照签到结果', summary)
+      if (results.length && results.every(r => !r.success)) allowRetryOnFailure(pending.aid)
+      else clearFail(pending.aid)
+    })
+
     dtServer.onImage(async (imageBuffer: Buffer) => {
       // 二维码签到：解析图片中的二维码（enc + aid），支持拖拽/上传任意签到码
       const payload = await decodeQrFromBuffer(imageBuffer, config.ocr)
@@ -702,7 +807,7 @@ async function main() {
 
   // 9.5.2 智能轮询：白天短间隔，夜间长间隔，每小时检查一次
   function applySmartPoll() {
-    if (!pollListener || config.smartPoll?.enabled === false) return
+    if (config.smartPoll?.enabled === false || pollListeners.length === 0) return
     const now = new Date()
     const h = now.getHours()
     const dayStart = config.smartPoll?.dayStart ?? 8
@@ -710,7 +815,9 @@ async function main() {
     const mult = config.smartPoll?.nightMultiplier ?? 3
     const isDay = h >= dayStart && h < dayEnd
     const baseInterval = config.listener.pollInterval
-    pollListener.setInterval(isDay ? baseInterval : baseInterval * mult)
+    for (const listener of pollListeners) {
+      listener.setInterval(isDay ? baseInterval : baseInterval * mult)
+    }
   }
   function scheduleSmartPoll() {
     applySmartPoll()
@@ -721,7 +828,9 @@ async function main() {
 
   // 9.6 自动打开控制台（GUI 打包环境通过 NO_OPEN_BROWSER 禁用）
   if (config.web?.openBrowser !== false && !process.env.NO_OPEN_BROWSER) {
-    openBrowser(`http://127.0.0.1:${config.dingtalk?.port || 3456}/`)
+    const servicePort = config.web?.port || 3456
+    const tokenQuery = config.web?.token ? `?token=${encodeURIComponent(config.web.token)}` : ''
+    openBrowser(`http://127.0.0.1:${servicePort}/${tokenQuery}`)
   }
 
   logger.success('系统初始化完毕')

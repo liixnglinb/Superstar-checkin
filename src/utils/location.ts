@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import { writeFileAtomic } from './fs'
 
 interface SavedLocation {
   address: string
@@ -24,10 +25,11 @@ export function initLocationStore(dataDir: string) {
 function save() {
   if (!filePath) return
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(locations, null, 2))
+  writeFileAtomic(filePath, JSON.stringify(locations, null, 2))
 }
 
 export function getLearnedLocation(address: string): { lat: number; lon: number } | null {
+  if (!address) return null
   const found = locations.find(l => l.address === address)
   if (found) {
     found.lastUsed = new Date().toISOString()
@@ -39,6 +41,7 @@ export function getLearnedLocation(address: string): { lat: number; lon: number 
 }
 
 export function saveLearnedLocation(address: string, lat: number, lon: number) {
+  if (!address) return
   const existing = locations.find(l => l.address === address)
   if (existing) {
     existing.lat = lat

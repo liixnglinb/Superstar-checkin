@@ -243,6 +243,59 @@ export class CheckinEngine {
   }
 
   /**
+   * 拍照签到：上传照片到超星云盘后提交 objectId
+   */
+  static async photoCheckin(
+    account: AccountMetaData,
+    activeId: string,
+    photoPath: string,
+    extra?: { courseId?: number | string; classId?: number | string },
+  ): Promise<string> {
+    const jar = new CookieJar()
+    const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
+
+    await this.preSign(client, account.cookie, { activeId, uid: account.uid }, extra)
+    const objectId = await this.uploadPhoto(account, photoPath)
+    return this.submitSign(client, account.cookie, {
+      name: account.name,
+      activeId,
+      uid: account.uid,
+      objectId,
+    })
+  }
+
+  private static async uploadPhoto(account: AccountMetaData, filePath: string): Promise<string> {
+    const tokenResp = await axios.get(API.PHOTO_TOKEN, {
+      headers: { Cookie: account.cookie, 'User-Agent': this.mobileUA() },
+      proxy: getProxyConfig(),
+      timeout: 20000,
+    })
+    const tokenJson = parseJsonSafe(tokenResp.data)
+    const token = tokenJson?.token
+    if (!token) throw new Error('获取网盘 token 失败')
+
+    const buf = await fs.promises.readFile(filePath)
+    const form = new FormData()
+    form.append('puid', String(account.uid))
+    form.append('_token', token)
+    form.append('file', new Blob([buf], { type: 'image/jpeg' }), path.basename(filePath))
+
+    const upResp = await axios.post(API.PHOTO_UPLOAD, form, {
+      headers: {
+        Cookie: account.cookie,
+        'User-Agent': this.mobileUA(),
+        Referer: 'https://pan-yz.chaoxing.com/',
+      },
+      proxy: getProxyConfig(),
+      timeout: 60000,
+    })
+    const upJson = parseJsonSafe(upResp.data)
+    const objectId = upJson?.objectId ?? (typeof upResp.data === 'string' ? upResp.data.trim() : '')
+    if (!objectId) throw new Error('上传图片未返回 objectId')
+    return objectId
+  }
+
+  /**
    * 位置签到：取教师发布坐标，在 10 米范围内生成签到点（GPS 漂移）；不在范围时三角定位逼近
    */
   static async geoCheckin(
@@ -255,6 +308,7 @@ export class CheckinEngine {
     geoProviders?: { amapKey?: string; baiduKey?: string },
     /** 签到点生成半径（米），默认 10（DEFAULTS.GEO_RADIUS），可由设置页调整 */
     radius?: number,
+    options?: { gpsDrift?: boolean },
   ): Promise<string> {
     const jar = new CookieJar()
     const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
@@ -298,7 +352,7 @@ export class CheckinEngine {
     const radiusM = radius && radius > 0 ? radius : DEFAULTS.GEO_RADIUS
 
     // 带 GPS 漂移的首次签到：在教师坐标 radiusM 米范围内生成签到点
-    const drifted = addGpsDrift(lat, lon, radiusM)
+    const drifted = options?.gpsDrift === false ? { lat, lon } : addGpsDrift(lat, lon, radiusM)
     const firstResult = await this.submitSign(client, account.cookie, {
       name: account.name, address: apiAddress, activeId, uid: account.uid,
       latitude: drifted.lat, longitude: drifted.lon,
@@ -315,7 +369,7 @@ export class CheckinEngine {
           name: account.name, address: apiAddress, activeId, uid: account.uid,
           latitude: ld.lat, longitude: ld.lon,
         })
-        if (!lr.includes('不在可签到范围内')) {
+        if (lr.includes('success') || lr.includes('签到成功') || lr.includes('您已签到')) {
           saveLearnedLocation(apiAddress, learned.lat, learned.lon)
           return lr
         }
@@ -401,7 +455,7 @@ export class CheckinEngine {
       }
     }
 
-    if (best.dist <= DEFAULTS.TRIANGULATE_RADIUS) {
+    if (best.result.includes('success') || best.result.includes('签到成功') || best.result.includes('您已签到')) {
       saveLearnedLocation(address, best.lat, best.lon)
     }
 

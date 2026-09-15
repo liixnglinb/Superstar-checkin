@@ -33,6 +33,18 @@ export class NotificationManager {
         case 'email':
           this.notifiers.set('email', new EmailNotifier(ch.config))
           break
+        case 'telegram':
+          this.notifiers.set('telegram', new TelegramNotifier(ch.config.botToken, ch.config.chatId))
+          break
+        case 'feishu':
+          this.notifiers.set('feishu', new FeishuNotifier(ch.config.webhook))
+          break
+        case 'wecom':
+          this.notifiers.set('wecom', new WeComNotifier(ch.config.webhook))
+          break
+        case 'serverchan':
+          this.notifiers.set('serverchan', new ServerChanNotifier(ch.config.sendKey))
+          break
       }
     }
 
@@ -129,6 +141,51 @@ class DingTalkNotifier implements Notifier {
     await axios.post(url, {
       msgtype: 'markdown',
       markdown: { title, text: `### ${title}\n\n${content}` },
+    })
+  }
+}
+
+class TelegramNotifier implements Notifier {
+  constructor(private botToken: string, private chatId: string) {}
+
+  async send(title: string, content: string): Promise<void> {
+    await axios.post(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
+      chat_id: this.chatId,
+      text: `*${title}*\n${content}`,
+      parse_mode: 'Markdown',
+    })
+  }
+}
+
+class FeishuNotifier implements Notifier {
+  constructor(private webhook: string) {}
+
+  async send(title: string, content: string): Promise<void> {
+    await axios.post(this.webhook, {
+      msg_type: 'text',
+      content: { text: `${title}\n${content}` },
+    })
+  }
+}
+
+class WeComNotifier implements Notifier {
+  constructor(private webhook: string) {}
+
+  async send(title: string, content: string): Promise<void> {
+    await axios.post(this.webhook, {
+      msgtype: 'markdown',
+      markdown: { content: `### ${title}\n${content}` },
+    })
+  }
+}
+
+class ServerChanNotifier implements Notifier {
+  constructor(private sendKey: string) {}
+
+  async send(title: string, content: string): Promise<void> {
+    await axios.post(`https://sctapi.ftqq.com/${this.sendKey}.send`, {
+      title,
+      desp: content,
     })
   }
 }

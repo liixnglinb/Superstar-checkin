@@ -93,11 +93,10 @@ async function decodeViaTencentOcr(
     const results = resp.data?.Response?.CodeResults || []
     for (const item of results) {
       const url = item.Url || item.Symbol || ''
-      const match = url.match(QR_REGEX) || url.match(/enc=([\dA-Fa-f]+)/)
-      if (match) {
-        const enc = match[5] || match[1]
-        logger.info(`腾讯云 OCR 解析成功: enc=${enc} aid=${match[3] || '无'}`)
-        return { aid: match[3] || undefined, enc }
+      const payload = extractPayload(url)
+      if (payload) {
+        logger.info(`腾讯云 OCR 解析成功: enc=${payload.enc} aid=${payload.aid || '无'}`)
+        return payload
       }
       // 也检查原始文本内容
       const text = JSON.stringify(item)
@@ -118,11 +117,25 @@ async function decodeViaTencentOcr(
 
 /** 提取 jsQR 解码文本中的 aid + enc 参数 */
 function extractPayload(text: string): { aid?: string; enc: string } | null {
-  const match = text.match(QR_REGEX) || text.match(/enc=([\dA-Fa-f]+)/)
-  if (!match) return null
-  const enc = match[5] || match[1]
-  if (!enc) return null
-  return { aid: match[3] || undefined, enc }
+  const content = String(text || '').trim()
+  try {
+    const url = new URL(content)
+    const enc = url.searchParams.get('enc') || ''
+    const aid = url.searchParams.get('activeId') || url.searchParams.get('aid') || url.searchParams.get('id') || undefined
+    if (enc) return { aid: aid || undefined, enc }
+  } catch { /* 非 URL 内容，继续使用签到串解析 */ }
+
+  const signinMatch = content.match(/SIGNIN:.*?aid=(\d+).*?enc=([\dA-Fa-f]+)/i)
+  if (signinMatch) return { aid: signinMatch[1], enc: signinMatch[2] }
+
+  const urlMatch = content.match(/[?&](?:activeId|aid|id)=(\d+).*?[?&]enc=([\dA-Fa-f]+)/i)
+  if (urlMatch) return { aid: urlMatch[1], enc: urlMatch[2] }
+
+  const legacy = content.match(QR_REGEX)
+  if (legacy) return { aid: legacy[3] || undefined, enc: legacy[5] || legacy[1] }
+
+  const encOnly = content.match(/enc=([\dA-Fa-f]+)/i)
+  return encOnly ? { enc: encOnly[1] } : null
 }
 
 /**
@@ -148,7 +161,8 @@ async function decodeViaJsQR(buffer: Buffer): Promise<QrPayload | null> {
 
     if (sharp) {
       const raw = await sharp(buffer)
-        .raw()
+        .ensureAlpha()
+        .raw({ channels: 4 })
         .toBuffer({ resolveWithObject: true })
       data = raw.data
       width = raw.info.width

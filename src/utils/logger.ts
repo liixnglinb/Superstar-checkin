@@ -21,8 +21,23 @@ class Logger {
     if (logFile) {
       this.logFile = logFile
       fs.mkdirSync(path.dirname(logFile), { recursive: true })
+      try {
+        if (fs.existsSync(logFile) && fs.statSync(logFile).size > 10 * 1024 * 1024) {
+          const backup = `${logFile}.1`
+          if (fs.existsSync(backup)) fs.unlinkSync(backup)
+          fs.renameSync(logFile, backup)
+        }
+      } catch { /* 日志轮转失败不应影响业务启动 */ }
       this.stream = fs.createWriteStream(logFile, { flags: 'a' })
     }
+  }
+
+  private redact(value: any): any {
+    if (typeof value !== 'string') return value
+    return value
+      .replace(/(Cookie:\s*).+?(?=\s|$)/gi, '$1[REDACTED]')
+      .replace(/([?&](?:token|access_token|password|secret|key)=)[^&\s]+/gi, '$1[REDACTED]')
+      .replace(/((?:password|secretKey|secretId|smtpPassword)\s*[:=]\s*)([^\s,;]+)/gi, '$1[REDACTED]')
   }
 
   private timestamp(): string {
@@ -41,7 +56,7 @@ class Logger {
   private writeToFile(prefix: string, ...args: any[]) {
     if (!this.stream) return
     const line = `[${this.timestamp()}][${prefix}] ${args.map(a =>
-      typeof a === 'object' ? JSON.stringify(a) : String(a),
+      this.redact(typeof a === 'object' ? JSON.stringify(a) : String(a)),
     ).join(' ')}\n`
     this.stream.write(line)
   }
