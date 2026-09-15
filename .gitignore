@@ -297,7 +297,7 @@ qrcode/
 # 桌面端构建产物与测试目录
 dist-sea/
 dist-electron/
-ui-shots/
+docs/screenshots/
 skills-study/
 !assets/app-icon.ico
 

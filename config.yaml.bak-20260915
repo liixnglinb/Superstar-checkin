@@ -1,0 +1,73 @@
+proxy: ""
+accounts:
+  - username: 19847671589
+    password: DPAPI:AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAlEcKwcAAzkKKPo61JDgr9AAAAAACAAAAAAAQZgAAAAEAACAAAACyQiAmgaEEE5vaIgRbYpIiYId2Emb6HdD7GqcWBGGPvQAAAAAOgAAAAAIAACAAAAAS3Ml+GYVqa8x4LsaD6gBU5YIoJixQxZg7baEjoX5HVBAAAAAE8aAE337SZ735XnyanXK7QAAAACVoaYs4N9VOriOqy+JoTk39mdf3Jmj8+OTPHwPdGHoTiaWSlga6YuZYH4+5F9NWraeAYIJPSHNCgGF6xgIrFQE=
+listener:
+  mode: hybrid
+  pollInterval: 30000
+  pollJitter: 15
+checkin:
+  delay:
+    min: 15
+    max: 45
+  retry:
+    maxAttempts: 3
+    delayMs: 5000
+  antiDetect:
+    enabled: true
+    randomDelay: true
+    useragentRotation: false
+    gpsDrift: true
+geo:
+  providers:
+    amapKey: ""
+  locations: null
+  locationRadius: 10
+notify:
+  channels:
+    - type: pushplus
+      enabled: false
+      config:
+        token: 你的PushPlus Token
+    - type: bark
+      enabled: false
+      config:
+        url: ""
+        key: 你的Bark Key
+    - type: dingtalk
+      enabled: false
+      config:
+        webhook: https://oapi.dingtalk.com/robot/send?access_token=xxx
+        secret: ""
+    - type: email
+      enabled: false
+      config:
+        smtpHost: smtp.qq.com
+        smtpPort: 465
+        from: 你的邮箱@qq.com
+        password: SMTP授权码
+        to: 接收邮箱@qq.com
+ocr:
+  provider: zxing
+  tencent:
+    secretId: ""
+    secretKey: ""
+dingtalk:
+  port: 3456
+  publicUrl: ""
+  appSecret: ""
+  appKey: ""
+web:
+  port: 3456
+  token: ""
+  allowedOrigin: http://localhost
+photo:
+  path: ""
+storage:
+  dataDir: ./data
+log:
+  level: info
+  file: ./data/app.log
+report:
+  enabled: true
+  hour: 22

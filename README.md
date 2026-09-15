@@ -278,6 +278,15 @@ web:
 
 ## 📝 更新日志
 
+### v3.2.1
+
+**修复**：
+- **更新下载源实测校准**：剔除 3 个已失效镜像（`mirror.ghproxy.com`、`github.moeyy.xyz`、`gh.api.99988866.xyz`），新增 `ghfast.top`。此前软件会依次等待失效源超时，是"更新下载慢"的主要成因。
+  实测（106MB 安装包全量）：`gh-proxy.com` ≈ **1.39 MB/s**、`ghfast.top` ≈ **1.25 MB/s**、`ghproxy.net` ≈ 0.03 MB/s（保留作兜底）
+
+**整理**：
+- 目录归类：架构文档移入 `docs/`、UI 截图移入 `docs/screenshots/`、历史图标归档至 `assets/archive/`
+
 ### v3.2.0
 
 **新增功能**：

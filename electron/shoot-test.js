@@ -6,7 +6,7 @@ const path = require('path')
 process.env.NO_OPEN_BROWSER = '1'
 
 const CONSOLE_URL = 'http://127.0.0.1:3456/'
-const OUT_DIR = path.join(__dirname, '..', 'ui-shots')
+const OUT_DIR = path.join(__dirname, '..', 'docs', 'screenshots')
 let win = null
 
 function waitForService(retries) {
