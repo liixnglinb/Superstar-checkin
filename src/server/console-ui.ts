@@ -147,11 +147,11 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
             : '<span class="pill pill-ok">监控中</span>'
         return `
       <tr>
-        <td class="cell-main">${esc(c.courseName)}</td>
-        <td class="cell-mono">${c.courseId}</td>
-        <td class="cell-mono">${c.classId}</td>
-        <td>${statePill}</td>
-        <td><button class="watch-toggle ${watching ? 'on' : ''}" data-cid="${esc(String(c.courseId))}">${watching ? '关闭监听' : '开启监听'}</button></td>
+        <td class="cell-main" data-label="课程">${esc(c.courseName)}</td>
+        <td class="cell-mono" data-label="Course ID">${c.courseId}</td>
+        <td class="cell-mono" data-label="Class ID">${c.classId}</td>
+        <td data-label="状态">${statePill}</td>
+        <td data-label="监听"><button class="watch-toggle ${watching ? 'on' : ''}" data-cid="${esc(String(c.courseId))}">${watching ? '关闭监听' : '开启监听'}</button></td>
       </tr>`
       }).join('')
     : `<tr><td colspan="5" class="cell-empty">暂无课程数据</td></tr>`
@@ -163,10 +163,10 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
         const badge = ok ? '<span class="pill pill-ok">成功</span>' : '<span class="pill pill-err">失败</span>'
         return `
         <tr>
-          <td class="cell-sub">${esc(fmtTime(r.timestamp))}</td>
-          <td class="cell-main">${esc(r.courseName || '未知课程')}</td>
-          <td class="cell-sub">${esc(typeText(r.type))}</td>
-          <td class="cell-sub">${badge}</td>
+          <td class="cell-sub" data-label="时间">${esc(fmtTime(r.timestamp))}</td>
+          <td class="cell-main" data-label="课程">${esc(r.courseName || '未知课程')}</td>
+          <td class="cell-sub" data-label="类型">${esc(typeText(r.type))}</td>
+          <td class="cell-sub" data-label="结果">${badge}</td>
         </tr>`
       }).join('')
     : `<tr><td colspan="4" class="cell-empty">还没有签到记录</td></tr>`
@@ -616,63 +616,149 @@ tr:hover td{background:#FBFBF9}
   .stat-grid,.acct-stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cal-cell{min-height:50px}
 }
-/* ===== 移动端：底部 Tab 栏 + 触控优化 =====
-   设计参照 Tabler / Gentelella 的移动端规范与 iOS HIG：
-   - 底部固定 Tab 栏（拇指可达区），替换桌面端的侧边栏
-   - 触控目标 ≥ 44px，去点击高亮，输入框 16px 防 iOS 聚焦放大
-   - 适配 iPhone 底部安全区（env(safe-area-inset-bottom)）与动态视口高度（dvh） */
+/* ===== 移动端界面 =====
+   设计依据（来自 GitHub / 官方规范的学习成果）：
+   · Material Design 3 —— 圆角体系（Large=16dp）、底部导航、卡片三态（Elevated/Filled/Outlined）、
+     「同质内容用列表而非卡片」、动效 200-300ms 自然缓动
+   · iOS Human Interface Guidelines —— 触控目标最小 44×44pt、Tab bar 49pt、
+     安全区（刘海 / Home Indicator）、Clarity/Deference/Depth 三原则
+   · 移动端通用最佳实践 —— 屏幕边距 16px、分区间距 24px、交互元素间距 ≥12px、
+     输入框 16px 字号（避免 iOS 聚焦时自动放大）、底部拇指可达区放主操作
+   手机端的核心改造：表格 → 卡片列表（表格在窄屏上横向挤压严重，可读性差）。 */
 @media (max-width:720px){
   /* 手机浏览器里不需要 Electron 的窗口控件 */
   .titlebar{display:none}
   .shell{height:100vh;height:100dvh}
 
+  /* ---------- 底部标签栏（HIG：49pt + 安全区） ---------- */
   .app{flex-direction:column}
-
-  /* 侧栏 → 底部固定 Tab 栏 */
   .side{
     position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;
     width:100%;flex-direction:row;align-items:stretch;
-    padding:0 4px;
+    padding:0 2px;
     padding-bottom:env(safe-area-inset-bottom,0px);
     border-right:0;border-top:1px solid var(--border);
-    background:rgba(255,255,255,.94);
-    backdrop-filter:blur(20px);
-    box-shadow:0 -1px 12px rgba(28,25,21,.06);
+    background:rgba(255,255,255,.93);
+    backdrop-filter:blur(24px) saturate(180%);
+    box-shadow:0 -1px 16px rgba(28,25,21,.07);
   }
   .brand,.side-foot{display:none}
-  .nav{flex-direction:row;flex:1;gap:0;justify-content:space-around}
+  .nav{flex-direction:row;flex:1;gap:0;justify-content:space-around;align-items:stretch}
   .nav-item{
     flex:1;flex-direction:column;gap:3px;justify-content:center;align-items:center;
-    min-height:52px;padding:8px 2px 7px;
-    font-size:10.5px;border-radius:0;text-align:center;
+    min-height:56px;padding:8px 1px 6px;
+    font-size:10px;font-weight:500;
+    border-radius:0;text-align:center;
     -webkit-tap-highlight-color:transparent;
+    transition:color .2s ease,background .2s ease;
   }
-  .nav-item svg{width:21px;height:21px}
-  .nav-item.active{background:none;font-weight:600}
+  .nav-item svg{width:22px;height:22px}
+  .nav-item.active{background:none;color:var(--accent);font-weight:600}
   .nav-item.active::after{display:none}
   .nav-item:active{background:var(--surface-2)}
 
-  /* 内容区避让底部 Tab 栏 */
-  .topbar{height:52px;position:sticky;top:0;z-index:50;padding-left:16px;padding-right:16px}
-  .page-title{font-size:16px}
-  .content{padding:16px 16px calc(74px + env(safe-area-inset-bottom,0px))}
+  /* ---------- 顶部标题区（HIG：导航栏 44pt） ---------- */
+  .topbar{
+    height:52px;position:sticky;top:0;z-index:50;
+    padding-left:16px;padding-right:16px;
+    background:rgba(255,255,255,.88);
+  }
+  .page-title{font-size:19px;font-weight:650;letter-spacing:-.02em}
 
-  /* 触控与排版 */
+  /* ---------- 内容区（边距 16px / 分区间距 24px / 底部避开标签栏） ---------- */
+  .content{padding:16px 16px calc(76px + env(safe-area-inset-bottom,0px))}
+  .section{margin-bottom:24px}
+  .section-head{margin-bottom:12px;gap:10px}
+  .section-title{font-size:15.5px;font-weight:650}
+  .section-more{font-size:11.5px}
+
+  /* ---------- 卡片：M3 Large 圆角（16dp） ---------- */
+  .card,.stat-card,.drag-box,.req-grid{border-radius:16px}
+
+  /* ---------- 表格 → 卡片列表（移动端关键改造） ---------- */
+  table{display:block;font-size:14px;border-collapse:separate}
+  thead{display:none}
+  tbody{display:block}
+  tbody tr{
+    display:block;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px 14px;
+    margin-bottom:10px;
+    box-shadow:var(--shadow-sm);
+    transition:background .2s ease,transform .2s ease;
+  }
+  tbody tr:active{background:var(--surface-2);transform:scale(.995)}
+  tbody td{
+    display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+    padding:5px 0;border:0;text-align:right;white-space:normal;
+  }
+  tbody td::before{
+    content:attr(data-label);
+    flex:0 0 auto;
+    color:var(--text-3);
+    font-size:12.5px;font-weight:400;
+    text-align:left;
+  }
+  tbody td.cell-main{font-size:14.5px;font-weight:600}
+  tbody td.cell-mono{font-size:12.5px;word-break:break-all}
+  tbody td[colspan]{justify-content:center;color:var(--text-3)}
+  tbody td[colspan]::before{display:none}
+  /* 主标题行：整行独占、下方加分隔线，形成卡片标题 */
+  tbody td:first-child{
+    justify-content:flex-start;
+    font-size:15px;font-weight:650;
+    padding-bottom:8px;margin-bottom:5px;
+    border-bottom:1px solid var(--border);
+  }
+  tbody td:first-child::before{display:none}
+
+  /* ---------- 统计卡片（双列网格） ---------- */
   .stat-grid,.acct-stat-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  .stat-num{font-size:22px}
-  th,td{padding:11px 12px;font-size:13px}
-  .btn{min-height:42px;padding-left:16px;padding-right:16px}
-  .btn-sm{min-height:34px}
-  .modal,.disclaimer-modal{max-width:calc(100vw - 24px)}
-  .drag-box{padding:24px 20px}
-  button,.nav-item,.card{touch-action:manipulation}
+  .stat-card{padding:14px 15px}
+  .stat-num{font-size:23px;font-weight:700;letter-spacing:-.02em}
+  .stat-label{font-size:11.5px}
+
+  /* ---------- 表单与按钮（HIG：触控目标 ≥44pt） ---------- */
+  .btn{min-height:44px;padding-left:18px;padding-right:18px;border-radius:12px;font-size:14.5px}
+  .btn-sm{min-height:36px;font-size:13px;padding-left:14px;padding-right:14px}
+  .field-input{min-height:44px;border-radius:12px}
   input,select,textarea{font-size:16px}
+  .watch-toggle{min-height:38px;padding:0 14px;border-radius:10px}
+  .pill{font-size:11.5px;padding:3px 9px}
+  /* 操作按钮区：手机上纵向堆叠并占满宽度，避免文字被挤断成两行 */
+  .section-foot{flex-direction:column;gap:10px;align-items:stretch}
+  .section-foot .btn{width:100%}
+
+  /* ---------- 弹窗（移动端接近全宽） ---------- */
+  .modal,.disclaimer-modal{
+    max-width:calc(100vw - 28px);
+    border-radius:18px;
+    max-height:calc(100dvh - 84px);
+  }
+  .modal-close,.win-btn{min-width:44px;min-height:44px}
+
+  /* ---------- 设置项：值过长时自动换行，避免挤压折行 ---------- */
+  .set-row{flex-wrap:wrap;row-gap:2px}
+  .set-label{flex:0 0 auto}
+  .set-value{flex:1 1 auto;min-width:0;text-align:right;word-break:break-word;overflow-wrap:anywhere}
+
+  /* ---------- 触控反馈 ---------- */
+  button,.nav-item,.card,.watch-toggle{touch-action:manipulation}
+  .drag-box{padding:24px 18px}
 }
 @media (max-width:400px){
-  .stat-grid,.acct-stat-row{grid-template-columns:1fr}
+  /* 375px 级窄屏仍保持双列 —— 单列会让统计区过长，需滚动很久才能看到签到趋势 */
+  .stat-grid,.acct-stat-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .stat-card{padding:12px 13px}
+  .stat-num{font-size:21px}
+  .stat-label{font-size:11px}
   .nav-item{font-size:9.5px}
-  .nav-item svg{width:19px;height:19px}
+  .nav-item svg{width:20px;height:20px}
+  .content{padding-left:14px;padding-right:14px}
 }
+
 </style>
 </head>
 <body>
@@ -1159,7 +1245,7 @@ tr:hover td{background:#FBFBF9}
     var rows=(s.recent||[]).map(function(r){
       var ok=/成功|✅|已签到/.test(r.result)
       var badge=ok?'<span class="pill pill-ok">成功</span>':'<span class="pill pill-err">失败</span>'
-      return '<tr><td class="cell-sub">'+esc(fmtTime(r.timestamp))+'</td><td class="cell-main">'+esc(r.courseName||'未知课程')+'</td><td class="cell-sub">'+esc(typeText(r.type))+'</td><td class="cell-sub">'+badge+'</td></tr>'
+      return '<tr><td class="cell-sub" data-label="时间">'+esc(fmtTime(r.timestamp))+'</td><td class="cell-main" data-label="课程">'+esc(r.courseName||'未知课程')+'</td><td class="cell-sub" data-label="类型">'+esc(typeText(r.type))+'</td><td class="cell-sub" data-label="结果">'+badge+'</td></tr>'
     }).join('')
     if(!rows)rows='<tr><td colspan="4" class="cell-empty">还没有签到记录</td></tr>'
     if(document.getElementById('recentBody'))document.getElementById('recentBody').innerHTML=rows
@@ -1215,7 +1301,7 @@ tr:hover td{background:#FBFBF9}
             var total=st.success+st.fail
             var rate=total?Math.round(st.success/total*100):0
             var rc=rate>=90?'#178A5B':(rate>=60?'#B7791F':'#D64545')
-            return '<tr><td class="cell-main">'+esc(st.course)+'</td><td class="cell-sub" style="color:#178A5B">'+st.success+'</td><td class="cell-sub" style="color:'+(st.fail?'#D64545':'#9A8B80')+'">'+st.fail+'</td><td class="cell-sub" style="color:'+rc+';font-weight:600">'+rate+'%</td></tr>'
+            return '<tr><td class="cell-main" data-label="课程">'+esc(st.course)+'</td><td class="cell-sub" data-label="签到成功" style="color:#178A5B">'+st.success+'</td><td class="cell-sub" data-label="签到失败" style="color:'+(st.fail?'#D64545':'#9A8B80')+'">'+st.fail+'</td><td class="cell-sub" data-label="成功率" style="color:'+rc+';font-weight:600">'+rate+'%</td></tr>'
           }).join('')
         : '<tr><td colspan="4" class="cell-empty">暂无统计数据（产生签到记录后显示）</td></tr>'
     }
@@ -1721,7 +1807,7 @@ tr:hover td{background:#FBFBF9}
       }
       var rows=d.records.map(function(r){
         var ok=/成功|✅|已签到/.test(r.result||'')
-        return '<tr><td class="cell-mono">'+esc(r.time||'')+'</td><td>'+esc(r.type||'普通')+'</td><td>'+esc(r.account||'')+'</td><td><span class="pill '+(ok?'pill-ok':'pill-off')+'">'+esc(r.result||'')+'</span></td></tr>'
+        return '<tr><td class="cell-mono" data-label="时间">'+esc(r.time||'')+'</td><td data-label="类型">'+esc(r.type||'普通')+'</td><td data-label="账号">'+esc(r.account||'')+'</td><td data-label="结果"><span class="pill '+(ok?'pill-ok':'pill-off')+'">'+esc(r.result||'')+'</span></td></tr>'
       }).join('')
       document.getElementById('detailBody').innerHTML='<div style="margin-bottom:10px;font-size:12px;color:var(--text-3)">共 '+d.total+' 条记录（最近100条）</div><table><thead><tr><th>时间</th><th>类型</th><th>账号</th><th>结果</th></tr></thead><tbody>'+rows+'</tbody></table>'
     }).catch(function(){document.getElementById('detailBody').innerHTML='<div style="text-align:center;padding:30px;color:var(--text-3)">加载失败</div>'})
