@@ -197,9 +197,81 @@ export class DingTalkServer {
         return
       }
 
+      // PWA 清单：手机浏览器据此提供「添加到主屏幕」，以独立 App 形态打开
+      if (req.method === 'GET' && routePath === '/manifest.webmanifest') {
+        res.writeHead(200, {
+          'Content-Type': 'application/manifest+json; charset=utf-8',
+          'Cache-Control': 'public, max-age=3600',
+        })
+        res.end(JSON.stringify({
+          name: '学习通自动签到',
+          short_name: '学习通签到',
+          description: '学习通（超星）自动签到助手 · 手机控制台',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          orientation: 'portrait',
+          background_color: '#F6F7F4',
+          theme_color: '#F27B34',
+          lang: 'zh-CN',
+          icons: [
+            { src: '/assets/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/assets/app-icon.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/assets/app-icon.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          ],
+        }))
+        return
+      }
+
+      // 192×192 图标（PWA 安装所需的小尺寸）
+      if (req.method === 'GET' && routePath === '/assets/app-icon-192.png') {
+        try {
+          const p192 = require('path').join(__dirname, '..', '..', 'assets', 'app-icon-192.png')
+          const fallback = require('path').join(__dirname, '..', '..', 'assets', 'app-icon.png')
+          const target = fs.existsSync(p192) ? p192 : fallback
+          if (fs.existsSync(target)) {
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' })
+            res.end(fs.readFileSync(target))
+          } else {
+            res.writeHead(404); res.end()
+          }
+        } catch (e) { res.writeHead(500); res.end() }
+        return
+      }
+
+      // Service Worker：让控制台可安装、并在断网时回退到缓存壳
+      // 注意：/api/* 一律直连不缓存——控制台数据必须实时，缓存会导致看到过期状态
+      if (req.method === 'GET' && routePath === '/sw.js') {
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          'Service-Worker-Allowed': '/',
+        })
+        res.end([
+          "const CACHE = 'checkin-console-v2'",
+          "const PRECACHE = ['/', '/assets/app-icon.png', '/assets/app-icon-192.png', '/manifest.webmanifest']",
+          "self.addEventListener('install', (e) => {",
+          "  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).catch(() => {}).then(() => self.skipWaiting()))",
+          "})",
+          "self.addEventListener('activate', (e) => {",
+          "  e.waitUntil(caches.keys()",
+          "    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))",
+          "    .then(() => self.clients.claim()))",
+          "})",
+          "self.addEventListener('fetch', (e) => {",
+          "  const req = e.request",
+          "  if (req.method !== 'GET') return",
+          "  const url = new URL(req.url)",
+          "  if (url.origin !== self.location.origin) return",
+          "  if (url.pathname.startsWith('/api/') || url.pathname === '/sw.js') return",
+          "  e.respondWith(fetch(req).catch(() => caches.match(req).then((r) => r || caches.match('/'))))",
+          "})",
+        ].join('\n'))
+        return
+      }
+
     // 健康检查
-      if (req.method === 'GET' && routePath === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' })
+      if (req.method === 'GET' && routePath === '/health') {        res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }))
         return
       }

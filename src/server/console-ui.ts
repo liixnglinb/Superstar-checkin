@@ -337,8 +337,15 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>学习通自动签到</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#F27B34">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="学习通签到">
+<link rel="apple-touch-icon" href="/assets/app-icon-192.png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -609,22 +616,62 @@ tr:hover td{background:#FBFBF9}
   .stat-grid,.acct-stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cal-cell{min-height:50px}
 }
+/* ===== 移动端：底部 Tab 栏 + 触控优化 =====
+   设计参照 Tabler / Gentelella 的移动端规范与 iOS HIG：
+   - 底部固定 Tab 栏（拇指可达区），替换桌面端的侧边栏
+   - 触控目标 ≥ 44px，去点击高亮，输入框 16px 防 iOS 聚焦放大
+   - 适配 iPhone 底部安全区（env(safe-area-inset-bottom)）与动态视口高度（dvh） */
 @media (max-width:720px){
+  /* 手机浏览器里不需要 Electron 的窗口控件 */
+  .titlebar{display:none}
+  .shell{height:100vh;height:100dvh}
+
   .app{flex-direction:column}
-  .side{width:100%;flex-direction:row;align-items:center;gap:10px;border-right:0;border-bottom:1px solid var(--border);padding:10px 14px;overflow-x:auto}
-  .brand{padding:0}
-  .brand-name{font-size:13px;white-space:nowrap}
-  .brand-ver{display:none}
-  .nav{flex-direction:row;gap:4px}
-  .nav-item{width:auto;white-space:nowrap;padding:8px 10px}
+
+  /* 侧栏 → 底部固定 Tab 栏 */
+  .side{
+    position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;
+    width:100%;flex-direction:row;align-items:stretch;
+    padding:0 4px;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    border-right:0;border-top:1px solid var(--border);
+    background:rgba(255,255,255,.94);
+    backdrop-filter:blur(20px);
+    box-shadow:0 -1px 12px rgba(28,25,21,.06);
+  }
+  .brand,.side-foot{display:none}
+  .nav{flex-direction:row;flex:1;gap:0;justify-content:space-around}
+  .nav-item{
+    flex:1;flex-direction:column;gap:3px;justify-content:center;align-items:center;
+    min-height:52px;padding:8px 2px 7px;
+    font-size:10.5px;border-radius:0;text-align:center;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .nav-item svg{width:21px;height:21px}
+  .nav-item.active{background:none;font-weight:600}
   .nav-item.active::after{display:none}
-  .side-foot{border-top:0;padding-top:0;margin-top:0;margin-left:auto}
-  .content,.topbar{padding-left:14px;padding-right:14px}
-  .content{padding-top:18px}
+  .nav-item:active{background:var(--surface-2)}
+
+  /* 内容区避让底部 Tab 栏 */
+  .topbar{height:52px;position:sticky;top:0;z-index:50;padding-left:16px;padding-right:16px}
+  .page-title{font-size:16px}
+  .content{padding:16px 16px calc(74px + env(safe-area-inset-bottom,0px))}
+
+  /* 触控与排版 */
+  .stat-grid,.acct-stat-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .stat-num{font-size:22px}
+  th,td{padding:11px 12px;font-size:13px}
+  .btn{min-height:42px;padding-left:16px;padding-right:16px}
+  .btn-sm{min-height:34px}
+  .modal,.disclaimer-modal{max-width:calc(100vw - 24px)}
+  .drag-box{padding:24px 20px}
+  button,.nav-item,.card{touch-action:manipulation}
+  input,select,textarea{font-size:16px}
+}
+@media (max-width:400px){
   .stat-grid,.acct-stat-row{grid-template-columns:1fr}
-  th,td{padding-left:12px;padding-right:12px}
-  .modal,.disclaimer-modal{max-width:94vw}
-  .drag-box{padding:28px 30px}
+  .nav-item{font-size:9.5px}
+  .nav-item svg{width:19px;height:19px}
 }
 </style>
 </head>
@@ -1749,6 +1796,15 @@ function loadLogs(){
   poll()
   setInterval(poll,5000)
 })();
+</script>
+<script>
+/* PWA：注册 Service Worker，让手机浏览器可「添加到主屏幕」并以独立 App 形态打开。
+   注册失败静默忽略，不影响控制台任何功能。 */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
 </script>
 </body>
 </html>`
