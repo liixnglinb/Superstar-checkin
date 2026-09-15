@@ -301,6 +301,9 @@ dist-electron/
 docs/screenshots/
 skills-study/
 !assets/app-icon.ico
+!assets/app-icon.png
+!assets/app-icon-192.png
+!assets/favicon-checkin.png
 
 
 # 安装版运行解包产物
