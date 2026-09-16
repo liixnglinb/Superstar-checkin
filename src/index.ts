@@ -116,9 +116,19 @@ async function main() {
 
   // 控制台状态数据提供者（每次请求实时计算；闭包引用后续初始化的模块）
   // 注意：上传页服务先于业务模块启动，早期请求可能命中 TDZ，故全部包 try/catch
+  // 版本号从 package.json 动态读取——此前这里硬编码为 '3.1'，
+  // 导致控制台侧边栏一直显示旧版本（实际已迭代到 3.4.x）。
+  // 编译产物位于 build/，require('../package.json') 指向项目根，打包进 asar 后同样成立。
+  let appVersion = ''
+  try {
+    appVersion = String(require('../package.json').version || '')
+  } catch {
+    appVersion = ''
+  }
+
   const getConsoleStatus = () => {
     const base: any = {
-      version: '3.1',
+      version: appVersion,
       mode: config.listener.mode,
       pollInterval: config.listener.pollInterval,
       port: config.web?.port || 3456,
