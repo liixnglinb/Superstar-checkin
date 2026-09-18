@@ -94,6 +94,8 @@ const hooks = [
   ['data-view="settings"', '设置视图'],
   ['class="fab"', 'FAB 样式类'],
   ['sheetIn', '移动端底部弹层动画'],
+  ['id="qrMobileUrl"', '手机端上传地址'],
+  ['id="qrCopyBtn"', '地址复制按钮'],
 ]
 for (const [needle, label] of hooks) {
   check(`产物包含${label}`, html.includes(needle))

@@ -13,6 +13,10 @@ export interface ConsoleStatus {
   mode?: string
   pollInterval?: number
   port?: number
+  /** 本机局域网 IPv4（手机端访问控制台/上传页用），取不到则为空 */
+  lanIp?: string
+  /** 服务监听地址：127.0.0.1 时手机无法访问，界面会给出提示 */
+  webHost?: string
   uptime?: number
   accounts?: Array<{ username: string; name?: string; schoolname?: string }>
   courses?: Array<{ courseName: string; courseId: number; classId: number }>
@@ -74,6 +78,7 @@ const ICONS = {
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5.5 3.8 9.7 8 11 4.2-1.3 8-5.5 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
 }
 
 function esc(s: any): string {
@@ -122,6 +127,15 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
   const mode = status.mode || '-'
   const qs = token ? '?token=' + encodeURIComponent(token) : ''
   const scriptNonce = options?.scriptNonce || ''
+  /**
+   * 手机端访问地址：直接给出带 token 的完整 URL（页面本身已在 token 保护下，不存在额外泄露面），
+   * 用户扫码/输入即可在手机上传签到码，不必手拼 token。
+   */
+  const webPort = status.port || 3456
+  const lanHost = status.lanIp || '电脑IP'
+  const mobileUploadUrl = `http://${lanHost}:${webPort}/upload${token ? '?token=' + encodeURIComponent(token) : ''}`
+  /** 仅监听本机时手机连不上（最常见的新手问题），界面直接提示改法 */
+  const loopbackOnly = !status.webHost || /^(127\.0\.0\.1|localhost|::1)$/.test(status.webHost)
 
   const accountRows = accounts.length
     ? accounts.map(a => `
@@ -634,6 +648,13 @@ tr:hover td{background:var(--n-25)}
 .qr-status{margin-top:14px;font-size:var(--fs-base);color:var(--text-2);text-align:center;min-height:20px}
 .qr-status.ok{color:var(--ok);font-weight:var(--fw-semibold)}
 .qr-status.err{color:var(--err);font-weight:var(--fw-semibold)}
+/* 弹窗内的手机上传地址块：给出带 token 的完整 URL，省去用户手拼 */
+.qr-mobile{margin-top:16px;padding:14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2)}
+.qr-mobile-title{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-2);margin-bottom:8px}
+.qr-mobile-url{display:flex;align-items:center;gap:10px}
+.qr-mobile-url .cell-mono{flex:1;min-width:0;word-break:break-all;line-height:1.5}
+.qr-mobile-hint{font-size:var(--fs-sm);color:var(--text-3);margin-top:8px;line-height:1.6}
+.qr-mobile-warn{font-size:var(--fs-sm);color:var(--warn);background:var(--warn-weak);border-radius:var(--r-xs);padding:8px 10px;margin-top:10px;line-height:1.65}
 .modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--border);font-size:var(--fs-sm);color:var(--text-3)}
 /* 免责声明：底部操作区撑满整行（左侧不同意、右侧同意并继续） */
 .disclaimer-modal .modal-foot{padding:16px 18px;gap:12px}
@@ -1123,7 +1144,7 @@ tr:hover td{background:var(--n-25)}
             </div>
           </div>
           <div style="padding:2px 18px 14px;font-size:var(--fs-sm);color:var(--text-3);line-height:1.7">
-            也可点击右上角「二维码签到」按钮，或手机在同一 Wi-Fi 下访问 <span class="cell-mono">http://电脑IP:${esc(String(status.port || '3456'))}/upload</span> 上传。签到失败会自动重试；检测到手势/拍照类签到会推送提醒（请在学习通 APP 手动完成）。
+            也可点击右上角「二维码签到」按钮，或手机在同一 Wi-Fi 下访问 <span class="cell-mono">${esc(mobileUploadUrl)}</span> 上传。签到失败会自动重试；检测到手势/拍照类签到会推送提醒（请在学习通 APP 手动完成）。
           </div>
         </div>
         <div class="section">
@@ -1224,6 +1245,17 @@ tr:hover td{background:var(--n-25)}
         </div>
       </div>
       <div class="qr-status" id="qrStatus"></div>
+      <!-- 手机端上传入口：教室二维码用手机拍最方便，这里给出可直接打开的完整地址 -->
+      <div class="qr-mobile">
+        <div class="qr-mobile-title">用手机拍二维码？打开这个地址上传</div>
+        <div class="qr-mobile-url">
+          <span class="cell-mono" id="qrMobileUrl">${esc(mobileUploadUrl)}</span>
+          <button class="btn btn-ghost btn-sm" id="qrCopyBtn" type="button">${ICONS.copy}<span id="qrCopyLabel">复制</span></button>
+        </div>
+        ${loopbackOnly
+          ? `<div class="qr-mobile-warn">当前服务仅监听本机（config.yaml 中 <b>web.host: 127.0.0.1</b>），手机连不上。把该项改为 <b>0.0.0.0</b> 并重启软件后即可用手机访问（已开启 token 鉴权，仅同一 Wi-Fi 可见）。</div>`
+          : `<div class="qr-mobile-hint">手机与电脑需连同一 Wi-Fi；地址含访问令牌，请勿发给他人。</div>`}
+      </div>
     </div>
     <div class="modal-foot" style="justify-content:flex-start">签到二维码会随时间更新，更新后拖入新码即可</div>
   </div>
@@ -2022,6 +2054,24 @@ function loadLogs(){
   // 移动端 FAB：与右上角「二维码签到」同一入口
   var fabQr=document.getElementById('fabQr')
   if(fabQr)fabQr.addEventListener('click',openQrModal)
+  // 复制手机上传地址（手机端输入长 URL 很麻烦，桌面端点一下复制再发过去即可）
+  var qrCopyBtn=document.getElementById('qrCopyBtn')
+  if(qrCopyBtn)qrCopyBtn.addEventListener('click',function(){
+    var el=document.getElementById('qrMobileUrl')
+    var label=document.getElementById('qrCopyLabel')
+    var txt=el?el.textContent:''
+    function done(ok){if(label){label.textContent=ok?'已复制':'复制失败';setTimeout(function(){label.textContent='复制'},1800)}}
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){done(true)},function(){done(false)})
+    }else{
+      try{
+        var ta=document.createElement('textarea')
+        ta.value=txt;ta.style.position='fixed';ta.style.opacity='0'
+        document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)
+        done(true)
+      }catch(e){done(false)}
+    }
+  })
   var qrModalClose=document.getElementById('qrModalClose')
   if(qrModalClose)qrModalClose.addEventListener('click',closeQrModal)
   if(qrModal)qrModal.addEventListener('click',function(e){if(e.target===qrModal)closeQrModal()})

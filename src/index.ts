@@ -55,6 +55,22 @@ function allowRetryOnFailure(aid: string) {
   }
 }
 
+/**
+ * 取本机局域网 IPv4 地址（用于在界面里给出「手机可直接打开」的控制台/上传页地址）。
+ * 取不到时返回空串，界面会退化为「电脑IP」占位文案。
+ */
+function getLanIp(): string {
+  try {
+    const nets = require('os').networkInterfaces() as Record<string, any[]>
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name] || []) {
+        if (net && net.family === 'IPv4' && !net.internal) return String(net.address)
+      }
+    }
+  } catch { /* 环境异常时忽略 */ }
+  return ''
+}
+
 function openBrowser(url: string) {
   const cp = require('child_process')
   const cmd =
@@ -123,6 +139,9 @@ async function main() {
       pollInterval: config.listener.pollInterval,
       port: config.web?.port || 3456,
       uptime: process.uptime(),
+      /** 局域网地址 + 监听范围：手机端访问地址由前端据此拼装（见 console-ui 的二维码弹窗） */
+      lanIp: getLanIp(),
+      webHost: config.web?.host || '127.0.0.1',
     }
     try {
       const history = checkinHandler.getHistory()
