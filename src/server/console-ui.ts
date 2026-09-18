@@ -472,15 +472,37 @@ body{font-family:var(--font);background:
 .nav-item:hover{background:var(--surface-2);color:var(--text);transform:translateX(1px)}
 .nav-item.active{background:var(--accent-weak);color:var(--accent);font-weight:var(--fw-semibold)}
 .nav-item.active::after{content:'';position:absolute;left:-12px;top:50%;width:3px;height:18px;border-radius:0 3px 3px 0;background:var(--accent);transform:translateY(-50%)}
-.side-foot{border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
-.foot-row{display:flex;align-items:center;gap:8px;padding:2px 8px;font-size:var(--fs-sm);color:var(--text-2)}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.side-foot{border-top:1px solid var(--border);padding-top:12px;margin-top:12px;display:flex;flex-direction:column;gap:1px}
+.foot-row{display:flex;align-items:center;gap:8px;padding:3px 8px;font-size:var(--fs-sm);color:var(--text-2)}
+.foot-row svg{width:13px;height:13px;color:var(--text-3);flex-shrink:0}
+/* 运行指示：缓慢呼吸的绿色光点，表示服务在跑（不做夸张动效） */
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0;position:relative}
+.dot::after{content:'';position:absolute;inset:-3px;border-radius:50%;background:var(--ok);opacity:.28;animation:pulse 2.4s var(--ease) infinite}
+.dot.off{background:var(--text-3)}
+.dot.off::after{display:none}
+@keyframes pulse{0%,100%{transform:scale(.85);opacity:.3}50%{transform:scale(1.25);opacity:.08}}
 .foot-port{font-family:ui-monospace,Consolas,monospace;font-size:var(--fs-xs);color:var(--text-3)}
 /* ===== 主区 ===== */
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{height:64px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 30px;background:rgba(255,255,255,.72);border-bottom:1px solid var(--border);backdrop-filter:blur(18px)}
-.page-title{font-size:var(--fs-2xl);font-weight:var(--fw-bold);letter-spacing:-.02em}
-.top-actions{display:flex;gap:10px}
+.topbar{height:64px;flex-shrink:0;display:flex;align-items:center;gap:18px;padding:0 30px;background:rgba(255,255,255,.72);border-bottom:1px solid var(--border);backdrop-filter:blur(18px)}
+.topbar-lead{min-width:0;flex-shrink:0}
+.page-title{font-size:var(--fs-2xl);font-weight:var(--fw-bold);letter-spacing:-.02em;line-height:1.2}
+.page-sub{font-size:var(--fs-sm);color:var(--text-3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 顶部实时状态条：一屏内看清「监听模式 / 登录 / IM / 待签」四态，不必翻设置页 */
+.status-strip{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:var(--r-full);font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--text-2);background:var(--n-100);border:1px solid var(--border);white-space:nowrap}
+.chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.75}
+.chip-ok{color:var(--ok);background:var(--ok-weak);border-color:transparent}
+.chip-warn{color:var(--warn);background:var(--warn-weak);border-color:transparent}
+.chip-err{color:var(--err);background:var(--err-weak);border-color:transparent}
+.top-actions{display:flex;gap:10px;margin-left:auto;flex-shrink:0}
+/* 移动端主操作 FAB：仅手机显示，悬浮于底部标签栏之上 */
+.fab{display:none;position:fixed;right:18px;bottom:calc(78px + env(safe-area-inset-bottom,0px));z-index:70;width:54px;height:54px;border-radius:50%;border:none;background:linear-gradient(180deg,#F98A44 0%,#E56920 100%);color:#fff;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--gloss-strong),0 2px 6px rgba(150,66,14,.26),0 12px 28px rgba(229,105,32,.32);transition:transform var(--dur-fast) var(--ease),filter var(--dur) var(--ease)}
+.fab svg{width:24px;height:24px}
+.fab:active{transform:scale(.94);filter:brightness(.97)}
+/* 窄桌面窗口：状态条按优先级收窄，优先保留「登录 / 待签」两类关键信息 */
+@media (max-width:1180px){.chip{font-size:var(--fs-xs);padding:4px 9px}#chipMode{display:none}}
+@media (max-width:1040px){#chipIm{display:none}.page-sub{display:none}}
 .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:var(--radius-sm);border:none;font-size:var(--fs-base);font-weight:var(--fw-semibold);cursor:pointer;font-family:var(--font);transition:transform var(--dur-fast) var(--ease),background var(--dur) var(--ease),box-shadow var(--dur) var(--ease),opacity var(--dur) var(--ease),filter var(--dur) var(--ease)}
 .btn svg{width:15px;height:15px}
 .btn:active{transform:scale(.97);transition-duration:80ms}
@@ -723,27 +745,50 @@ tr:hover td{background:var(--n-25)}
     box-shadow:0 -1px 16px rgba(28,25,21,.07);
   }
   .brand,.side-foot{display:none}
-  .nav{flex-direction:row;flex:1;gap:0;justify-content:space-around;align-items:stretch}
+  .nav{flex-direction:row;flex:1;gap:0;justify-content:space-around;align-items:stretch;min-width:0;overflow-x:auto;scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
   .nav-item{
-    flex:1;flex-direction:column;gap:3px;justify-content:center;align-items:center;
-    min-height:56px;padding:8px 1px 6px;
+    flex:1 0 auto;flex-direction:column;gap:3px;justify-content:center;align-items:center;
+    min-width:54px;min-height:56px;padding:8px 2px 6px;
     font-size:var(--fs-2xs);font-weight:var(--fw-medium);
     border-radius:0;text-align:center;
     -webkit-tap-highlight-color:transparent;
     transition:color .2s ease,background .2s ease;
   }
-  .nav-item svg{width:22px;height:22px}
+  /* 极窄屏（≤360px）允许标签栏横向滑动，避免 6 个入口被压缩到不可点 */
+  .nav-item span{white-space:nowrap}
+  .nav-item svg{width:22px;height:22px;transition:transform .2s var(--ease-spring)}
   .nav-item.active{background:none;color:var(--accent);font-weight:var(--fw-semibold)}
+  /* 选中态：图标上浮 + 顶部小横条，比整块底色更轻，也更符合 M3 导航指示器 */
+  .nav-item.active svg{transform:translateY(-1px)}
+  .nav-item.active::before{content:'';position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
   .nav-item.active::after{display:none}
   .nav-item:active{background:var(--surface-2)}
+  .nav-item:active svg{transform:scale(.9)}
 
-  /* ---------- 顶部标题区（HIG：导航栏 44pt） ---------- */
+  /* ---------- 顶部标题区：标题行 + 状态条折行（HIG：导航栏 44pt） ---------- */
   .topbar{
-    height:52px;position:sticky;top:0;z-index:50;
-    padding-left:16px;padding-right:16px;
-    background:rgba(255,255,255,.88);
+    height:auto;position:sticky;top:0;z-index:50;
+    flex-wrap:wrap;row-gap:8px;gap:12px;
+    padding:10px 16px 11px;
+    background:rgba(255,255,255,.9);
   }
-  .page-title{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);letter-spacing:-.02em}
+  .topbar-lead{flex:1 1 auto;order:1}
+  .page-title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);letter-spacing:-.02em}
+  /* 手机屏幕窄，副标题省略；状态条独占第二行并允许横向滑动 */
+  .page-sub{display:none}
+  .status-strip{
+    order:3;flex:1 1 100%;overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+    padding-bottom:1px;
+  }
+  .status-strip::-webkit-scrollbar{display:none}
+  .chip{flex-shrink:0}
+  .top-actions{order:2;margin-left:0;flex-shrink:0}
+  /* 手机上主操作改为右下 FAB，标题行只留紧凑按钮 */
+  .top-actions .btn span{display:none}
+  .top-actions .btn{padding:9px 12px}
+  .fab{display:inline-flex}
 
   /* ---------- 内容区（边距 16px / 分区间距 24px / 底部避开标签栏） ---------- */
   .content{padding:16px 16px calc(76px + env(safe-area-inset-bottom,0px))}
@@ -811,13 +856,27 @@ tr:hover td{background:var(--n-25)}
   .section-foot{flex-direction:column;gap:10px;align-items:stretch}
   .section-foot .btn{width:100%}
 
-  /* ---------- 弹窗（移动端接近全宽） ---------- */
-  .modal,.disclaimer-modal{
-    max-width:calc(100vw - 28px);
-    border-radius:var(--r-lg);
-    max-height:calc(100dvh - 84px);
+  /* ---------- 弹窗 → 底部弹层（Bottom Sheet） ----------
+     手机上把居中弹窗改为从底部升起的面板：拇指区可达、内容可滚动、
+     顶部圆角与底部安全区对齐 iOS / M3 的 Sheet 规范。 */
+  .modal-mask,.detail-modal{align-items:flex-end;padding:0}
+  .modal,.disclaimer-modal,.detail-modal-box{
+    width:100%;max-width:100%;
+    border-radius:var(--r-xl) var(--r-xl) 0 0;
+    max-height:88dvh;
+    animation:sheetIn .26s cubic-bezier(.2,.8,.2,1);
   }
+  @keyframes sheetIn{from{transform:translateY(100%);opacity:.6}to{transform:translateY(0);opacity:1}}
+  /* 顶部拖拽提示条（纯视觉指示） */
+  .modal-head::before,.detail-modal-head::before{
+    content:'';position:absolute;top:6px;left:50%;transform:translateX(-50%);
+    width:36px;height:4px;border-radius:var(--r-full);background:var(--n-250);
+  }
+  .modal-head,.detail-modal-head{position:relative;padding-top:16px}
+  .modal-body,.detail-modal-body{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .modal-foot{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
   .modal-close,.win-btn{min-width:44px;min-height:44px}
+  .qr-drop{padding:34px 18px}
 
   /* ---------- 设置项：值过长时自动换行，避免挤压折行 ---------- */
   .set-row{flex-wrap:wrap;row-gap:2px}
@@ -869,14 +928,24 @@ tr:hover td{background:var(--n-25)}
       <button class="nav-item" data-view="settings">${ICONS.settings}<span>设置</span></button>
     </nav>
     <div class="side-foot">
-      <div class="foot-row"><span class="dot"></span><span>运行中</span></div>
-      <div class="foot-row"><span>${ICONS.server}</span><span class="foot-port">端口 ${esc(String(status.port || '3456'))}</span></div>
+      <div class="foot-row"><span class="dot" id="footDot"></span><span id="footState">运行中</span></div>
+      <div class="foot-row">${ICONS.user}<span id="footAccounts">${accounts.length} 个账号</span></div>
+      <div class="foot-row">${ICONS.server}<span class="foot-port">端口 ${esc(String(status.port || '3456'))}</span></div>
     </div>
   </aside>
 
   <div class="main">
     <header class="topbar">
-      <div class="page-title" id="pageTitle">总览</div>
+      <div class="topbar-lead">
+        <div class="page-title" id="pageTitle">总览</div>
+        <div class="page-sub" id="pageSub">自动监听签到活动，发现后自动完成签到</div>
+      </div>
+      <div class="status-strip" id="statusStrip">
+        <span class="chip" id="chipMode">${esc(modeText(mode))}</span>
+        <span class="chip ${status.cookieValid === false ? 'chip-err' : 'chip-ok'}" id="chipCookie">${status.cookieValid === false ? 'Cookie 失效' : 'Cookie 有效'}</span>
+        <span class="chip ${status.imConnected ? 'chip-ok' : 'chip-warn'}" id="chipIm">${status.imConnected ? 'IM 已连接' : 'IM 不可用'}</span>
+        ${status.qrPending ? '<span class="chip chip-warn" id="chipQr">有二维码待签</span>' : '<span class="chip chip-warn" id="chipQr" style="display:none">有二维码待签</span>'}
+      </div>
       <div class="top-actions">
         <button class="btn btn-primary" id="btnQrModal">${ICONS.qr}<span>二维码签到</span></button>
       </div>
@@ -1134,6 +1203,9 @@ tr:hover td{background:var(--n-25)}
   </div>
 </div>
 
+<!-- 移动端主操作浮动按钮（拇指可达区）：手机上没有鼠标拖拽，扫码签到是最常用的手动动作 -->
+<button class="fab" id="fabQr" title="二维码签到" aria-label="二维码签到">${ICONS.qr}</button>
+
 <!-- 二维码签到弹窗：拖入任意签到码图片即完成签到 -->
 <div class="modal-mask" id="qrModal" style="display:none">
   <div class="modal">
@@ -1162,11 +1234,13 @@ tr:hover td{background:var(--n-25)}
   const API_TOKEN = ${JSON.stringify(token)}
   var views=['overview','courses','schedule','history','logs','settings']
   var titles={overview:'总览',courses:'课程',schedule:'课表',history:'历史记录',logs:'运行日志',settings:'设置'}
+  var subs={overview:'自动监听签到活动，发现后自动完成签到',courses:'勾选要监听的课程，未勾选即全部监听',schedule:'课程监听状态与签到统计一览',history:'签到日历与全部签到记录',logs:'服务运行日志，排查问题时查看',settings:'账号、监听参数与通知配置'}
   function show(v){
     if(views.indexOf(v)<0)v='overview'
     document.querySelectorAll('.view').forEach(function(el){el.classList.toggle('active',el.dataset.view===v)})
     document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===v)})
     document.getElementById('pageTitle').textContent=titles[v]
+    var subEl=document.getElementById('pageSub');if(subEl)subEl.textContent=subs[v]||''
     if(v==='logs')loadLogs();if(v==='schedule')loadSchedule()
   }
   document.getElementById('nav').addEventListener('click',function(e){
@@ -1322,6 +1396,26 @@ tr:hover td{background:var(--n-25)}
     document.getElementById('stat-ok').textContent=s.successCount||0
     document.getElementById('stat-fail').textContent=s.failCount||0
     document.getElementById('historyCount').textContent='共 '+(s.recordCount||0)+' 条'
+    // 顶部状态条 + 侧栏运行指示：每次轮询刷新，异常状态一眼可见
+    var chipCookie=document.getElementById('chipCookie')
+    if(chipCookie){
+      var cookieOk=s.cookieValid!==false
+      chipCookie.textContent=cookieOk?'Cookie 有效':'Cookie 失效'
+      chipCookie.className='chip '+(cookieOk?'chip-ok':'chip-err')
+    }
+    var chipIm=document.getElementById('chipIm')
+    if(chipIm){
+      chipIm.textContent=s.imConnected?'IM 已连接':'IM 不可用'
+      chipIm.className='chip '+(s.imConnected?'chip-ok':'chip-warn')
+    }
+    var chipQr=document.getElementById('chipQr')
+    if(chipQr)chipQr.style.display=s.qrPending?'':'none'
+    var footDot=document.getElementById('footDot')
+    if(footDot)footDot.className='dot'+((s.cookieValid===false)?' off':'')
+    var footState=document.getElementById('footState')
+    if(footState)footState.textContent=(s.cookieValid===false)?'登录异常':'运行中'
+    var footAccounts=document.getElementById('footAccounts')
+    if(footAccounts)footAccounts.textContent=((s.accounts||[]).length||0)+' 个账号'
     var rows=(s.recent||[]).map(function(r){
       var ok=/成功|✅|已签到/.test(r.result)
       var badge=ok?'<span class="pill pill-ok">成功</span>':'<span class="pill pill-err">失败</span>'
@@ -1925,6 +2019,9 @@ function loadLogs(){
   function closeQrModal(){qrModal.style.display='none'}
   var btnQrModal=document.getElementById('btnQrModal')
   if(btnQrModal)btnQrModal.addEventListener('click',openQrModal)
+  // 移动端 FAB：与右上角「二维码签到」同一入口
+  var fabQr=document.getElementById('fabQr')
+  if(fabQr)fabQr.addEventListener('click',openQrModal)
   var qrModalClose=document.getElementById('qrModalClose')
   if(qrModalClose)qrModalClose.addEventListener('click',closeQrModal)
   if(qrModal)qrModal.addEventListener('click',function(e){if(e.target===qrModal)closeQrModal()})
