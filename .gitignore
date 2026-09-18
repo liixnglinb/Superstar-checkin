@@ -1,4 +1,4 @@
-### VisualStudioCode template
+﻿### VisualStudioCode template
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -312,3 +312,5 @@ dist-electron/
 
 # 智能体工作区数据（本地记忆等，不入库）
 .workbuddy/
+`ndist-electron-v36/
+dist-electron-v36/

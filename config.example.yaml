@@ -142,12 +142,6 @@ web:
   token: ""           # Bearer Token 认证，留空则不启动
   allowedOrigin: "http://localhost"
 
-# ---- 拍照签到（可选）----
-# 默认照片路径：填一个本地图片（如 ./data/photo.jpg），拍照签到会直接上传此图。
-# 留空则每次拍照签到会通过「上传链接」向你索取照片（与二维码签到同模式）。
-photo:
-  path: ""
-
 # ---- 存储 ----
 storage:
   dataDir: ./data

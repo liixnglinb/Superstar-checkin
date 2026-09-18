@@ -91,20 +91,17 @@ export class PollListener {
       trimProcessed(1000)
     }
 
-    // 首次执行
-    poll()
-
-    // 定时执行（带随机抖动：interval + 0~jitter，防规律性被风控识别）
+    // 首次执行 + 后续定时执行统一走 chain（间隔带随机抖动，防规律性被风控识别）
     const scheduleNext = () => {
       const jitter = this.jitterMs > 0 ? Math.floor(Math.random() * this.jitterMs) : 0
-      this.timer = setTimeout(poll, this.interval + jitter)
+      this.timer = setTimeout(chain, this.interval + jitter)
     }
     const chain = async () => {
       await poll()
       if (this.timer) clearTimeout(this.timer)
       scheduleNext()
     }
-    this.timer = setTimeout(chain, this.interval)
+    chain()
   }
 
   /** 动态调整轮询间隔（毫秒）：智能轮询在白天/夜间切换时调用，下一轮生效 */

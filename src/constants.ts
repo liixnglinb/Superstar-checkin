@@ -50,11 +50,10 @@ export const DEFAULTS = {
   MAX_LEARNED_LOC: 50,        // 已学坐标最大条数
 } as const
 
-// 签到类型映射（otherId）
+// 签到类型映射（otherId）；手势(3)/拍照 已移除，自动忽略并提示手动签到
 export const CHECKIN_TYPE_MAP: Record<number, string> = {
   0: 'normal',
   2: 'qr',
-  3: 'gesture',
   4: 'location',
 } as const
 

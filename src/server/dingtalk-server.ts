@@ -21,7 +21,6 @@ export interface DingTalkMessage {
 }
 
 type ImageHandler = (imageBuffer: Buffer) => Promise<void>
-type PhotoHandler = (imageBuffer: Buffer) => Promise<void>
 
 /** 控制台首页数据提供者（每次请求时实时获取） */
 export type StatusProvider = () => Record<string, any>
@@ -61,7 +60,6 @@ export interface DingTalkServerOptions {
 export class DingTalkServer {
   private server: http.Server | null = null
   private imageHandler: ImageHandler | null = null
-  private photoHandler: PhotoHandler | null = null
   private rateBuckets = new Map<string, { count: number; resetAt: number }>()
   private appSecret: string
   private appKey?: string
@@ -98,10 +96,6 @@ export class DingTalkServer {
    */
   onImage(handler: ImageHandler) {
     this.imageHandler = handler
-  }
-
-  onPhoto(handler: PhotoHandler) {
-    this.photoHandler = handler
   }
 
   private clientKey(req: http.IncomingMessage): string {
@@ -211,7 +205,7 @@ export class DingTalkServer {
           scope: '/',
           display: 'standalone',
           orientation: 'portrait',
-          background_color: '#F6F7F4',
+          background_color: '#F6F5F1',
           theme_color: '#F27B34',
           lang: 'zh-CN',
           icons: [
@@ -971,21 +965,20 @@ export class DingTalkServer {
         return
       }
 
-      // 上传页面（手机端，二维码签到上传；?type=photo 已随拍照签到一并移除）
+      // 上传页面（手机端，仅二维码签到上传）
       if (req.method === 'GET' && routePath.startsWith('/upload')) {
         if (!this.allowRequest(req, 30, 60000)) {
           res.writeHead(429, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: '请求过于频繁' }))
           return
         }
-        const uploadType = new URL(req.url || '/', `http://localhost:${this.port}`).searchParams.get('type') === 'photo' ? 'photo' : 'qr'
         const scriptNonce = crypto.randomBytes(18).toString('base64url')
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Security-Policy': `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'nonce-${scriptNonce}'; connect-src 'self'`,
           'X-Frame-Options': 'DENY',
         })
-        res.end(this.getUploadPage(uploadType, scriptNonce))
+        res.end(this.getUploadPage('qr', scriptNonce))
         return
       }
 
@@ -1026,11 +1019,7 @@ export class DingTalkServer {
             return
           }
 
-          const uploadType = new URL(req.url || '/', `http://localhost:${this.port}`).searchParams.get('type') || 'qr'
-          if (uploadType === 'photo' && this.photoHandler && buffer.length > 0) {
-            await this.photoHandler(buffer)
-          } else if (this.imageHandler && buffer.length > 0) {
-            // 默认按二维码处理，保持旧客户端兼容
+          if (this.imageHandler && buffer.length > 0) {
             await this.imageHandler(buffer)
           }
 
@@ -1140,13 +1129,11 @@ export class DingTalkServer {
   /**
    * 手机端上传页面（二维码签到专用，自动携带 token）
    */
-  private getUploadPage(type: 'qr' | 'photo' = 'qr', scriptNonce = ''): string {
+  private getUploadPage(_type: 'qr' = 'qr', scriptNonce = ''): string {
     const token = this.token || ''
-    const title = type === 'photo' ? '学习通签到 - 拍照上传' : '学习通签到 - 二维码上传'
-    const tip = type === 'photo'
-      ? '拍一张可用于签到的照片，点击上传（软件会自动提交）'
-      : '拍一张教室里的签到二维码，点击上传（软件会自动识别并完成签到）'
-    const placeholder = type === 'photo' ? '📷 点击拍照上传' : '📷 点击拍照或选择图片'
+    const title = '学习通签到 - 二维码上传'
+    const tip = '拍一张教室里的签到二维码，点击上传（软件会自动识别并完成签到）'
+    const placeholder = '📷 点击拍照或选择图片'
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1155,14 +1142,14 @@ export class DingTalkServer {
 <title>${title}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",sans-serif;background:radial-gradient(circle at 84% -6%,rgba(242,123,52,.12),transparent 24rem),#f6f7f4;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#1d1a16}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",sans-serif;background:radial-gradient(circle at 84% -6%,rgba(242,123,52,.12),transparent 24rem),#f6f5f1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#191712}
 .card{background:rgba(255,255,255,.9);border:1px solid #e7e4de;border-radius:20px;padding:30px;width:100%;max-width:410px;box-shadow:0 18px 44px rgba(28,25,21,.09);backdrop-filter:blur(18px)}
 h1{font-size:20px;text-align:center;margin-bottom:8px;color:#1d1a16;letter-spacing:-.02em}
 p{font-size:14px;color:#635b52;text-align:center;margin-bottom:24px;line-height:1.55}
-.upload-area{border:2px dashed #f0b07c;border-radius:14px;padding:42px 20px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s,transform .18s;background:#fff0e4}
-.upload-area:hover,.upload-area.drag{border-color:#db641c;background:#fbe0c8;transform:scale(1.01)}
+.upload-area{border:2px dashed #FCBB8B;border-radius:14px;padding:42px 20px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s,transform .18s;background:#FFF8F2}
+.upload-area:hover,.upload-area.drag{border-color:#F27B34;background:#FFEEDD;transform:scale(1.01)}
 .upload-area img{max-width:100%;max-height:200px;border-radius:10px;margin-top:12px}
-.btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#f98a44,#e56920);color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;margin-top:20px;box-shadow:0 10px 22px rgba(229,105,32,.18);transition:filter .18s,transform .12s}
+.btn{display:block;width:100%;padding:14px;background:linear-gradient(180deg,#F98A44,#E56920);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;margin-top:20px;box-shadow:0 1px 2px rgba(150,66,14,.2),0 8px 20px rgba(229,105,32,.22);transition:filter .18s,transform .12s}
 .btn:hover:not(:disabled){filter:brightness(.97)}
 .btn:active{transform:scale(.99)}
 .btn:disabled{background:#d9d5cd;color:#8d857c;cursor:not-allowed;box-shadow:none}
@@ -1187,7 +1174,7 @@ input[type=file]{display:none}
 </div>
 <script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
 const UPLOAD_TOKEN = ${JSON.stringify(token)}
-const UPLOAD_TYPE = ${JSON.stringify(type)}
+const UPLOAD_TYPE = 'qr'
 const fileInput=document.getElementById('fileInput')
 const preview=document.getElementById('preview')
 const placeholder=document.getElementById('placeholder')

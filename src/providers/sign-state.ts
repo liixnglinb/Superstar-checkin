@@ -89,15 +89,6 @@ export interface PendingQr {
 
 const pendingQr = new Map<string, PendingQr>()
 
-export interface PendingPhoto {
-  courseName: string
-  courseId: number
-  classId: number
-  createdAt: number
-}
-
-const pendingPhoto = new Map<string, PendingPhoto>()
-
 let stateFile = ''
 let statePersistTimer: NodeJS.Timeout | null = null
 
@@ -110,7 +101,6 @@ export function initSignState(dataDir: string): void {
       for (const aid of saved.processedAids || []) processedAids.add(String(aid))
       for (const [aid, count] of Object.entries(saved.failCounts || {})) failCounts.set(String(aid), Number(count))
       for (const [aid, info] of Object.entries(saved.pendingQr || {})) pendingQr.set(String(aid), info as PendingQr)
-      for (const [aid, info] of Object.entries(saved.pendingPhoto || {})) pendingPhoto.set(String(aid), info as PendingPhoto)
     }
   } catch {
     // 状态文件损坏时继续运行，签到仍可用
@@ -131,7 +121,6 @@ function persistState(): void {
     processedAids: Array.from(processedAids),
     failCounts: Object.fromEntries(failCounts),
     pendingQr: Object.fromEntries(pendingQr),
-    pendingPhoto: Object.fromEntries(pendingPhoto),
   }
   writeFileAtomic(stateFile, JSON.stringify(payload, null, 2))
 }
@@ -139,7 +128,7 @@ function persistState(): void {
 /** 待处理项过期时间（30 分钟），避免陈旧签到永久占用 */
 const PENDING_TTL = 30 * 60 * 1000
 
-/** 清理已过期的二维码/拍照待处理项 */
+/** 清理已过期的二维码待处理项 */
 function sweepPending(m: Map<string, { createdAt: number }>) {
   const now = Date.now()
   for (const [k, v] of m) {
@@ -185,33 +174,4 @@ export function takePendingQr(aid: string): PendingQr | null {
   return info
 }
 
-export function setPendingPhoto(aid: string, info: Omit<PendingPhoto, 'createdAt'>): void {
-  sweepPending(pendingPhoto)
-  pendingPhoto.set(aid, { ...info, createdAt: Date.now() })
-  scheduleStatePersist()
-}
 
-export function hasPendingPhoto(): boolean {
-  sweepPending(pendingPhoto)
-  return pendingPhoto.size > 0
-}
-
-export function takeLatestPendingPhoto(): { aid: string; info: PendingPhoto } | null {
-  sweepPending(pendingPhoto)
-  const keys = Array.from(pendingPhoto.keys())
-  if (keys.length === 0) return null
-  const aid = keys[keys.length - 1]
-  const info = pendingPhoto.get(aid)!
-  pendingPhoto.delete(aid)
-  scheduleStatePersist()
-  return { aid, info }
-}
-
-export function takePendingPhoto(aid: string): PendingPhoto | null {
-  sweepPending(pendingPhoto)
-  const info = pendingPhoto.get(aid)
-  if (!info) return null
-  pendingPhoto.delete(aid)
-  scheduleStatePersist()
-  return info
-}

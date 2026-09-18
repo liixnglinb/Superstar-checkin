@@ -1,4 +1,4 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { CookieJar } from 'tough-cookie'
 import { wrapper } from 'axios-cookiejar-support'
 import { MOBILE_AGENT, API, DEFAULTS } from '../constants'
@@ -8,8 +8,6 @@ import { randomDelay, addGpsDrift, getRandomMobileUA } from '../utils/anti-detec
 import { geocodeAddress } from '../utils/geocode'
 import { getLearnedLocation, saveLearnedLocation } from '../utils/location'
 import { getProxyConfig } from '../providers/runtime-config'
-import * as fs from 'fs'
-import * as path from 'path'
 
 /**
  * 签到引擎 - 核心签到逻辑
@@ -85,14 +83,14 @@ export class CheckinEngine {
     const d = res.data.data
     let type: CheckinType
 
+    // 手势(otherId=3)/拍照(ifphoto) 类型已从功能中移除：探测到时报错，由上层提示用户在学习通 APP 手动完成
     switch (d.otherId) {
       case 2: type = 'qr'; break
-      case 3: type = 'gesture'; break
-      case 4:
-        type = 'location'
-        break
+      case 3: throw new Error('手势签到无法自动完成，请在手机学习通 APP 内手动签到')
+      case 4: type = 'location'; break
       default:
-        type = d.ifphoto ? 'photo' : 'normal'
+        if (d.ifphoto) throw new Error('拍照签到需要本人到场拍摄，已停止支持，请在手机学习通 APP 内手动签到')
+        type = 'normal'
     }
 
     const result: CheckinInfo = { type }
@@ -242,58 +240,6 @@ export class CheckinEngine {
     })
   }
 
-  /**
-   * 拍照签到：上传照片到超星云盘后提交 objectId
-   */
-  static async photoCheckin(
-    account: AccountMetaData,
-    activeId: string,
-    photoPath: string,
-    extra?: { courseId?: number | string; classId?: number | string },
-  ): Promise<string> {
-    const jar = new CookieJar()
-    const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
-
-    await this.preSign(client, account.cookie, { activeId, uid: account.uid }, extra)
-    const objectId = await this.uploadPhoto(account, photoPath)
-    return this.submitSign(client, account.cookie, {
-      name: account.name,
-      activeId,
-      uid: account.uid,
-      objectId,
-    })
-  }
-
-  private static async uploadPhoto(account: AccountMetaData, filePath: string): Promise<string> {
-    const tokenResp = await axios.get(API.PHOTO_TOKEN, {
-      headers: { Cookie: account.cookie, 'User-Agent': this.mobileUA() },
-      proxy: getProxyConfig(),
-      timeout: 20000,
-    })
-    const tokenJson = parseJsonSafe(tokenResp.data)
-    const token = tokenJson?.token
-    if (!token) throw new Error('获取网盘 token 失败')
-
-    const buf = await fs.promises.readFile(filePath)
-    const form = new FormData()
-    form.append('puid', String(account.uid))
-    form.append('_token', token)
-    form.append('file', new Blob([buf], { type: 'image/jpeg' }), path.basename(filePath))
-
-    const upResp = await axios.post(API.PHOTO_UPLOAD, form, {
-      headers: {
-        Cookie: account.cookie,
-        'User-Agent': this.mobileUA(),
-        Referer: 'https://pan-yz.chaoxing.com/',
-      },
-      proxy: getProxyConfig(),
-      timeout: 60000,
-    })
-    const upJson = parseJsonSafe(upResp.data)
-    const objectId = upJson?.objectId ?? (typeof upResp.data === 'string' ? upResp.data.trim() : '')
-    if (!objectId) throw new Error('上传图片未返回 objectId')
-    return objectId
-  }
 
   /**
    * 位置签到：取教师发布坐标，在 10 米范围内生成签到点（GPS 漂移）；不在范围时三角定位逼近

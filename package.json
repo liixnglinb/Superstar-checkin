@@ -1,6 +1,6 @@
 {
   "name": "chaoxing-auto-sign",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "Chaoxing (学习通) Auto Check-in System v3",
   "main": "electron/main.js",
   "scripts": {
@@ -118,3 +118,6 @@
     ]
   }
 }
+
+
+

@@ -31,7 +31,7 @@ export interface UserInfo {
 
 // ===================== 签到相关 =====================
 
-export type CheckinType = 'normal' | 'gesture' | 'qr' | 'location' | 'photo'
+export type CheckinType = 'normal' | 'qr' | 'location'
 
 export interface GeoLocation {
   courseId: number | string
@@ -223,10 +223,6 @@ export interface AppConfig {
   }
   /** 只监听这些课程（courseId 数组）；留空/省略 = 监听全部课程 */
   watchCourses?: string[]
-  /** 拍照签到：默认照片路径（可选）。留空则每次拍照签到需经上传链接提供照片。 */
-  photo?: {
-    path?: string
-  }
   storage: {
     dataDir: string
   }

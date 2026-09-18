@@ -216,60 +216,6 @@ export class CheckinHandler {
     return results
   }
 
-  /**
-   * 处理拍照签到（照片必须由用户配置/上传，软件不生成伪造照片）
-   */
-  async handlePhoto(
-    aid: string,
-    photoPath: string,
-    info: { courseName: string; courseId: number; classId: number },
-  ): Promise<CheckinResult[]> {
-    const results: CheckinResult[] = []
-
-    for (const account of this.accountManager.getAccounts()) {
-      const meta = this.accountManager.getMeta(account.username)
-      try {
-        const result = await retry(
-          () => CheckinEngine.photoCheckin(meta, aid, photoPath, { courseId: info.courseId, classId: info.classId }),
-          {
-            maxAttempts: this.config.checkin.retry.maxAttempts,
-            delayMs: this.config.checkin.retry.delayMs,
-            label: `拍照签到 ${meta.name}`,
-          },
-        )
-        const finalMsg = await this.verifyAfterCheckin(meta, aid, info.courseId, info.classId, { type: 'photo' } as CheckinInfo, '', result)
-        results.push({
-          account: account.username,
-          accountName: meta.name,
-          success: isSuccessMessage(result),
-          message: finalMsg,
-          type: 'photo',
-          courseName: info.courseName,
-          aid,
-          timestamp: Date.now(),
-        })
-      } catch (e: any) {
-        results.push({
-          account: account.username,
-          accountName: meta.name,
-          success: false,
-          message: e.message,
-          type: 'photo',
-          courseName: info.courseName,
-          aid,
-          timestamp: Date.now(),
-        })
-      }
-    }
-
-    if (results.length) {
-      this.history.push(...results)
-      if (this.history.length > DEFAULTS.MAX_HISTORY) this.history = this.history.slice(-DEFAULTS.MAX_HISTORY)
-      storage.set('checkinHistory', this.history)
-    }
-    return results
-  }
-
   getHistory(): CheckinResult[] {
     return [...this.history].reverse()
   }

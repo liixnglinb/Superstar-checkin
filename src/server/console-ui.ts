@@ -109,7 +109,7 @@ function modeText(mode: string): string {
 }
 
 function typeText(t: string): string {
-  const map: Record<string, string> = { normal: '普通', gesture: '手势', qr: '二维码', location: '位置', photo: '拍照' }
+  const map: Record<string, string> = { normal: '普通', qr: '二维码', location: '位置' }
   return map[t] || t
 }
 
@@ -356,20 +356,20 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
    GPU 成本已控制：全页面仅 2 处 backdrop-filter。
    =================================================================== */
 :root{
-  /* --- 中性色阶：质感的根基是明度层次，而不是装饰 --- */
+  /* --- 中性色阶：暖白底 + 柔和灰阶 --- */
   --n-0:#FFFFFF;    /* 卡片表面（最高层） */
-  --n-25:#FCFCFB;
-  --n-50:#F8F8F6;   /* 页面画布 */
-  --n-100:#F3F3F0;  /* 次级表面 */
-  --n-150:#EDEEEA;  /* 三级表面 / 悬停 */
-  --n-200:#E7E4DE;  /* 边框 */
-  --n-250:#DEDAD3;
-  --n-300:#D3CEC6;  /* 强边框 */
-  --n-400:#B5AEA4;  /* 禁用 / 占位文字 */
-  --n-500:#8D857C;  /* 三级文字 */
-  --n-600:#635B52;  /* 二级文字 */
-  --n-700:#3F3931;  /* 次级标题 */
-  --n-800:#1D1A16;  /* 主文字 */
+  --n-25:#FBFAF7;
+  --n-50:#F6F5F1;   /* 页面画布 */
+  --n-100:#EFEDE7;  /* 次级表面 */
+  --n-150:#E6E3DB;  /* 三级表面 / 悬停 */
+  --n-200:#DDD9CF;  /* 边框 */
+  --n-250:#CFC9BC;
+  --n-300:#BDB6A6;  /* 强边框 */
+  --n-400:#9C9482;  /* 禁用 / 占位文字 */
+  --n-500:#7C7463;  /* 三级文字 */
+  --n-600:#5A5344;  /* 二级文字 */
+  --n-700:#3A352B;  /* 次级标题 */
+  --n-800:#191712;  /* 主文字 */
 
   /* --- 主色（暖橙）完整色阶：50 → 800 --- */
   --a-50:#FFF8F2;
@@ -497,7 +497,7 @@ body{font-family:var(--font);background:
 /* ===== 总览 ===== */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px}
 .stat-card{background:linear-gradient(180deg,var(--n-0) 0%,var(--n-25) 100%);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--sp-5);display:flex;flex-direction:column;gap:2px;box-shadow:var(--gloss),var(--shadow-sm);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),border-color var(--dur) var(--ease)}
-.stat-card:hover{transform:translateY(-2px);border-color:#F2C39F;box-shadow:var(--shadow)}
+.stat-card:hover{transform:translateY(-2px);border-color:var(--a-300);box-shadow:var(--shadow-md)}
 .stat-ico{width:34px;height:34px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
 .stat-ico svg{width:17px;height:17px}
 .stat-num{font-size:var(--fs-3xl);font-weight:var(--fw-bold);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
@@ -520,7 +520,7 @@ table{width:100%;border-collapse:collapse;font-size:var(--fs-base)}
 th{text-align:left;padding:10px 18px;font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-2);border-bottom:1px solid var(--border);background:var(--surface-2);letter-spacing:.02em}
 td{padding:11px 18px;border-bottom:1px solid var(--border);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:#FBFBF9}
+tr:hover td{background:var(--n-25)}
 .cell-main{font-weight:var(--fw-medium)}
 .cell-sub{color:var(--text-2);font-size:var(--fs-base)}
 .cell-mono{font-family:ui-monospace,Consolas,monospace;font-size:var(--fs-sm);color:var(--text-2);font-variant-numeric:tabular-nums}
@@ -560,7 +560,8 @@ tr:hover td{background:#FBFBF9}
 .section-foot{display:flex;align-items:center;gap:14px;padding:12px 18px}
 /* ===== 开关 ===== */
 .switch{width:44px;height:24px;border-radius:var(--r-full);border:1px solid var(--border);background:var(--surface-2);position:relative;cursor:pointer;transition:background .15s ease,border-color .15s ease;flex-shrink:0;padding:0}
-.switch .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .15s ease}
+.switch .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.22);transition:left .15s ease,transform .15s ease}
+.switch:active .knob{transform:scale(.92)}
 .switch.on{background:var(--accent);border-color:var(--accent)}
 .switch.on .knob{left:22px}
 /* ===== 小按钮 / 危险按钮 ===== */
@@ -603,8 +604,8 @@ tr:hover td{background:#FBFBF9}
 .modal-close{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:none;background:none;border-radius:var(--r-sm);color:var(--text-2);cursor:pointer}
 .modal-close:hover{background:var(--surface-2);color:var(--text)}
 .modal-body{padding:20px 18px}
-.qr-drop{border:2px dashed #F0B07C;border-radius:var(--radius);background:var(--accent-weak);padding:32px 22px;text-align:center;color:var(--accent);transition:border-color .16s ease,background .16s ease,transform .16s ease}
-.qr-drop.drag{border-color:var(--accent-strong);background:#FBE0C8;transform:scale(1.01)}
+.qr-drop{border:2px dashed var(--a-300);border-radius:var(--radius);background:var(--accent-weak);padding:32px 22px;text-align:center;color:var(--accent);transition:border-color .16s ease,background .16s ease,transform .16s ease}
+.qr-drop.drag{border-color:var(--accent-strong);background:var(--a-100);transform:scale(1.01)}
 .qr-drop>svg{width:44px;height:44px;margin-bottom:10px}
 .qr-drop-text{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--text)}
 .qr-drop-sub{font-size:var(--fs-sm);color:var(--text-2);margin-top:5px}
@@ -657,12 +658,12 @@ tr:hover td{background:#FBFBF9}
 /* 课表页 */
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;padding:16px 18px}
 .stat-card{background:rgba(255,255,255,.88);border-radius:var(--radius);padding:16px 12px;text-align:center;border:1px solid var(--border);box-shadow:var(--shadow-sm);transition:transform .18s ease,box-shadow .18s ease}
-.stat-row .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.stat-row .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
 .stat-num{font-size:var(--fs-3xl);font-weight:var(--fw-bold);color:var(--accent);line-height:1.2}
 .stat-label{font-size:var(--fs-sm);color:var(--text-3);margin-top:4px}
 .course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:14px 18px}
 .course-card{background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;position:relative;box-shadow:var(--shadow-sm)}
-.course-card:hover{border-color:#F0B07C;box-shadow:var(--shadow);transform:translateY(-2px)}
+.course-card:hover{border-color:var(--a-300);box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .course-card.watching{border-left:3px solid var(--accent)}
 .course-card.retired{opacity:.55;border-left:3px solid var(--text-3)}
 .course-card-name{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--text);margin-bottom:4px;line-height:1.3}
@@ -1053,7 +1054,7 @@ tr:hover td{background:#FBFBF9}
             </div>
           </div>
           <div style="padding:2px 18px 14px;font-size:var(--fs-sm);color:var(--text-3);line-height:1.7">
-            也可点击右上角「二维码签到」按钮，或手机在同一 Wi-Fi 下访问 <span class="cell-mono">http://电脑IP:${esc(String(status.port || '3456'))}/upload?type=qr</span> 上传。签到失败会自动重试，检测到拍照/手势类签到会推送提醒（请在学习通 APP 手动完成）。
+            也可点击右上角「二维码签到」按钮，或手机在同一 Wi-Fi 下访问 <span class="cell-mono">http://电脑IP:${esc(String(status.port || '3456'))}/upload</span> 上传。签到失败会自动重试；检测到手势/拍照类签到会推送提醒（请在学习通 APP 手动完成）。
           </div>
         </div>
         <div class="section">
@@ -1412,7 +1413,7 @@ tr:hover td{background:#FBFBF9}
   }
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
   function fmtTime(ts){if(!ts)return '—';var d=new Date(ts),n=new Date();var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');if(d.toDateString()===n.toDateString())return '今天 '+hm;var y=new Date(n.getTime()-86400000);if(d.toDateString()===y.toDateString())return '昨天 '+hm;return (d.getMonth()+1)+'月'+d.getDate()+'日 '+hm}
-  function typeText(t){var m={normal:'普通',gesture:'手势',qr:'二维码',location:'位置',photo:'拍照'};return m[t]||t}
+  function typeText(t){var m={normal:'普通',qr:'二维码',location:'位置'};return m[t]||t}
   function apiFetch(url, options){
     options=options||{}
     options.headers=Object.assign({},options.headers||{},{Authorization:'Bearer '+API_TOKEN})

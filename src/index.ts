@@ -22,9 +22,6 @@ import {
   initSignState,
   takeLatestPendingQr,
   hasPendingQr,
-  setPendingPhoto,
-  takeLatestPendingPhoto,
-  hasPendingPhoto,
 } from './providers/sign-state'
 import type { ImMessage, CheckinInfo } from './types'
 import { DEFAULTS } from './constants'
@@ -105,13 +102,6 @@ async function main() {
   initStorage(config.storage.dataDir)
   initSignState(config.storage.dataDir)
   initLocationStore(config.storage.dataDir)
-  const photoDir = path.join(config.storage.dataDir, 'photos')
-  fs.mkdirSync(photoDir, { recursive: true })
-  const savePhotoBuffer = (buffer: Buffer) => {
-    const photoPath = path.join(photoDir, `upload_${Date.now()}.jpg`)
-    fs.writeFileSync(photoPath, buffer)
-    return photoPath
-  }
   setProxy(config.proxy) // 代理全局生效（登录/签到请求均可走）
 
   // 控制台状态数据提供者（每次请求实时计算；闭包引用后续初始化的模块）
@@ -172,7 +162,7 @@ async function main() {
         const d = new Date(ts)
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         const e = dayMap.get(key) || { success: 0, fail: 0 }
-        if (okRe.test(r.result)) e.success++
+        if (okRe.test(r.message || r.result)) e.success++
         else e.fail++
         dayMap.set(key, e)
       }
@@ -421,37 +411,6 @@ async function main() {
         return
       }
 
-      if (checkinInfo.type === 'photo') {
-        const configuredPhoto = String(storage.get<string>('currentPhoto') || config.photo?.path || '')
-        if (configuredPhoto && fs.existsSync(configuredPhoto)) {
-          logger.info(`${courseName} 是拍照签到，使用照片: ${configuredPhoto}`)
-          const results = await checkinHandler.handlePhoto(aid, configuredPhoto, { courseName, courseId, classId })
-          const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
-          await notifier.notify(`✅ ${courseName} 拍照签到结果`, summary)
-          if (results.length && results.every(r => !r.success)) allowRetryOnFailure(aid)
-          else clearFail(aid)
-          return
-        }
-
-        setPendingPhoto(aid, { courseName, courseId, classId })
-        const baseUrl = config.dingtalk?.publicUrl || `http://127.0.0.1:${config.web?.port || 3456}`
-        const uploadUrl = `${baseUrl}/upload?type=photo${config.web?.token ? `&token=${encodeURIComponent(config.web.token)}` : ''}`
-        await notifier.notify(
-          `⚠️ ${courseName} - 拍照签到`,
-          `请上传一张照片完成签到\naid: ${aid}\n\n手机上传: ${uploadUrl}`,
-        )
-        return
-      }
-
-      if (checkinInfo.type === 'gesture') {
-        logger.warn(`${courseName} 是手势签到，请在学习通中手动完成`)
-        await notifier.notify(
-          `⚠️ ${courseName} - 手势签到`,
-          '手势轨迹无法由本软件自动完成，请在学习通 APP 中手动签到\naid: ' + aid,
-        )
-        return
-      }
-
       // 签到前确认：先弹通知倒计时，用户可取消，超时自动签
       let confirmed = true
       if (config.checkin.confirmBefore?.enabled) {
@@ -467,9 +426,10 @@ async function main() {
         await new Promise(r => setTimeout(r, waitSec * 1000))
         if (cancelledAids.has(aid)) {
           cancelledAids.delete(aid)
+          // 解除已处理标记：用户反悔时，下一轮轮询/IM 消息仍可重新触发该签到（带失败次数上限兜底）
+          unmarkProcessed(aid)
           logger.warn(`${courseName} 用户取消了签到`)
-          await notifier.notify(`已取消签到`, `${courseName} 的签到已取消（aid: ${aid}）`).catch(() => {})
-          markProcessed(aid)
+          await notifier.notify(`已取消签到`, `${courseName} 的签到已取消（aid: ${aid}），如想恢复自动签到请等待下一轮检测`).catch(() => {})
           return
         }
       }
@@ -590,23 +550,6 @@ async function main() {
 
   // 9. 钉钉回调服务器图片处理（服务已在启动早期创建并启动，这里仅绑定 onImage 回调）
   if (dtServer) {
-    dtServer.onPhoto(async (imageBuffer: Buffer) => {
-      const savedPath = savePhotoBuffer(imageBuffer)
-      storage.set('currentPhoto', savedPath)
-      const pending = hasPendingPhoto() ? takeLatestPendingPhoto() : null
-      if (!pending) {
-        logger.info(`已保存默认拍照签到照片: ${savedPath}`)
-        await notifier.notify('📷 默认照片已更新', savedPath).catch(() => {})
-        return
-      }
-      logger.info(`收到拍照签到照片，开始签到: ${pending.aid}`)
-      const results = await checkinHandler.handlePhoto(pending.aid, savedPath, pending.info)
-      const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
-      await notifier.notify('✅ 拍照签到结果', summary)
-      if (results.length && results.every(r => !r.success)) allowRetryOnFailure(pending.aid)
-      else clearFail(pending.aid)
-    })
-
     dtServer.onImage(async (imageBuffer: Buffer) => {
       // 二维码签到：解析图片中的二维码（enc + aid），支持拖拽/上传任意签到码
       const payload = await decodeQrFromBuffer(imageBuffer, config.ocr)
