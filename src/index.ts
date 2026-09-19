@@ -8,7 +8,7 @@ import { PollListener } from './listeners/poll-listener'
 import { CheckinHandler } from './handlers/checkin-handler'
 import { NotificationManager } from './notifiers'
 import { CheckinEngine } from './core/checkin-engine'
-import { getCourseList, type CourseInfo } from './core/course'
+import { getCourseList, getCourseActivities, shouldPollActivity, type CourseInfo } from './core/course'
 import { initLocationStore } from './utils/location'
 import {
   initWindowStore,
@@ -28,6 +28,7 @@ import {
   WEEKDAYS,
   WEEKDAY_NAMES,
 } from './providers/timetable'
+import { initDisclaimer, getConsent, acceptDisclaimer } from './providers/disclaimer'
 import { DingTalkServer } from './server/dingtalk-server'
 import { decodeQrFromBuffer } from './utils/qr-decoder'
 import { setProxy } from './providers/runtime-config'
@@ -41,6 +42,7 @@ import {
   initSignState,
   takeLatestPendingQr,
   hasPendingQr,
+  isProcessed,
 } from './providers/sign-state'
 import type { ImMessage, CheckinInfo, AppConfig } from './types'
 import { DEFAULTS } from './constants'
@@ -169,6 +171,7 @@ async function main() {
   initLocationStore(config.storage.dataDir)
   initWindowStore(config.storage.dataDir)
   initTimetable(config.storage.dataDir)
+  initDisclaimer(config.storage.dataDir)
   setProxy(config.proxy) // 代理全局生效（登录/签到请求均可走）
 
   // 控制台状态数据提供者（每次请求实时计算；闭包引用后续初始化的模块）
@@ -437,6 +440,55 @@ async function main() {
     },
     /** 课表：保存（未填满会拒绝，避免"填一半以为在工作"导致的静默漏签） */
     saveTimetable: (table: any) => saveTimetable(table),
+    /** 免责声明：读取接受状态 / 记录接受（服务端持久化，桌面与手机共用一份） */
+    getConsent: () => getConsent(),
+    acceptDisclaimer: () => acceptDisclaimer(),
+    /**
+     * 立即扫描一次全部课程（供手机端/控制台手动触发）。
+     *
+     * 课表驱动扫描上线后，非上课时段不会自动扫描，用户在外面拿到二维码时
+     * 没有任何办法让软件立刻查一次 —— 加了这个入口兜底。
+     * 与定时轮询的区别：忽略课表时段、忽略单课开关、忽略总开关，
+     * 但**保留已结课排除**（那些课查了也只会返回空，纯浪费）。
+     */
+    scanNow: async () => {
+      const metas = configuredMetas.filter(m => m.cookie)
+      if (!metas.length) return { ok: false, scanned: 0, found: 0, message: '没有可用账号（请先在设置页登录）' }
+      const targets = courses.filter(c => !c.isRetired)
+      if (!targets.length) return { ok: false, scanned: 0, found: 0, message: '没有可扫描的课程（请先拉取课程列表）' }
+
+      let scanned = 0
+      let found = 0
+      let failed = 0
+      logger.info(`手动触发立即扫描：${targets.length} 门课程（忽略课表时段与监听开关）`)
+      for (const meta of metas) {
+        for (const c of targets) {
+          try {
+            const acts = await getCourseActivities(meta.cookie, c.courseId, c.classId)
+            scanned++
+            for (const act of acts) {
+              const isCheckin = act.activeType === 2 || (act.activeType === 0 && act.name?.includes('签到'))
+              if (!isCheckin) continue
+              if (!shouldPollActivity(act)) continue      // 已结束的签到不处理
+              if (isProcessed(act.activeId)) continue      // 已处理过的不重复
+              found++
+              logger.info(`立即扫描发现签到: ${c.courseName} - ${act.name} (aid: ${act.activeId})`)
+              watchdog.lastActivityAt = Date.now()
+              // 不阻塞返回：让用户尽快看到"发现 N 个"，签到在后台继续
+              processCheckin(act.activeId, Number(c.courseId), Number(c.classId), c.courseName)
+            }
+          } catch (e: any) {
+            failed++
+            logger.warn(`立即扫描失败: ${c.courseName} - ${e.message}`)
+          }
+        }
+      }
+      const msg = found > 0
+        ? `发现 ${found} 个待处理签到，正在自动完成${failed ? `（${failed} 门课扫描失败）` : ''}`
+        : `已扫描 ${scanned} 门次，暂未发现新的签到活动${failed ? `（${failed} 门课扫描失败）` : ''}`
+      logger.success(`立即扫描完成：${msg}`)
+      return { ok: true, scanned, found, message: msg }
+    },
     getLogFile: () => config.log.file || '',
     getPrimaryCookie: () => primaryMeta.cookie || '',
   })

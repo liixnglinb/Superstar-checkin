@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "validate:ui": "node scripts/validate-ui.js",
     "test": "node --test \"tests/*.test.js\"",
+    "security:check": "node scripts/check-secrets.js",
+    "security:check:all": "node scripts/check-secrets.js --all",
     "pack": "node build-sea.js"
   },
   "keywords": [

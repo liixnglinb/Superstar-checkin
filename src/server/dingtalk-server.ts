@@ -63,6 +63,16 @@ export interface DingTalkServerOptions {
   suggestTimetable?: () => any
   /** 保存课表；未填满时返回 ok=false 与提示（不落盘） */
   saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
+  /** 免责声明：读取接受状态（含当前声明版本） */
+  getConsent?: () => { accepted: boolean; acceptedAt?: string; version?: number; currentVersion: number }
+  /** 免责声明：记录用户已接受（带时间与服务端持久化，便于事后举证） */
+  acceptDisclaimer?: () => { accepted: boolean; acceptedAt: string; version: number }
+  /**
+   * 立即扫描一次全部课程（忽略课表时段与监听开关）。
+   * 手机端在教室外拿到二维码、或想立刻确认有没有新签到时用 ——
+   * 课表驱动扫描上线后，非上课时段不再自动扫描，必须有这个手动入口兜底。
+   */
+  scanNow?: () => Promise<{ ok: boolean; scanned: number; found: number; message: string }>
   /** 日志文件路径（软件内日志查看页用） */
   getLogFile?: () => string
   /** 主账号 Cookie（网络诊断用） */
@@ -98,6 +108,9 @@ export class DingTalkServer {
   private getTimetablePayload?: () => any
   private suggestTimetable?: () => any
   private saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
+  private getConsent?: () => { accepted: boolean; acceptedAt?: string; version?: number; currentVersion: number }
+  private acceptDisclaimer?: () => { accepted: boolean; acceptedAt: string; version: number }
+  private scanNow?: () => Promise<{ ok: boolean; scanned: number; found: number; message: string }>
   private getLogFile?: () => string
   private getPrimaryCookie?: () => string
 
@@ -122,6 +135,9 @@ export class DingTalkServer {
     this.getTimetablePayload = options.getTimetablePayload
     this.suggestTimetable = options.suggestTimetable
     this.saveTimetable = options.saveTimetable
+    this.getConsent = options.getConsent
+    this.acceptDisclaimer = options.acceptDisclaimer
+    this.scanNow = options.scanNow
     this.getLogFile = options.getLogFile
     this.getPrimaryCookie = options.getPrimaryCookie
   }
@@ -1125,6 +1141,47 @@ export class DingTalkServer {
         } catch (e: any) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: `保存课表失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 立即扫描一次（手机端手动催扫；忽略课表时段与监听开关）
+      if (req.method === 'POST' && routePath === '/api/scan-now') {
+        try {
+          if (!this.scanNow) throw new Error('扫描功能未接入')
+          const r = await this.scanNow()
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify(r))
+        } catch (e: any) {
+          logger.error(`立即扫描失败: ${e.message}`)
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `扫描失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 免责声明：读取接受状态（客户端据此决定是否弹窗）
+      if (req.method === 'GET' && routePath === '/api/disclaimer') {
+        try {
+          const r = this.getConsent ? this.getConsent() : { accepted: false, currentVersion: 1 }
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, ...r }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, accepted: false, message: e.message }))
+        }
+        return
+      }
+
+      // 免责声明：记录已接受（服务端持久化，留存时间与版本）
+      if (req.method === 'POST' && routePath === '/api/disclaimer/accept') {
+        try {
+          const r = this.acceptDisclaimer ? this.acceptDisclaimer() : { accepted: true, acceptedAt: new Date().toISOString(), version: 1 }
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, ...r }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: e.message }))
         }
         return
       }

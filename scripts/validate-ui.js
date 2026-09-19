@@ -96,6 +96,12 @@ const hooks = [
   ['sheetIn', '移动端底部弹层动画'],
   ['id="qrMobileUrl"', '手机端上传地址'],
   ['id="qrCopyBtn"', '地址复制按钮'],
+  ['id="disclaimerModal"', '免责声明弹窗'],
+  ['id="disclaimerAgree"', '免责声明同意按钮'],
+  ['id="disclaimerRefuse"', '免责声明拒绝按钮'],
+  ['id="listenToggleBtn"', '监听总开关按钮'],
+  ['id="scanNowBtn"', '立即扫描按钮'],
+  ['id="ttBody"', '课表填写网格'],
 ]
 for (const [needle, label] of hooks) {
   check(`产物包含${label}`, html.includes(needle))

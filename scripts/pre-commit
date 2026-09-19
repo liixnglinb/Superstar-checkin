@@ -1,0 +1,15 @@
+#!/bin/sh
+# 提交前自动检查敏感信息（由 scripts/check-secrets.js 提供规则）
+#
+# 背景：2026-09-19 曾把钉钉群机器人 webhook 与加签密钥提交进**公开仓库**
+# （commit e023445），删文件无法撤回历史。此钩子用于防止同类事故复发。
+#
+# 安装：把本文件复制到 .git/hooks/pre-commit 并赋予可执行权限。
+# 临时跳过：git commit --no-verify
+
+node scripts/check-secrets.js || {
+  echo ""
+  echo "  如果确认是误报，可临时用：git commit --no-verify"
+  echo ""
+  exit 1
+}

@@ -1059,7 +1059,12 @@ tr:hover td{background:var(--n-25)}
           <div class="section-head"><span class="section-title">监控课程</span><span class="section-more" id="courseCount">${courses.length} 门 · 轮询发现签到活动</span></div>
           <div class="watch-bar">
             <button class="btn ${status.listening === false ? 'btn-primary' : 'btn-ghost'}" id="listenToggleBtn">${status.listening === false ? '▶ 开启监听' : '⏸ 停止监听'}</button>
+            <button class="btn btn-ghost" id="scanNowBtn">⚡ 立即扫描一次</button>
             <span id="listenState">${status.listening === false ? '已停止监听（不会发送任何轮询请求，二维码上传仍可用）' : `正在监听 ${status.listeningCount ?? courses.length} 门课程`}</span>
+          </div>
+          <div class="watch-bar" style="color:var(--text-3)">
+            扫描严格按课表进行（只在周一~周五 07:30–12:30、14:00–21:00 的对应节次查对应课程）。
+            课表之外临时想确认有没有新签到，点「⚡ 立即扫描一次」——它会立刻查一遍全部课程，不受课表限制。
           </div>
           <div class="watch-bar">逐课开关：点按钮切换后点「保存并立即生效」；已结课的课程已自动排除</div>
           <table>
@@ -1312,26 +1317,33 @@ tr:hover td{background:var(--n-25)}
     <div class="modal-body">
       <div class="disclaimer-scroll">
         <h3>学习通自动签到助手 免责声明</h3>
-        <p>感谢使用学习通自动签到助手（以下简称"本软件"）。在使用本软件前，请仔细阅读并充分理解以下全部条款。您点击下方「同意并继续」按钮，即表示您已阅读、理解并自愿接受本声明的全部内容。</p>
+        <p>感谢使用学习通自动签到助手（以下简称"本软件"）。在使用本软件前，请仔细阅读并充分理解以下全部条款。您点击下方「同意并继续」按钮，即表示您已阅读、理解并自愿接受本声明的全部内容，并自愿承担使用本软件的全部风险与后果。</p>
         <h4>一、软件性质与使用范围</h4>
-        <p>1. 本软件是一款仅供个人学习辅助使用的自动化工具，用于协助使用者在本人已选课程中完成学习通平台的签到操作，以减轻重复性操作负担，不提供任何商业服务。</p>
-        <p>2. 本软件仅限使用者本人使用，不得转售、出租、出借，不得用于任何商业用途或任何违反法律法规、平台规则的目的。</p>
+        <p>1. 本软件是一款免费、开源的个人学习辅助工具，用于协助使用者在本人已选课程中完成学习通平台的签到操作，以减轻重复性操作负担。</p>
+        <p>2. 本软件不提供任何商业服务、不收取任何费用、不附带任何形式的技术支持承诺或可用性承诺。作者与使用者之间不构成任何服务合同关系。</p>
+        <p>3. 本软件仅限使用者本人使用，不得转售、出租、出借，不得用于任何商业用途或任何违反法律法规、平台规则的目的。</p>
         <h4>二、合规与责任声明</h4>
         <p>1. 使用者所在学校、学院可能对课堂考勤、签到行为有明确管理规定（包括但不限于：使用第三方工具自动签到可能被认定为违反考勤纪律的情形）。使用者应在使用前了解并遵守所在学校、学院及任课教师的相关规定。</p>
-        <p>2. 因使用本软件而导致的考勤记录异常、课程成绩影响、纪律处分或其他任何后果，均由使用者本人自行承担，软件作者不承担任何责任。</p>
-        <p>3. 本软件仅辅助完成签到操作，不代替使用者对课程内容的学习与掌握，使用者仍应正常参与课堂学习，按时完成学习任务。</p>
+        <p>2. <b>本软件不得用于代替本人到场、伪造出勤记录、规避学校考勤管理或任何形式的学术不端行为。</b>是否使用、如何使用本软件，完全由使用者自行判断并决定，使用者应对自己的行为及其全部后果独立负责。</p>
+        <p>3. 因使用或无法使用本软件而导致的考勤记录异常、课程成绩影响、纪律处分、学业处理、账号受限或其他任何直接或间接后果，<b>均由使用者本人自行承担，本软件作者不承担任何责任</b>。</p>
+        <p>4. 本软件仅辅助完成签到操作，不代替使用者对课程内容的学习与掌握，使用者仍应正常参与课堂学习，按时完成学习任务。</p>
         <h4>三、平台条款与账号安全</h4>
         <p>1. 使用者应遵守学习通平台（超星学习通）的用户协议、隐私政策及相关法律法规，不得利用本软件从事违反平台规则的操作，如账号共享、批量注册、恶意刷课等。</p>
         <p>2. 使用者应妥善保管自己的学习通账号与密码。本软件对账号密码采用本地加密存储（Windows DPAPI 加密，与当前系统用户绑定），不会明文保存；但使用者仍不得将账号出借给他人，并应对自己账号下的全部操作负责。</p>
         <p>3. 因账号保管不善、密码泄露或被他人冒用所导致的任何损失，由使用者自行承担；本软件及作者不对账号安全承担担保责任。</p>
+        <p>4. 使用者理解并同意：使用自动化工具访问平台接口，存在被平台风控识别、限流或账号受限的可能性，该风险由使用者自行评估并承担。</p>
         <h4>四、服务可用性与技术限制</h4>
-        <p>1. 本软件依赖学习通平台的公开接口与网络环境。平台接口变更、网络波动、服务器异常、登录状态失效、课程安排调整等情况均可能导致签到失败或功能异常，本软件不保证签到 100% 成功。</p>
-        <p>2. 使用者应留意签到结果通知。如发现签到失败或漏签，应及时通过学习通 APP 手动补签，避免影响考勤。</p>
+        <p>1. 本软件依赖学习通平台的公开接口与网络环境。平台接口变更、网络波动、服务器异常、登录状态失效、课程安排调整等情况均可能导致签到失败或功能异常，<b>本软件不保证签到 100% 成功，也不保证任何成功率</b>。</p>
+        <p>2. 使用者应留意签到结果通知（建议配置至少一个推送渠道）。如发现签到失败或漏签，应及时通过学习通 APP 手动补签，避免影响考勤。<b>本软件不承担漏签导致的任何后果。</b></p>
         <p>3. 本软件按"现状"提供，不提供任何明示或默示的担保，包括但不限于适销性、特定用途适用性及不侵权担保。</p>
         <h4>五、数据与隐私</h4>
         <p>1. 本软件的所有配置数据、签到记录均存储于使用者本地设备，默认不会上传至任何第三方服务器；除使用者主动配置的通知通道（如钉钉、邮件、PushPlus、Bark 等）外，本软件不向外部发送任何数据。</p>
         <p>2. 使用者如将本软件安装包、配置文件或软件目录分享给他人，需自行评估风险；本软件及作者不对因分享造成的账号、密码或数据泄露承担任何责任。</p>
-        <h4>六、其他</h4>
+        <h4>六、开源与责任限制</h4>
+        <p>1. 本软件以开源方式发布，使用者可自行审阅全部源代码。下载、安装、运行本软件的行为，即视为使用者已理解并接受其全部功能与风险。</p>
+        <p>2. 在适用法律允许的最大范围内，作者对因本软件产生的任何索赔、损害或其他责任（无论基于合同、侵权或其他）概不负责。</p>
+        <p>3. 若使用者所在地区的法律不允许上述部分免责内容，则该部分以法律规定为准，其余条款仍然有效。</p>
+        <h4>七、其他</h4>
         <p>1. 本声明内容可能随软件功能更新而调整，更新后以软件内展示的最新版本为准。</p>
         <p>2. 如使用者不同意本声明的任何条款，请点击「不同意并退出」，停止使用并卸载本软件。</p>
       </div>
@@ -1401,13 +1413,18 @@ tr:hover td{background:var(--n-25)}
   })
 
   // ===== 免责声明（首次进入显示，同意后不再打扰；不同意则退出软件） =====
+  // 接受状态存在**服务端**（data/disclaimer.json），不再用 localStorage：
+  // localStorage 是每个浏览器独立的，换浏览器/清缓存就会重复弹窗，
+  // 而手机端与桌面端本应是同一份状态。服务端记录还留了接受时间与版本，便于事后举证。
   function ensureDisclaimer(){
     var box=document.getElementById('disclaimerModal')
     if(!box)return
-    try{
-      if(localStorage.getItem('disclaimerAccepted')==='1')return
-    }catch(e){/* 隐私模式等场景无法存取，直接显示 */}
-    box.style.display='flex'
+    apiFetch('/api/disclaimer').then(function(r){return r.json()}).then(function(d){
+      if(!d.accepted)box.style.display='flex'
+    }).catch(function(){
+      // 读不到状态时保守处理：宁可多弹一次，也不要漏掉声明的展示
+      box.style.display='flex'
+    })
   }
   function closeDisclaimer(){
     var box=document.getElementById('disclaimerModal')
@@ -1415,8 +1432,10 @@ tr:hover td{background:var(--n-25)}
   }
   var disAgree=document.getElementById('disclaimerAgree')
   if(disAgree)disAgree.addEventListener('click',function(){
-    try{localStorage.setItem('disclaimerAccepted','1')}catch(e){}
-    closeDisclaimer()
+    disAgree.disabled=true
+    apiFetch('/api/disclaimer/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .catch(function(){})
+      .then(function(){ disAgree.disabled=false; closeDisclaimer() })
   })
   var disRefuse=document.getElementById('disclaimerRefuse')
   if(disRefuse)disRefuse.addEventListener('click',function(){
@@ -1818,6 +1837,30 @@ tr:hover td{background:var(--n-25)}
         }
       })
       .catch(function(){msg.textContent='❌ 保存失败，请重试';msg.style.color='#B42318';watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存并立即生效'})
+  })
+
+  // ===== 立即扫描一次（课表之外的手动兜底；手机端在教室外也常用） =====
+  var scanNowBtn=document.getElementById('scanNowBtn')
+  if(scanNowBtn)scanNowBtn.addEventListener('click',function(){
+    var st=document.getElementById('listenState')
+    scanNowBtn.disabled=true
+    var old=scanNowBtn.textContent
+    scanNowBtn.textContent='⚡ 扫描中…'
+    if(st)st.textContent='正在逐门课程查询签到活动，请稍候…'
+    apiFetch('/api/scan-now',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        scanNowBtn.disabled=false;scanNowBtn.textContent=old
+        if(st){
+          st.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'扫描完成')
+          st.style.color=d.ok?'#178A5B':'#B42318'
+        }
+        if(d.ok&&d.found>0)setTimeout(function(){location.reload()},2500)
+      })
+      .catch(function(){
+        scanNowBtn.disabled=false;scanNowBtn.textContent=old
+        if(st){st.textContent='❌ 扫描失败，请重试';st.style.color='#B42318'}
+      })
   })
 
   // ===== 监听总开关（原 IM 通道的替代：随时能停，随时能开） =====
