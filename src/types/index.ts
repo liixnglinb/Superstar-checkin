@@ -226,6 +226,11 @@ export interface AppConfig {
     host?: string
     /** 监听剪贴板中的二维码图片，复制截图后自动识别签到 */
     watchClipboard?: boolean
+    /**
+     * 全局热键：复制二维码图片后按下即签到（钉钉图片通道的备用入口）。
+     * 例 'Control+Alt+Q'（默认）；设为空字符串则关闭。
+     */
+    hotkey?: string
     token?: string
     allowedOrigin?: string
     /** 启动成功后自动在浏览器打开控制台首页（默认 true） */

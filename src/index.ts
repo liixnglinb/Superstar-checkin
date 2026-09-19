@@ -443,6 +443,23 @@ async function main() {
   dtServer.start()
   logger.info(`上传页服务已启动: http://${config.web?.host || '127.0.0.1'}:${dtPort}`)
 
+  /**
+   * 启动期图片缓冲。
+   *
+   * 服务在第 374 行就开始监听了，但真正的图片处理器要等到业务模块（通知/账号/签到处理器）
+   * 初始化完成后才能注册 —— 中间要跑登录校验与课程拉取，可能几秒钟。
+   * 此前这段窗口里上传的图片会**静默丢弃**（接口回"正在处理"，实际 imageHandler 还是 null）。
+   * 现在先装一个缓冲处理器把图排队，真正的处理器注册时再补处理。
+   */
+  const earlyImages: Buffer[] = []
+  if (dtServer) {
+    dtServer.onImage(async (buf: Buffer) => {
+      if (earlyImages.length < 20) earlyImages.push(buf)
+      logger.warn(`服务尚未初始化完成，二维码图片已暂存（待初始化后自动处理，队列 ${earlyImages.length}）`)
+      return '⏳ 软件正在启动，图片已暂存，稍后自动处理'
+    })
+  }
+
   // 3. 通知管理器（先初始化，供账号刷新失败等回调引用，避免 TDZ）
   const notifier = new NotificationManager(config.notify.channels, {
     desktop: config.notify.desktop,
@@ -777,11 +794,25 @@ async function main() {
       : '⚠️ 没有可用账号，未能提交签到'
   }
 
-  // 钉钉 HTTP 回调（Stream 模式不需要它，但保留以兼容已配置公网回调的用户）
+  // 钉钉 HTTP 回调 / 上传页 / qrcode 文件夹的统一处理器（Stream 模式不再需要回调，但保留兼容）
   if (dtServer) {
     dtServer.onImage(async (imageBuffer: Buffer) => {
-      await handleQrImage(imageBuffer, '钉钉回调')
+      // 必须 return：上传页依赖这个返回值显示真实结果，
+      // 漏掉 return 会让接口永远回退到"图片已接收，正在处理..."（实际踩过）
+      return await handleQrImage(imageBuffer, '上传页/回调')
     })
+  }
+
+  // 补处理启动期暂存的图片（见上方 earlyImages 注释）
+  if (earlyImages.length) {
+    logger.info(`开始补处理启动期暂存的 ${earlyImages.length} 张图片`)
+    for (const buf of earlyImages.splice(0)) {
+      try {
+        await handleQrImage(buf, '启动期暂存')
+      } catch (e: any) {
+        logger.error(`补处理暂存图片失败: ${e.message}`)
+      }
+    }
   }
 
   // 9.5 钉钉 Stream 模式：群内发二维码图片即自动签到

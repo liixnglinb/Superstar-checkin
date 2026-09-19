@@ -45,17 +45,39 @@ function apiUrl(pathname) {
 let clipboardWatcher = null
 let lastClipboardImageHash = ''
 
+/** 统一的剪贴板发图入口：上传 + 把服务端返回的真实结果显示出来。
+ *  @returns 结果文案（客户端会直接显示，无需再去翻日志） */
 async function uploadClipboardImage(buffer) {
   const service = serviceConfig()
-  if (!service.token) return
+  if (!service.token) return '未获取到本地服务 token，无法上传'
   try {
     // 走 apiUrl 统一拼 token（此前这里引用了未定义的 token 变量，剪贴板识别路径整体 500/未授权）
-    await fetch(apiUrl('/upload/image?type=qr'), {
+    const res = await fetch(apiUrl('/upload/image?type=qr'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'image/png' },
       body: buffer,
     })
-  } catch (e) { console.warn('剪贴板二维码上传失败:', e.message) }
+    let msg = ''
+    let ok = res.ok
+    try {
+      const data = await res.json()
+      msg = data?.message || data?.error || ''
+      if (data && data.success === false) ok = false
+    } catch { /* 非 JSON 响应 */ }
+    if (!ok) return msg || `上传失败（HTTP ${res.status}）`
+    return msg || '已提交，等待识别结果'
+  } catch (e) {
+    console.warn('剪贴板二维码上传失败:', e.message)
+    return `上传失败: ${e.message}`
+  }
+}
+
+/** 桌面通知：热键/剪贴板识别结果要立刻让用户看到 */
+function notifyResult(title, body) {
+  try {
+    const { Notification } = require('electron')
+    if (Notification.isSupported()) new Notification({ title, body }).show()
+  } catch { /* 通知不可用则忽略 */ }
 }
 
 function startClipboardWatcher() {
@@ -67,7 +89,7 @@ function startClipboardWatcher() {
     if (!cfg?.web?.watchClipboard) return
   } catch (_) { return }
   if (clipboardWatcher) return
-  clipboardWatcher = setInterval(() => {
+  clipboardWatcher = setInterval(async () => {
     try {
       const image = clipboard.readImage()
       if (image.isEmpty()) return
@@ -75,9 +97,52 @@ function startClipboardWatcher() {
       const hash = require('crypto').createHash('sha256').update(buffer).digest('hex')
       if (hash === lastClipboardImageHash) return
       lastClipboardImageHash = hash
-      uploadClipboardImage(buffer)
+      const r = await uploadClipboardImage(buffer)
+      // 只在有结果时提示，避免复制无关图片时静默无感（上传失败/识别失败都会给出原因）
+      if (r && !/已提交/.test(r)) notifyResult('二维码识别', r)
     } catch (_) { /* 剪贴板可能暂不可读 */ }
   }, 2000)
+}
+
+/**
+ * 全局热键：按下即把剪贴板里的图当作签到二维码提交。
+ *
+ * 这是钉钉图片通道的**备用入口** —— 图不是从钉钉来的（同学微信发你、或钉钉通道没连上）时用。
+ * 相比剪贴板自动监听，热键的好处是"你说了才算"，不会拿你复制的任意图片去瞎试。
+ * 快捷键可在 config.yaml 的 web.hotkey 配置，设为空字符串即关闭。
+ */
+function registerSignHotkey() {
+  let accel = 'Control+Alt+Q'
+  try {
+    const fs = require('fs')
+    const YAML = require('yaml')
+    const file = process.env.CONFIG_FILE || path.join(process.cwd(), 'config.yaml')
+    const cfg = YAML.parse(fs.readFileSync(file, 'utf8'))
+    if (typeof cfg?.web?.hotkey === 'string') accel = cfg.web.hotkey.trim()
+  } catch { /* 用默认值 */ }
+
+  if (!accel) { console.log('签到热键已在配置中关闭'); return }
+  try {
+    const { globalShortcut } = require('electron')
+    const ok = globalShortcut.register(accel, async () => {
+      try {
+        const image = clipboard.readImage()
+        if (image.isEmpty()) {
+          notifyResult('未识别到图片', `请先复制签到二维码图片，再按 ${accel}`)
+          return
+        }
+        const r = await uploadClipboardImage(image.toPNG())
+        notifyResult(/成功/.test(String(r)) ? '签到成功' : '签到结果', String(r || '已提交'))
+      } catch (e) {
+        notifyResult('签到失败', e.message)
+      }
+    })
+    console.log(ok
+      ? `已注册签到热键 ${accel}（复制二维码图片后按下即签到）`
+      : `签到热键 ${accel} 注册失败：可能已被其它软件占用，可在 config.yaml 的 web.hotkey 改一个`)
+  } catch (e) {
+    console.warn('注册签到热键失败:', e.message)
+  }
 }
 
 let mainWindow = null
@@ -397,6 +462,7 @@ app.whenReady().then(() => {
     console.error('签到服务启动失败:', err)
   }
   startClipboardWatcher()
+  registerSignHotkey()
   createTray()
   waitForService(60)
   app.on('activate', () => openWindow())
@@ -409,4 +475,8 @@ app.on('window-all-closed', (e) => {
   // 托盘常驻，不退出
 })
 
-app.on('before-quit', () => { quitting = true })
+app.on('before-quit', () => {
+  quitting = true
+  // 必须注销全局热键，否则退出后热键仍被占用（表现为"按键没反应且别的软件也抢不到"）
+  try { require('electron').globalShortcut.unregisterAll() } catch { /* 忽略 */ }
+})

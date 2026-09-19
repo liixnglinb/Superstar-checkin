@@ -20,7 +20,7 @@ export interface DingTalkMessage {
   msgId?: string
 }
 
-type ImageHandler = (imageBuffer: Buffer) => Promise<void>
+type ImageHandler = (imageBuffer: Buffer) => Promise<string | void>
 
 /** 控制台首页数据提供者（每次请求时实时获取） */
 export type StatusProvider = () => Record<string, any>
