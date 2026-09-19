@@ -25,7 +25,7 @@ const MODE_ALL = process.argv.includes('--all')
 const RULES = [
   { name: '钉钉群机器人 token', re: /oapi\.dingtalk\.com\/robot\/send\?access_token=[a-f0-9]{32,}/i },
   { name: '钉钉加签密钥', re: /SEC[0-9a-f]{40,}/i },
-  // 真实 AppKey 形如 RRRRRRRRRRRRRRRRRRRR（ding + 全小写字母数字）。
+  // 真实 AppKey 形如 ding + 一长串小写字母数字（此处不写真实值，避免检查器自身成为泄露源）。
   // 后接驼峰（dingtalkStream、DingTalkListener）是标识符，不是密钥，故用 (?![A-Z]) 排除。
   { name: '钉钉企业内部应用 AppKey', re: /\bding[a-z0-9]{14,}(?![A-Za-z0-9])/ },
   { name: '钉钉 AppSecret 赋值', re: /["']?appSecret["']?\s*[:=]\s*["'][A-Za-z0-9_-]{40,}["']/i },
@@ -38,7 +38,22 @@ const RULES = [
   { name: '疑似密钥硬编码赋值', re: /\b(token|secret|password|passwd|apikey|api_key)\b\s*[:=]\s*["'][A-Za-z0-9_\-]{24,}["']/i },
 ]
 
-/** 允许出现的白名单（示例值、占位符、文档中的字段名） */
+/** 不检查这些路径（文档里的字段名说明、构建产物、依赖与本地配置） */
+const SKIP_PATH = [
+  /^node_modules\//,
+  /^build\//,
+  /^dist/,
+  /^\.git\//,
+  /^data\//,
+  /^config\.yaml$/,
+  /package-lock\.json$/,
+]
+
+/**
+ * 允许出现的白名单（示例值、占位符、文档中的字段名）。
+ * 注意：本文件自身**不**在 SKIP_PATH 里 —— 整文件跳过会让检查器内部若混入真实密钥
+ * 也永远查不出来（第一版就是这么写的，属设计缺陷）。这里用白名单精确放过自己的示例串。
+ */
 const ALLOW = [
   /你的\s*(PushPlus|Bark|Token|Key|邮箱|密码)/,
   /xxx+/i,
@@ -50,18 +65,11 @@ const ALLOW = [
   /appSecret:\s*""/,
   /token:\s*""/,
   /YOUR_|MY_|_HERE/i,
-]
-
-/** 不检查这些路径（文档里的字段名说明、检查脚本自身、构建产物） */
-const SKIP_PATH = [
-  /^scripts\/check-secrets\.js$/,
-  /^node_modules\//,
-  /^build\//,
-  /^dist/,
-  /^\.git\//,
-  /^data\//,
-  /^config\.yaml$/,
-  /package-lock\.json$/,
+  /REPLACED_LEAKED_/,            // 历史清理后的占位
+  /dingExampleAppKeyHere/,       // 本文档/检查器用的示例 AppKey
+  /ding\[a-z0-9\]/,              // 检查器自身的正则字面量
+  /SEC\[0-9a-f\]/,
+  /ding\[0-9a-f\]/,
 ]
 
 function listFiles() {
