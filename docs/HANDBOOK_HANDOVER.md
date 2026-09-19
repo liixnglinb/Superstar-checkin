@@ -44,8 +44,10 @@
   旧代码只读小写 `starttime` / `endtime`，导致时间恒为 0、名称恒为空
   —— 修好 classId 后这些历史活动会第一次被真正读到，42 条会被当成 42 个「新签到」逐个触发
   （失败重试还各打 3 次）。为此加了 `shouldPollActivity()` 闸门：**已结束的签到不处理**。
-- 验证方式（可复跑）：`npm run test` 跑纯逻辑回归；`npm run test:live` 注入一个「未结束的签到」
-  验证完整检测链路（注入假 aid `999999999`，用独立 `config.smoke.yaml` + `data-smoke/`，无真实副作用）。
+- 验证方式：`npm test`（`tests/*.test.js`）跑纯逻辑回归，覆盖 `shouldPollActivity` 闸门、
+  二维码解析正则、钉钉消息解析、课表与扫描时段判定，共 27 条用例，无需网络与账号。
+  排查期间用过的一次性活体 harness（注入假 aid 验证检测链路、开关实测、课表端到端等）
+  已在收尾时删除，避免在 CI 与发布前验证清单里留下用不了的东西。
 
 **③ 顺带确认：`preSign` 不校验 `courseId` / `classId`**
 
@@ -135,8 +137,7 @@
 | `npx electron .` | 桌面壳 | 必须先 `npm run build`；`electron/main.js` 是 `require('../build/index.js')` **同进程**跑服务，不是子进程 |
 | `npm run typecheck` | `tsc --noEmit` | 只查类型，不产出 |
 | `npm run validate:ui` | 校验控制台页 | 依赖 `../build/server/*`，**必须在 build 之后跑** |
-| `npm test` | 纯逻辑回归（`node --test tests/*.test.js`） | 覆盖 `shouldPollActivity` 闸门与二维码正则；无需网络/账号，**改检测逻辑后必跑** |
-| `npm run test:live` | 活体检测链路验证（`tests/live-detection-harness.js`） | 需 `npm run build` 先跑；会生成 `config.smoke.yaml` + `data-smoke/`（已 gitignore），监听 3457 端口，注入假 aid 无真实副作用 |
+| `npm test` | 纯逻辑回归（`node --test tests/*.test.js`） | 27 条用例：`shouldPollActivity` 闸门、二维码正则、钉钉消息解析（三种形态）、课表与扫描时段判定；无需网络/账号，**改检测或课表逻辑后必跑** |
 
 - 控制台：`http://<host>:<web.port>/?token=<web.token>`，默认 `127.0.0.1:3456`。
 - 服务起来后 `GET /health` 可探活（无鉴权），Electron 主进程就是靠轮询 `/api/status` 决定何时开窗。
@@ -267,7 +268,7 @@ npx electron-builder --win --x64
 | 加通知渠道 | `src/notifiers/index.ts` 加 case + `src/types/index.ts` + `config.example.yaml` + 设置页 | 服务日志看是否命中该渠道，或 `/api/settings` 存一次再重启 |
 | 加/改 HTTP 路由 | `dingtalk-server.ts` 的 `start()` 里那条 `if (method && path)` 链 | 鉴权是**白名单式**的（见下），新路径要决定是否需要 token；返回 HTML 的响应记得带 `scriptNonce`（CSP） |
 | 调签到成功率/风控 | `core/checkin-engine.ts` + `utils/anti-detect.ts` | 只在真实账号上小步验证，一次改一个变量 |
-| **「有签到但软件没反应」** | 先确认检测链路：`npm run test:live`（离线自检）；再看日志有无 `发现新签到`、`/api/status` 的 `courseHealth` 是否为空 | 若 `courseHealth` 有课连续失败，多半是 `getCourseList()` 的 `courseId`/`classId` 取值又失配（见 1.0②），用活动列表接口直接验一次 |
+| **「有签到但软件没反应」** | 依次看：① 日志有无 `发现新签到`；② `/api/status` 的 `courseHealth` 是否为空（有课连续失败即为异常）；③ 当前时刻是否落在课表的某一节内（课表未填完时不会按课表收紧）；④ 监听总开关是否为开启 | 若 `courseHealth` 有课连续失败，多半是 `getCourseList()` 的 `courseId`/`classId` 取值又失配（见 1.0②），用活动列表接口直接验一次 |
 | 手机端连不上 | `web.host` 改 `0.0.0.0`、`web.token` 非空、重启；控制台地址用 `/api/status` 返回的 `lanIp` | 手机与电脑同网段，先 `ping` 再开 URL |
 
 ### 7.1 鉴权与限流（动 `src/server/` 前必读）
