@@ -16,6 +16,45 @@
 
 ## 1. 项目当前状态（v3.6.0）
 
+### 1.0 ⚠️ 2026-09-19 排查结论：IM 通道已下线，且轮询曾全量失效（必读）
+
+接手时请先看这一节。当天排查两件事，结论都直接影响「软件还能不能签到」：
+
+**① IM 通道不可用 —— 学习通服务端已关闭 `/webim/me`（平台侧，无法修复）**
+
+- 现象：启动日志 `未能获取 IM token（IM 通道暂不可用，已由轮询监听兜底）`。
+- 实测：带有效 Cookie 请求 `https://im.chaoxing.com/webim/me` → **HTTP 200 + 一张「信息提示 / 系统维护中，功能暂时无法使用」页**（1388 字节，无 `#myToken` 元素）；
+  不带 Cookie → 302 跳 `passport2.chaoxing.com/wlogin`。**即鉴权是通过的，是服务端关掉了这条路由。**
+- 排除项：换完整 Chrome UA、加 Referer、带/不带参数、跟随重定向，结果完全一致；同期的 `mooc1-api` 课程接口（21238 字节）与 `mobilelearn` 域名均正常，Easemob 侧 `a1-vip6.easecdn.com` 也返回 200。
+  **所以不是账号、Cookie、UA、防风控或本机网络问题，也不是 Easemob 挂了。**
+- 影响：IM 实时通道无法建立，检测全部由轮询承担（见②）。控制台状态条的「IM 通道」chip 会一直是离线态。
+- 已做处理：`im-listener.ts` 识别该维护页后走**低频探测**（`PLATFORM_DOWN_RETRY_MS` = 6 小时），
+  不再 60 秒一次重连刷 ERROR；服务恢复后会自动接回并打印「IM 通道已恢复」。
+- **不要试图「修好」它**：这不是代码缺陷。除非学习通重新开放该接口，否则任何客户端改动都无效。
+
+**② 轮询兜底曾 100% 失效 —— `classId` 取错字段（已修复，这是当天最严重的缺陷）**
+
+- 现象：逐门课调用活动列表接口，25/25 门课返回 `{"result":0,"errorMsg":"非本班学生"}`，
+  轮询永远发现不了任何签到。**IM 下线后轮询是唯一检测通道，等于全量漏签、软件形同废掉。**
+- 根因：`getCourseList()` 里 `classId` 取的是 `data.id`（**课程ID**，如 210951295），
+  而真实 classId 是 `channel.content.id`（= `channel.key`，如 131533226）。两者是完全不同的值。
+- 实测证据：同一门课用 `classId=210951295` → `非本班学生`；用 `classId=131533226` → `result=1`。
+  修正后 **25/25 门课成功，共读到 44 条活动、其中 42 条签到类活动**。
+- 连带修的坑：活动列表返回的是 **camelCase**（`startTime` / `endTime` / `nameOne`），
+  旧代码只读小写 `starttime` / `endtime`，导致时间恒为 0、名称恒为空
+  —— 修好 classId 后这些历史活动会第一次被真正读到，42 条会被当成 42 个「新签到」逐个触发
+  （失败重试还各打 3 次）。为此加了 `shouldPollActivity()` 闸门：**已结束的签到不处理**。
+- 验证方式（可复跑）：`npm run test` 跑纯逻辑回归；`npm run test:live` 注入一个「未结束的签到」
+  验证完整检测链路（注入假 aid `999999999`，用独立 `config.smoke.yaml` + `data-smoke/`，无真实副作用）。
+
+**③ 顺带确认：`preSign` 不校验 `courseId` / `classId`**
+
+用 5 种参数组合（两个都对、两个都错、classId 留空等）请求 `newsign/preSign`，
+响应**完全一致**（同为 16242 字节的签到页）。即签到提交本身不受上述 classId 问题影响，
+问题只在「检测侧」的活动列表接口。这一条省得后人再怀疑提交链路。
+
+---
+
 ### 1.1 当前支持的签到类型（3 种）
 
 | 类型 | 自动程度 | 说明 |
@@ -96,6 +135,8 @@
 | `npx electron .` | 桌面壳 | 必须先 `npm run build`；`electron/main.js` 是 `require('../build/index.js')` **同进程**跑服务，不是子进程 |
 | `npm run typecheck` | `tsc --noEmit` | 只查类型，不产出 |
 | `npm run validate:ui` | 校验控制台页 | 依赖 `../build/server/*`，**必须在 build 之后跑** |
+| `npm test` | 纯逻辑回归（`node --test tests/*.test.js`） | 覆盖 `shouldPollActivity` 闸门与二维码正则；无需网络/账号，**改检测逻辑后必跑** |
+| `npm run test:live` | 活体检测链路验证（`tests/live-detection-harness.js`） | 需 `npm run build` 先跑；会生成 `config.smoke.yaml` + `data-smoke/`（已 gitignore），监听 3457 端口，注入假 aid 无真实副作用 |
 
 - 控制台：`http://<host>:<web.port>/?token=<web.token>`，默认 `127.0.0.1:3456`。
 - 服务起来后 `GET /health` 可探活（无鉴权），Electron 主进程就是靠轮询 `/api/status` 决定何时开窗。
@@ -205,7 +246,9 @@ npx electron-builder --win --x64
 
 ## 6. 签到主链路（改代码先看这节）
 
-1. **检测**：IM 通道（`listeners/im-listener.ts`，环信 XMPP，带重连与 token 刷新）或轮询（`listeners/poll-listener.ts`，间隔 + 抖动）。两者最终都调 `src/index.ts` 里同一个 `processCheckin`，所以改处理逻辑只需改一处。
+1. **检测**：轮询（`listeners/poll-listener.ts`，间隔 + 抖动）是**当前唯一可用的检测通道**；IM 通道（`listeners/im-listener.ts`，环信 XMPP）因学习通关闭 `/webim/me` 而处于离线态（见 1.0①），恢复前 `hybrid` 模式实际等于 `poll`。两者最终都调 `src/index.ts` 里同一个 `processCheckin`，所以改处理逻辑只需改一处。
+   - 轮询的输入是 `core/course.ts` 的 `getCourseList()`（提供 `courseId` + `classId`）与 `getCourseActivities()`（活动列表）。**这两个取错字段就会静默全量漏签**，改动时务必跑 `npm run test:live`。
+   - `shouldPollActivity()` 是活动进入处理流程前的闸门：已结束的签到直接跳过（否则历史活动会被当成新签到批量触发）。
 2. **闸门**：`providers/sign-state.ts` —— `isProcessed` / `markProcessed` / `unmarkProcessed`；容量上限 `MAX_PROCESSED_AIDS = 5000`（超出按 FIFO 淘汰）；失败上限 `MAX_FAIL_RETRY = 3`（`recordFail` / `shouldRetryFail` / `clearFail`）。
 3. **类型判定**：`core/checkin-engine.ts` 的 `getDetail()` 按活动详情里的 `otherId` 映射：`2 → qr`、`3 → 手势（不支持）`、`4 → location`、带 `ifphoto → 拍照（不支持）`、其余 `→ normal`。**新增/恢复一类签到，从这里开始。**
 4. **分发**：`handlers/checkin-handler.ts` 的 `executeCheckin()` → `simpleCheckin` / `geoCheckin` / `qrCheckin`。
@@ -224,6 +267,7 @@ npx electron-builder --win --x64
 | 加通知渠道 | `src/notifiers/index.ts` 加 case + `src/types/index.ts` + `config.example.yaml` + 设置页 | 服务日志看是否命中该渠道，或 `/api/settings` 存一次再重启 |
 | 加/改 HTTP 路由 | `dingtalk-server.ts` 的 `start()` 里那条 `if (method && path)` 链 | 鉴权是**白名单式**的（见下），新路径要决定是否需要 token；返回 HTML 的响应记得带 `scriptNonce`（CSP） |
 | 调签到成功率/风控 | `core/checkin-engine.ts` + `utils/anti-detect.ts` | 只在真实账号上小步验证，一次改一个变量 |
+| **「有签到但软件没反应」** | 先确认检测链路：`npm run test:live`（离线自检）；再看日志有无 `发现新签到`、`/api/status` 的 `courseHealth` 是否为空 | 若 `courseHealth` 有课连续失败，多半是 `getCourseList()` 的 `courseId`/`classId` 取值又失配（见 1.0②），用活动列表接口直接验一次 |
 | 手机端连不上 | `web.host` 改 `0.0.0.0`、`web.token` 非空、重启；控制台地址用 `/api/status` 返回的 `lanIp` | 手机与电脑同网段，先 `ping` 再开 URL |
 
 ### 7.1 鉴权与限流（动 `src/server/` 前必读）

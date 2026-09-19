@@ -316,3 +316,7 @@ dist-electron/
 # 打包产物快照目录：每个版本一份（dist-electron-v36/ v37/ …），一律不入库
 # 注：第 315 行原为乱码 `ndist-electron-v36/，只挡住了 v36，v37 起会漏进 git status（2026-09-19 修正）
 dist-electron-v*/
+
+# 活体验证 harness 的临时产物（npm run test:live 生成，会覆盖真实 config/data 之外的副本）
+config.smoke.yaml
+data-smoke/
