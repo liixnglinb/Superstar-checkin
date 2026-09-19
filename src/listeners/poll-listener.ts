@@ -28,6 +28,11 @@ export class PollListener {
   private jitterMs: number
   private handler: ActivityHandler | null = null
   private healthHandler: HealthHandler | null = null
+  /**
+   * 每轮扫描前动态决定某门课是否要查（运行时可变：控制台开关、结课停用、时段过滤都走它）。
+   * 取代此前「启动时传入固定 courses 数组」的做法 —— 那样任何改动都必须重启才生效。
+   */
+  private shouldPoll: ((course: CourseInfo) => boolean) | null = null
 
   constructor(intervalMs: number = 30000, jitterMs: number = 15000) {
     this.interval = intervalMs
@@ -55,11 +60,14 @@ export class PollListener {
     }
   }
 
-  start(cookie: string, courses: CourseInfo[]) {
+  start(cookie: string, courses: CourseInfo[], shouldPoll?: (course: CourseInfo) => boolean) {
+    this.shouldPoll = shouldPoll || null
     logger.info(`轮询监听已启动, 间隔 ${this.interval / 1000}s, 监控 ${courses.length} 门课程`)
 
     const poll = async () => {
       for (const course of courses) {
+        // 运行时过滤：控制台关掉的课、已结课、当前不在签到时段内的课都不发请求
+        if (this.shouldPoll && !this.shouldPoll(course)) continue
         try {
           const activities = await this.fetchWithRetry(cookie, course)
 

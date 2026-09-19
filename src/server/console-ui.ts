@@ -21,6 +21,12 @@ export interface ConsoleStatus {
   accounts?: Array<{ username: string; name?: string; schoolname?: string }>
   courses?: Array<{ courseName: string; courseId: number; classId: number }>
   watchCourses?: string[]
+  /** 监听总开关：false 时轮询完全停止（控制台「停止监听」按钮的替代物） */
+  listening?: boolean
+  /** 被手动关掉监听的 courseId 列表 */
+  disabledCourses?: string[]
+  /** 当前实际在监听的课程数（已排除已结课与手动关闭的） */
+  listeningCount?: number
   /** 课程扫描健康：courseId -> 连续轮询失败次数（≥3 时 UI 显示"扫描异常"） */
   courseHealth?: Record<string, number>
   /** 签到趋势（近 14 天逐日成功/失败） */
@@ -123,6 +129,8 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
   const accounts = status.accounts || []
   const courses = status.courses || []
   const watchSet = new Set((status.watchCourses || []).map((c: any) => String(c)))
+  /** 服务端已关闭监听的课程（运行时状态，优先于配置文件白名单） */
+  const disabledSet = new Set((status.disabledCourses || []).map((c: any) => String(c)))
   const recent = status.recent || []
   const mode = status.mode || '-'
   const qs = token ? '?token=' + encodeURIComponent(token) : ''
@@ -151,7 +159,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
 
   const courseRows = courses.length
     ? courses.map(c => {
-        const watching = watchSet.size === 0 || watchSet.has(String(c.courseId))
+        const watching = !disabledSet.has(String(c.courseId)) && (watchSet.size === 0 || watchSet.has(String(c.courseId)))
         // 课程扫描健康：连续轮询失败 ≥3 次时提示"扫描异常"（多为瞬时网络/网关抖动，重试后自动恢复）
         const fails = (status.courseHealth || {})[String(c.courseId)] || 0
         const statePill = !watching
@@ -1004,13 +1012,18 @@ tr:hover td{background:var(--n-25)}
       <section class="view" data-view="courses">
         <div class="section">
           <div class="section-head"><span class="section-title">监控课程</span><span class="section-more" id="courseCount">${courses.length} 门 · 轮询发现签到活动</span></div>
-          <div class="watch-bar">勾选要监听的课程（默认全部监听），保存后重启软件生效 · 新课程/小课程没出现时点「重新拉取课程列表」</div>
+          <div class="watch-bar">
+            <button class="btn ${status.listening === false ? 'btn-primary' : 'btn-ghost'}" id="listenToggleBtn">${status.listening === false ? '▶ 开启监听' : '⏸ 停止监听'}</button>
+            <span id="listenState">${status.listening === false ? '已停止监听（不会发送任何轮询请求，二维码上传仍可用）' : `正在监听 ${status.listeningCount ?? courses.length} 门课程`}</span>
+          </div>
+          <div class="watch-bar">逐课开关：点按钮切换后点「保存并立即生效」；已结课的课程已自动排除</div>
           <table>
             <thead><tr><th>课程名称</th><th>Course ID</th><th>Class ID</th><th>状态</th><th>监听</th></tr></thead>
             <tbody id="coursesBody">${courseRows}</tbody>
           </table>
           <div class="section-foot">
-            <button class="btn btn-ghost" id="watchSaveBtn">保存监听设置</button>
+            <button class="btn btn-primary" id="watchSaveBtn">保存并立即生效</button>
+            <button class="btn btn-ghost" id="coursesResetBtn">全部恢复监听</button>
             <button class="btn btn-ghost" id="refreshCoursesBtn">${ICONS.refresh}<span>重新拉取课程列表</span></button>
             <span class="cfg-msg" id="watchMsg"></span>
           </div>
@@ -1487,11 +1500,14 @@ tr:hover td{background:var(--n-25)}
       var cs2=s.courses||[]
       var ws2=(s.watchCourses||[]).map(String)
       var wset2={};ws2.forEach(function(id){wset2[id]=true})
+      var dis2={};(s.disabledCourses||[]).map(String).forEach(function(id){dis2[id]=true})
       var allOn2=ws2.length===0
+      // 与服务端一致的判定：未被手动关闭，且（无白名单 或 在白名单内）
+      var watchingOf=function(id){return !dis2[id] && (allOn2 || wset2[id])}
       cb.innerHTML=cs2.length
         ? cs2.map(function(c){
             var cid=String(c.courseId)
-            var watching=watchLocal[cid]!==undefined?watchLocal[cid]:(allOn2||wset2[cid])
+            var watching=watchLocal[cid]!==undefined?watchLocal[cid]:watchingOf(cid)
             return '<tr><td class="cell-main">'+esc(c.courseName)+'</td><td class="cell-mono">'+esc(String(c.courseId))+'</td><td class="cell-mono">'+esc(String(c.classId))+'</td><td><span class="pill '+(watching?'pill-ok':'pill-off')+'">'+(watching?'监控中':'已停用')+'</span></td><td><button class="watch-toggle '+(watching?'on':'')+'" data-cid="'+esc(cid)+'">'+(watching?'关闭监听':'开启监听')+'</button></td></tr>'
           }).join('')
         : '<tr><td colspan="5" class="cell-empty">暂无课程数据</td></tr>'
@@ -1633,11 +1649,13 @@ tr:hover td{background:var(--n-25)}
         var cb=document.getElementById('coursesBody')
         var cs2=s.courses||[],ws2=(s.watchCourses||[]).map(String)
         var wset2={};ws2.forEach(function(id){wset2[id]=true})
+        var dis2={};(s.disabledCourses||[]).map(String).forEach(function(id){dis2[id]=true})
         var allOn2=ws2.length===0
+        var watchingOf=function(id){return !dis2[id] && (allOn2 || wset2[id])}
         cb.innerHTML=cs2.length
           ? cs2.map(function(c){
               var id2=String(c.courseId)
-              var w=watchLocal[id2]!==undefined?watchLocal[id2]:(allOn2||wset2[id2])
+              var w=watchLocal[id2]!==undefined?watchLocal[id2]:watchingOf(id2)
               var f2=(s.courseHealth||{})[id2]||0
               var sp=!w
                 ? '<span class="pill pill-off">已停用</span>'
@@ -1666,10 +1684,49 @@ tr:hover td{background:var(--n-25)}
       .then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'保存失败')
         msg.style.color=d.ok?'#178A5B':'#B42318'
-        watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存监听设置'
-        if(d.ok){watchLocal={};setTimeout(function(){location.reload()},1500)}
+        watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存并立即生效'
+        if(d.ok){
+          watchLocal={}
+          // 立即生效、无需重启：刷新状态即可看到新的门数与状态列
+          var st=document.getElementById('listenState')
+          if(st&&d.listeningCount!==undefined)st.textContent='正在监听 '+d.listeningCount+' 门课程'
+          setTimeout(function(){location.reload()},1200)
+        }
       })
-      .catch(function(){msg.textContent='❌ 保存失败，请重试';msg.style.color='#B42318';watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存监听设置'})
+      .catch(function(){msg.textContent='❌ 保存失败，请重试';msg.style.color='#B42318';watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存并立即生效'})
+  })
+
+  // ===== 监听总开关（原 IM 通道的替代：随时能停，随时能开） =====
+  var listenToggleBtn=document.getElementById('listenToggleBtn')
+  if(listenToggleBtn)listenToggleBtn.addEventListener('click',function(){
+    var turningOff=listenToggleBtn.textContent.indexOf('停止')>=0
+    var st=document.getElementById('listenState')
+    listenToggleBtn.disabled=true
+    apiFetch('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:!turningOff})})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        listenToggleBtn.disabled=false
+        if(!d.ok){if(st)st.textContent='❌ '+(d.message||'操作失败');return}
+        listenToggleBtn.textContent=d.listening?'⏸ 停止监听':'▶ 开启监听'
+        listenToggleBtn.className='btn '+(d.listening?'btn-ghost':'btn-primary')
+        if(st)st.textContent=d.listening?('正在监听 '+d.listeningCount+' 门课程'):'已停止监听（不会发送任何轮询请求，二维码上传仍可用）'
+      })
+      .catch(function(){listenToggleBtn.disabled=false;if(st)st.textContent='❌ 操作失败，请重试'})
+  })
+
+  // ===== 全部恢复监听 =====
+  var coursesResetBtn=document.getElementById('coursesResetBtn')
+  if(coursesResetBtn)coursesResetBtn.addEventListener('click',function(){
+    var msg=document.getElementById('watchMsg')
+    coursesResetBtn.disabled=true
+    apiFetch('/api/courses/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        coursesResetBtn.disabled=false
+        if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'#178A5B':'#B42318'}
+        if(d.ok)setTimeout(function(){location.reload()},1200)
+      })
+      .catch(function(){coursesResetBtn.disabled=false;if(msg)msg.textContent='❌ 操作失败，请重试'})
   })
 
   // ===== 账号管理（设为主账号 / 删除） =====

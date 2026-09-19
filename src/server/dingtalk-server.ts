@@ -42,6 +42,21 @@ export interface DingTalkServerOptions {
   sendTestNotify?: () => Promise<void>
   /** 重新拉取课程列表并重建轮询监听 */
   refreshCourses?: () => Promise<{ ok: boolean; count: number; message: string }>
+  /**
+   * 监听总开关（控制台「开启监听 / 停止监听」按钮）。
+   * 这是原 IM 通道的替代物：IM 被学习通关掉后，用户需要一个随时能停、
+   * 一眼能看懂的开关，而不是只能靠关掉整个软件来停止轮询。
+   */
+  setListening?: (on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
+  /** 切换单门课程的监听开关，返回切换后的状态 */
+  toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
+  /** 恢复所有课程的监听（清除手动关闭） */
+  resetCourses?: () => { ok: boolean; listeningCount: number }
+  /**
+   * 批量设置监听课程（控制台「保存监听设置」）。
+   * 传入要监听的 courseId 列表；由宿主决定如何落到运行时状态，返回生效后的门数。
+   */
+  applyWatchCourses?: (ids: string[]) => { ok: boolean; listeningCount: number }
   /** 日志文件路径（软件内日志查看页用） */
   getLogFile?: () => string
   /** 主账号 Cookie（网络诊断用） */
@@ -70,6 +85,10 @@ export class DingTalkServer {
   private clearHistory?: () => void
   private sendTestNotify?: () => Promise<void>
   private refreshCourses?: () => Promise<{ ok: boolean; count: number; message: string }>
+  private setListening?: (on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
+  private toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
+  private resetCourses?: () => { ok: boolean; listeningCount: number }
+  private applyWatchCourses?: (ids: string[]) => { ok: boolean; listeningCount: number }
   private getLogFile?: () => string
   private getPrimaryCookie?: () => string
 
@@ -87,6 +106,10 @@ export class DingTalkServer {
     this.clearHistory = options.clearHistory
     this.sendTestNotify = options.sendTestNotify
     this.refreshCourses = options.refreshCourses
+    this.setListening = options.setListening
+    this.toggleCourse = options.toggleCourse
+    this.resetCourses = options.resetCourses
+    this.applyWatchCourses = options.applyWatchCourses
     this.getLogFile = options.getLogFile
     this.getPrimaryCookie = options.getPrimaryCookie
   }
@@ -897,26 +920,90 @@ export class DingTalkServer {
         return
       }
 
-      // 监听课程设置（勾选要监控的课程 → 写 config.yaml → 重启生效）
+      // 监听课程设置（保存 → 立即生效；此前是「写配置 + 提示重启」，实际点了没反应）
       if (req.method === 'POST' && routePath === '/api/watch') {
         try {
           const body = JSON.parse(await this.readBody(req))
           const watchCourses: string[] = Array.isArray(body.watchCourses)
             ? body.watchCourses.map((c: any) => String(c)).filter(Boolean)
             : []
+          // 仍写回配置，保证重启后保持同样的监听范围
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
             : {}
           existing.watchCourses = watchCourses
           writeFileAtomic(cfgFile, YAML.stringify(existing))
-          logger.info(`监听课程设置已保存（${watchCourses.length} 门），重启后生效`)
+
+          let listeningCount: number | undefined
+          if (this.applyWatchCourses) {
+            listeningCount = this.applyWatchCourses(watchCourses).listeningCount
+            logger.info(`监听课程设置已保存并立即生效（在监听 ${listeningCount} 门）`)
+          } else {
+            logger.info(`监听课程设置已保存（${watchCourses.length} 门）`)
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: watchCourses.length ? `已保存，将只监听 ${watchCourses.length} 门课程，重启后生效` : '已保存，将监听全部课程，重启后生效' }))
+          res.end(JSON.stringify({
+            ok: true,
+            listeningCount,
+            message: watchCourses.length
+              ? `已生效：只监听 ${watchCourses.length} 门课程（无需重启）`
+              : `已生效：监听全部课程${listeningCount !== undefined ? `（${listeningCount} 门）` : ''}（无需重启）`,
+          }))
         } catch (e: any) {
           logger.error(`保存监听课程失败: ${e.message}`)
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: `保存失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 监听总开关：开启/停止轮询监听（运行时立即生效，无需重启）
+      if (req.method === 'POST' && routePath === '/api/listen') {
+        try {
+          const body = JSON.parse(await this.readBody(req))
+          if (!this.setListening) throw new Error('监听开关未接入')
+          const r = this.setListening(!!body.on)
+          logger.info(`监听已${body.on ? '开启' : '停止'}（在监听 ${r.listeningCount} 门课程）`)
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ...r, message: body.on ? `已开启监听（${r.listeningCount} 门课程）` : '已停止监听（不再轮询，二维码上传仍可用）' }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 单门课程监听开关（运行时立即生效）
+      if (req.method === 'POST' && routePath === '/api/courses/toggle') {
+        try {
+          const body = JSON.parse(await this.readBody(req))
+          if (!this.toggleCourse) throw new Error('课程开关未接入')
+          const courseId = String(body.courseId || '').trim()
+          if (!courseId) throw new Error('缺少 courseId')
+          const r = this.toggleCourse(courseId, !!body.on)
+          logger.info(`课程 ${courseId} 监听已${body.on ? '开启' : '关闭'}`)
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ...r, message: body.on ? '已开启该课程监听' : '已关闭该课程监听' }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 恢复全部课程监听
+      if (req.method === 'POST' && routePath === '/api/courses/reset') {
+        try {
+          if (!this.resetCourses) throw new Error('课程开关未接入')
+          const r = this.resetCourses()
+          logger.info(`已恢复全部课程监听（${r.listeningCount} 门）`)
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ...r, message: `已恢复全部课程监听（${r.listeningCount} 门）` }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
         }
         return
       }

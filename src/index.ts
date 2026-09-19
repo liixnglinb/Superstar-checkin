@@ -241,6 +241,12 @@ async function main() {
         }),
         courses,
         watchCourses: config.watchCourses || [],
+        /** 监听总开关状态（控制台按钮据此显示） */
+        listening,
+        /** 被手动关掉监听的 courseId（控制台逐个开关用） */
+        disabledCourses: Array.from(disabledCourses),
+        /** 当前实际在监听的课程数（已排除已结课与手动关闭的） */
+        listeningCount: watchedCoursesNow().length,
         courseHealth: Object.fromEntries(courseHealth),
         courseStats,
         accountStats,
@@ -290,16 +296,25 @@ async function main() {
         for (const course of result.value) refreshMap.set(`${course.courseId}:${course.classId}`, course)
       }
       const fresh = Array.from(refreshMap.values())
-      courses = fresh
-      // 结课自动停用：已退休课程从监听列表移除，避免无效轮询和误报
-      const retiredIds = fresh.filter(c => c.isRetired).map(c => String(c.courseId))
-      if (retiredIds.length > 0 && config.watchCourses && config.watchCourses.length > 0) {
-        const before = config.watchCourses.length
-        config.watchCourses = config.watchCourses.filter(id => !retiredIds.includes(String(id)))
-        if (config.watchCourses.length < before) {
-          logger.info('结课自动停用：已移除 ' + (before - config.watchCourses.length) + ' 门已结课课程的监听')
-          saveConfig(config)
+      /**
+       * 已结课课程不进 courses：随后重建轮询监听器时它们自然被排除，
+       * 不必再走「写回 config.watchCourses」那条老路（那要求必须是白名单模式才生效）。
+       */
+      courses = fresh.filter(c => !c.isRetired)
+      const retiredFresh = fresh.filter(c => c.isRetired)
+      if (retiredFresh.length > 0) {
+        logger.info(`结课自动停用：${retiredFresh.length} 门已结课课程不再监听`)
+        if (config.watchCourses && config.watchCourses.length > 0) {
+          const retiredIds = retiredFresh.map(c => String(c.courseId))
+          const before = config.watchCourses.length
+          config.watchCourses = config.watchCourses.filter(id => !retiredIds.includes(String(id)))
+          if (config.watchCourses.length < before) saveConfig(config)
         }
+      }
+      // 清掉已不存在课程的关闭状态，避免 disabledCourses 无限增长
+      {
+        const alive = new Set(courses.map(c => String(c.courseId)))
+        for (const id of Array.from(disabledCourses)) if (!alive.has(id)) disabledCourses.delete(id)
       }
       applyWatchFilter()
       for (const listener of pollListeners) listener.stop()
@@ -312,14 +327,13 @@ async function main() {
             processCheckin(aid, courseId, classId, courseName)
           })
           attachHealth(pl)
-          pl.start(meta.cookie, watchedCourses)
+          pl.start(meta.cookie, courses, shouldListenCourse)
           pollListeners.push(pl)
         }
         pollListener = pollListeners[0] || null
       }
-      logger.success(`课程列表已刷新: ${fresh.length} 门，监听 ${watchedCourses.length} 门`)
-      return { ok: true, count: fresh.length, message: `已刷新课程列表（${fresh.length} 门），监听 ${watchedCourses.length} 门` }
-    } catch (e: any) {
+      logger.success(`课程列表已刷新: ${fresh.length} 门（已结课 ${retiredFresh.length} 门不再监听），在监听 ${watchedCoursesNow().length} 门`)
+      return { ok: true, count: courses.length, message: `已刷新：可监听 ${courses.length} 门（已排除已结课 ${retiredFresh.length} 门），当前在监听 ${watchedCoursesNow().length} 门` }    } catch (e: any) {
       logger.error(`刷新课程列表失败: ${e.message}`)
       return { ok: false, count: 0, message: `刷新失败: ${e.message}` }
     }
@@ -339,6 +353,42 @@ async function main() {
     sendTestNotify: () =>
       notifier.notify('✅ 测试通知', '通知通道工作正常\n（免打扰时段内桌面通知不会弹出）').catch(() => {}),
     refreshCourses,
+    /**
+     * 监听总开关 / 逐课开关。原 IM 通道被学习通关掉后，用这个替代：
+     * 用户可以随手停掉轮询（比如放假、不想被查），而不必关掉整个软件。
+     * 立即生效（shouldListenCourse 每轮求值），不写配置文件（重启回到默认的「全监听」）。
+     */
+    setListening: (on: boolean) => {
+      listening = on
+      logger.success(on ? `已开启监听，当前在监听 ${watchedCoursesNow().length} 门课程` : '已停止监听（不再发送任何轮询请求）')
+      return { ok: true, listening, listeningCount: watchedCoursesNow().length }
+    },
+    toggleCourse: (courseId: string, on: boolean) => {
+      if (on) disabledCourses.delete(String(courseId))
+      else disabledCourses.add(String(courseId))
+      return { ok: true, listening, listeningCount: watchedCoursesNow().length }
+    },
+    resetCourses: () => {
+      disabledCourses.clear()
+      logger.info(`已恢复全部课程监听（${watchedCoursesNow().length} 门）`)
+      return { ok: true, listeningCount: watchedCoursesNow().length }
+    },
+    /**
+     * 批量设置监听课程（控制台「保存监听设置」）。
+     * 白名单语义：列表为空 = 全部监听；非空 = 只监听列表内的课程。
+     * 立即生效，无需重启。
+     */
+    applyWatchCourses: (ids: string[]) => {
+      disabledCourses.clear()
+      const keep = new Set(ids.map(String))
+      if (keep.size > 0) {
+        for (const c of courses) {
+          if (!keep.has(String(c.courseId))) disabledCourses.add(String(c.courseId))
+        }
+      }
+      config.watchCourses = ids
+      return { ok: true, listeningCount: watchedCoursesNow().length }
+    },
     getLogFile: () => config.log.file || '',
     getPrimaryCookie: () => primaryMeta.cookie || '',
   })
@@ -387,20 +437,57 @@ async function main() {
       continue
     }
     for (const course of result.value) {
+      // 已结课（isretire=1）的课程直接不进监听列表：它们不可能再发布签到，
+      // 留着只会每轮白问一次（实测 26 门里 15 门已结课，占 58% 的无效请求）。
+      if (course.isRetired) continue
       courseMap.set(`${course.courseId}:${course.classId}`, course)
     }
   }
   let courses = Array.from(courseMap.values())
+  const retiredCount = courseResults.reduce(
+    (n, r) => n + (r.status === 'fulfilled' ? r.value.filter((c: CourseInfo) => c.isRetired).length : 0), 0)
+  if (retiredCount > 0) {
+    logger.info(`已结课课程已排除: ${retiredCount} 门（不再轮询）`)
+  }
 
   // 按「监听课程」配置过滤：watchCourses 为空 = 监听全部；否则只监听勾选的课程
-  let watchedCourses: typeof courses = []
+  /**
+   * 监听总开关（控制台「开启监听 / 停止监听」按钮）。
+   * 这是原 IM 通道的替代物：IM 被学习通关掉后，用户需要一个能一眼看懂、
+   * 随时能停下来的开关，而不是只能靠关软件来停止轮询。
+   */
+  let listening = true
+  /**
+   * 被手动关掉监听的课程（courseId）。
+   *
+   * 采用「默认监听」模型：只有明确被关掉的才不查，其余一律查。
+   * 这样刷新课程列表、新学期新增课程都会自动纳入，不会像白名单那样漏掉新加的课
+   * （watchCourses 白名单仍兼容：非空时作为初始基线）。
+   */
+  const disabledCourses = new Set<string>(
+    (config.watchCourses && config.watchCourses.length > 0)
+      ? courses.filter(c => !config.watchCourses!.map(String).includes(String(c.courseId))).map(c => String(c.courseId))
+      : [],
+  )
+
+  /** 当前在监听的课程（控制台展示与状态接口用） */
+  function watchedCoursesNow(): CourseInfo[] {
+    return courses.filter(c => !disabledCourses.has(String(c.courseId)))
+  }
+
+  /** 某门课这次轮询要不要发请求（所有过滤条件集中在这里，便于审查） */
+  function shouldListenCourse(course: CourseInfo): boolean {
+    if (!listening) return false
+    if (course.isRetired) return false
+    if (disabledCourses.has(String(course.courseId))) return false
+    return true
+  }
+
+  /** 兼容旧行为：保留 watchCourses 过滤日志，但改为运行时求值 */
   function applyWatchFilter() {
-    const watchSet = new Set((config.watchCourses || []).map((c: any) => String(c)))
-    watchedCourses = watchSet.size > 0
-      ? courses.filter(c => watchSet.has(String(c.courseId)))
-      : courses
-    if (watchSet.size > 0) {
-      logger.info(`按监听配置过滤课程: ${courses.length} 门 → 监听 ${watchedCourses.length} 门`)
+    const off = disabledCourses.size
+    if (off > 0) {
+      logger.info(`按监听配置过滤课程: ${courses.length} 门 → 监听 ${watchedCoursesNow().length} 门（关闭 ${off} 门）`)
     }
   }
   applyWatchFilter()
@@ -579,7 +666,7 @@ async function main() {
       })
       attachHealth(pl)
       try {
-        pl.start(meta.cookie, watchedCourses)
+        pl.start(meta.cookie, courses, shouldListenCourse)
         pollListeners.push(pl)
       } catch (e: any) {
         logger.error(`轮询监听器启动失败（不影响上传页）: ${e.message}`)
@@ -682,7 +769,7 @@ async function main() {
         const recentNames = new Set(
           history.filter((r: any) => (r.timestamp || 0) >= threeDaysAgo.getTime()).map((r: any) => r.courseName)
         )
-        const watchedNames = new Set(watchedCourses.map(c => c.courseName))
+        const watchedNames = new Set(watchedCoursesNow().map(c => c.courseName))
         const missed = Array.from(watchedNames).filter(n => !recentNames.has(n))
         if (missed.length > 0) {
           content += '\n\n⚠️ 漏签预警（近3天监听但零签到）：\n' + missed.slice(0, 8).map(n => '· ' + n).join('\n')
