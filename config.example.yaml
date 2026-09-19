@@ -1,6 +1,7 @@
 # =====================================================
-# ChaoXing Auto Sign v3.1 - 配置文件模板
+# ChaoXing Auto Sign - 配置文件模板
 # 复制为 config.yaml 并填入你的配置
+# 完整字段说明见 README「配置文件」一节与 src/types/index.ts 的 AppConfig
 # =====================================================
 
 # ---- 代理（可选，强烈建议用于规避数据中心 IP 风控）----
@@ -128,8 +129,9 @@ ocr:
 #   - notify.channels 的 dingtalk = 群机器人 webhook → 用来【收】那条带上传链接的通知消息
 #   - 本节点的 dingtalk            = 企业内部应用     → 用来【起上传页】+【收你直接发的图】
 dingtalk:
-  publicUrl: ""         # 必填（手机可用）：电脑在局域网/公网的访问地址，如 http://192.168.1.100:3456
-                        # 不填则默认 http://127.0.0.1:3456 —— 只能在本机浏览器打开，手机点链接打不开！
+  publicUrl: ""         # 推荐填写（手机可用）：电脑在局域网/公网的访问地址，如 http://192.168.1.100:3456
+                        # 留空时自动回退到局域网 IP（web.host 非 127.0.0.1 时），仍然只在同 Wi-Fi 下可开；
+                        # web.host 为 127.0.0.1 时回退为 http://127.0.0.1:3456 —— 只能在本机浏览器打开，手机点链接打不开！
   appSecret: ""         # 选填：企业内部应用 AppSecret（仅「直接发图给机器人」高级方式需要）
   appKey: ""            # 选填：企业内部应用 AppKey（仅「直接发图给机器人」方式需要，robotCode 一般等于 appKey）
 
@@ -138,9 +140,10 @@ web:
   port: 3456
   # 上传页 / 控制台 / API 统一使用该端口
   host: 127.0.0.1     # 默认只允许本机访问；改为 0.0.0.0 时请确保 token 保密
-  watchClipboard: false # 复制/截图含签到二维码的图片后自动识别
-  token: ""           # Bearer Token 认证，留空则不启动
-  allowedOrigin: "http://localhost"
+  watchClipboard: false # 复制/截图含签到二维码的图片后自动识别（桌面壳 Electron 生效）
+  token: ""           # Bearer Token 认证；首次运行会自动生成随机值并写回本文件
+                      # ⚠️ 留空 ≠ 不鉴权：留空时控制台/上传页/API 全部返回 401
+  allowedOrigin: "http://localhost"  # CORS 允许来源
 
 # ---- 存储 ----
 storage:
@@ -150,7 +153,3 @@ storage:
 log:
   level: info         # debug | info | warn | error
   file: ./data/app.log  # 日志文件路径（可选）
-
-# ---- 屏蔽课程 ----
-# ignoreCourses:
-#   - 99999999  # 不想自动签到的课程ID

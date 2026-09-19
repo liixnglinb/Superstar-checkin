@@ -49,9 +49,10 @@ async function uploadClipboardImage(buffer) {
   const service = serviceConfig()
   if (!service.token) return
   try {
-    await fetch(`http://${service.host}:${service.port}/upload/image?type=qr`, {
+    // 走 apiUrl 统一拼 token（此前这里引用了未定义的 token 变量，剪贴板识别路径整体 500/未授权）
+    await fetch(apiUrl('/upload/image?type=qr'), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/png' },
+      headers: { Authorization: `Bearer ${service.token}`, 'Content-Type': 'image/png' },
       body: buffer,
     })
   } catch (e) { console.warn('剪贴板二维码上传失败:', e.message) }

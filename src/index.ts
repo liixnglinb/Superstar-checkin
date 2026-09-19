@@ -1,4 +1,4 @@
-﻿import { logger } from './utils/logger'
+import { logger } from './utils/logger'
 import { loadConfig } from './providers/config'
 import { initStorage } from './providers/storage'
 import { AccountManager } from './providers/account-manager'
@@ -23,7 +23,7 @@ import {
   takeLatestPendingQr,
   hasPendingQr,
 } from './providers/sign-state'
-import type { ImMessage, CheckinInfo } from './types'
+import type { ImMessage, CheckinInfo, AppConfig } from './types'
 import { DEFAULTS } from './constants'
 import YAML from 'yaml'
 import axios from 'axios'
@@ -71,6 +71,29 @@ function getLanIp(): string {
   return ''
 }
 
+/**
+ * 推送里给出的「手机可打开」基址（上传页 / 取消签到链接用）。
+ *
+ * 优先级：dingtalk.publicUrl（用户显式配置，跨网段/域名场景）> 局域网 IP（同 Wi-Fi 默认可用）
+ *        > 127.0.0.1（兜底，仅本机浏览器可开）。
+ *
+ * 修复背景：此前没有 publicUrl 时固定回退 127.0.0.1，推送到手机的二维码上传链接
+ * 指向手机自己的 localhost，必然打不开；而控制台里同样用途的地址早已用 lanIp 自动拼装
+ * （见 console-ui.ts mobileUploadUrl），两处行为现已对齐。
+ */
+function getMobileBaseUrl(config: AppConfig): string {
+  const port = config.web?.port || 3456
+  const configured = (config.dingtalk?.publicUrl || '').trim()
+  if (configured) return configured.replace(/\/+$/, '')
+  // 仅监听本机时局域网 IP 也无意义（手机连不上），直接给本机地址，避免误导成「手机能开」
+  const hostOnly = /^(127\.0\.0\.1|localhost|::1)$/.test((config.web?.host || '127.0.0.1').trim())
+  if (!hostOnly) {
+    const lanIp = getLanIp()
+    if (lanIp) return `http://${lanIp}:${port}`
+  }
+  return `http://127.0.0.1:${port}`
+}
+
 function openBrowser(url: string) {
   const cp = require('child_process')
   const cmd =
@@ -84,7 +107,14 @@ function openBrowser(url: string) {
 
 async function main() {
   // 1. 加载配置
-  logger.info('=== ChaoXing Auto Sign v3.1 ===')
+  //    版本号从 package.json 动态读取（此前硬编码 v3.1，已滞后多个版本）
+  let bootVersion = ''
+  try {
+    bootVersion = String(require('../package.json').version || '')
+  } catch {
+    bootVersion = ''
+  }
+  logger.info(`=== ChaoXing Auto Sign ${bootVersion ? 'v' + bootVersion : '(unknown version)'} ===`)
   const config = loadConfig()
 
   // 2. 初始化
@@ -122,15 +152,10 @@ async function main() {
 
   // 控制台状态数据提供者（每次请求实时计算；闭包引用后续初始化的模块）
   // 注意：上传页服务先于业务模块启动，早期请求可能命中 TDZ，故全部包 try/catch
-  // 版本号从 package.json 动态读取——此前这里硬编码为 '3.1'，
-  // 导致控制台侧边栏一直显示旧版本（实际已迭代到 3.4.x）。
+  // 版本号来源见 main() 开头的 bootVersion：从 package.json 动态读取，启动横幅与控制台共用，
+  // 不再各自硬编码（历史上的 '3.1' 曾导致控制台侧边栏长期显示旧版本）。
   // 编译产物位于 build/，require('../package.json') 指向项目根，打包进 asar 后同样成立。
-  let appVersion = ''
-  try {
-    appVersion = String(require('../package.json').version || '')
-  } catch {
-    appVersion = ''
-  }
+  const appVersion = bootVersion
 
   const getConsoleStatus = () => {
     const base: any = {
@@ -420,7 +445,7 @@ async function main() {
         clearFail(aid)
         logger.warn(`${courseName} 是二维码签到，等待上传图片`)
 
-        const baseUrl = config.dingtalk?.publicUrl || `http://127.0.0.1:${config.web?.port || 3456}`
+        const baseUrl = getMobileBaseUrl(config)
         const uploadUrl = `${baseUrl}/upload?type=qr${config.web?.token ? `&token=${encodeURIComponent(config.web.token)}` : ''}`
 
         await notifier.notify(
@@ -434,7 +459,7 @@ async function main() {
       let confirmed = true
       if (config.checkin.confirmBefore?.enabled) {
         const waitSec = Math.max(3, config.checkin.confirmBefore.waitSeconds || 10)
-        const cancelUrl = (config.dingtalk?.publicUrl || `http://127.0.0.1:${config.web?.port || 3456}`) + '/api/confirm/cancel?aid=' + encodeURIComponent(aid) +
+        const cancelUrl = getMobileBaseUrl(config) + '/api/confirm/cancel?aid=' + encodeURIComponent(aid) +
           (config.web?.token ? `&token=${encodeURIComponent(config.web.token)}` : '')
         cancelledAids.delete(aid)
         await notifier.notify(

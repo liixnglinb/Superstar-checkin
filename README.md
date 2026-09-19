@@ -1,4 +1,4 @@
-﻿# 📅 学习通自动签到助手 · ChaoXing Auto Sign
+# 📅 学习通自动签到助手 · ChaoXing Auto Sign
 
 <div align="center">
 
@@ -254,8 +254,8 @@ report: { enabled: true, hour: 22, weekly: true }  # 每日/每周报告
 
 # 通知推送
 notify:
-  desktop: { enabled: true }
-  quiet: { enabled: false, start: "23:00", end: "07:00" }
+  desktop: true            # 软件自带桌面弹窗，布尔值（false 关闭）；不是 {enabled: ...}
+  quiet: { enabled: false, start: "23:00", end: "07:00" }   # 免打扰时段，期间不弹桌面通知
   channels:
     - type: dingtalk      # 钉钉群机器人
       enabled: false
@@ -289,6 +289,11 @@ web:
   port: 3456              # 控制台 / 上传页 / API 统一端口
   host: 127.0.0.1         # 默认仅本机访问；改 0.0.0.0 可局域网访问（务必配 token）
   watchClipboard: false   # 复制/截图含签到二维码时自动识别
+  token: ""               # 首次运行自动生成并写回；留空会导致控制台/上传页/API 全部 401
+
+# 手机可打开的上传页地址（二维码签到推送里给的链接）
+dingtalk:
+  publicUrl: ""           # 留空时自动用局域网 IP（需 web.host 非 127.0.0.1），同 Wi-Fi 下即可打开
 ```
 
 ---
