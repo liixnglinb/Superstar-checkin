@@ -6,6 +6,9 @@
  * 硬编码进了一个验证脚本并提交到**公开仓库**（commit e023445，含在 v3.7.0 发布里）。
  * 事后删文件也没用 —— 历史仍然可查。这次加自动检查，从机制上避免同类事故。
  *
+ * 注意：本文件内的示例串必须保持"不匹配真实密钥格式"（见下方 dingExampleAppKeyHere），
+ * 否则检查器自身会变成泄露源 —— 第一版就犯过这个错。
+ *
  * 用法：
  *   node scripts/check-secrets.js          # 检查暂存区（pre-commit 用）
  *   node scripts/check-secrets.js --all    # 检查工作区所有受版本控制的文件
