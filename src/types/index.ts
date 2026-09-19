@@ -205,6 +205,16 @@ export interface AppConfig {
     appKey: string
     appSecret: string
     publicUrl?: string
+    /**
+     * 钉钉 Stream 模式接收图片（推荐）。
+     * 用「企业内部应用机器人」的长连接接收群里的图片消息，无需公网地址、无需内网穿透：
+     * 软件主动向外连 wss-open-connection.dingtalk.com，你在群里发图即自动识别签到。
+     */
+    stream?: {
+      enabled: boolean
+      /** 输出 SDK 调试日志（排查连不上/收不到消息时打开） */
+      debug?: boolean
+    }
   }
   ocr?: {
     provider: 'tencent' | 'local'

@@ -40,6 +40,12 @@ export interface ConsoleStatus {
   failCount?: number
   cookieValid?: boolean
   imConnected?: boolean
+  /** 钉钉图片通道（Stream 模式）：是否启用 / 凭据是否齐全 / 长连接是否已建立 */
+  dingtalkStreamEnabled?: boolean
+  dingtalkStreamConfigured?: boolean
+  dingtalkStreamConnected?: boolean
+  /** 最近一次收到钉钉消息的时间戳（0 表示还没收到过） */
+  dingtalkLastMessageAt?: number
   qrPending?: boolean
   notifyDesktop?: boolean
   quiet?: { enabled: boolean; start: string; end: string }
@@ -534,6 +540,7 @@ body{font-family:var(--font);background:
 /* 窄桌面窗口：状态条按优先级收窄，优先保留「登录 / 待签」两类关键信息 */
 @media (max-width:1180px){.chip{font-size:var(--fs-xs);padding:4px 9px}#chipMode{display:none}}
 @media (max-width:1040px){#chipIm{display:none}.page-sub{display:none}}
+@media (max-width:1240px){#chipDing{display:none}}
 .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:var(--radius-sm);border:none;font-size:var(--fs-base);font-weight:var(--fw-semibold);cursor:pointer;font-family:var(--font);transition:transform var(--dur-fast) var(--ease),background var(--dur) var(--ease),box-shadow var(--dur) var(--ease),opacity var(--dur) var(--ease),filter var(--dur) var(--ease)}
 .btn svg{width:15px;height:15px}
 .btn:active{transform:scale(.97);transition-duration:80ms}
@@ -1004,6 +1011,13 @@ tr:hover td{background:var(--n-25)}
         <span class="chip" id="chipMode">${esc(modeText(mode))}</span>
         <span class="chip ${status.cookieValid === false ? 'chip-err' : 'chip-ok'}" id="chipCookie">${status.cookieValid === false ? 'Cookie 失效' : 'Cookie 有效'}</span>
         <span class="chip ${status.imConnected ? 'chip-ok' : 'chip-warn'}" id="chipIm">${status.imConnected ? 'IM 已连接' : 'IM 不可用'}</span>
+        <span class="chip ${status.dingtalkStreamConnected ? 'chip-ok' : (status.dingtalkStreamEnabled ? 'chip-warn' : '')}" id="chipDing">${
+          status.dingtalkStreamConnected
+            ? '钉钉图片通道已连接'
+            : status.dingtalkStreamEnabled
+              ? (status.dingtalkStreamConfigured ? '钉钉连接中' : '钉钉缺凭据')
+              : '钉钉图片通道未启用'
+        }</span>
         ${status.qrPending ? '<span class="chip chip-warn" id="chipQr">有二维码待签</span>' : '<span class="chip chip-warn" id="chipQr" style="display:none">有二维码待签</span>'}
       </div>
       <div class="top-actions">
@@ -1192,6 +1206,34 @@ tr:hover td{background:var(--n-25)}
               <span class="field-hint">依次检测公网 / 登录 / 课程 / 签到 / IM 通道，失败会给出原因与建议</span>
             </div>
             <div id="diagResult" style="display:none;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden"></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-head"><span class="section-title">钉钉图片通道（二维码签到）</span><span class="section-more">群里发二维码图片即自动签到</span></div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+            <div class="field-hint" style="line-height:1.8">
+              用法：在钉钉开放平台创建<b>企业内部应用</b> → 应用能力里添加<b>机器人</b>（接收模式选 <b>Stream</b>）→ 发布并把机器人拉进群。<br>
+              之后同学把签到二维码发到群里，软件会自动下载识别并签到，<b>你不需要做任何操作</b>。<br>
+              走长连接，<b>不需要公网地址、不需要端口映射</b>。保存后需重启软件生效。
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label class="field-label" for="dingKeyInput" style="width:104px">AppKey</label>
+              <input class="field-input" id="dingKeyInput" type="text" placeholder="钉钉企业内部应用的 ClientID(AppKey)" style="width:320px" spellcheck="false">
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label class="field-label" for="dingSecretInput" style="width:104px">AppSecret</label>
+              <input class="field-input" id="dingSecretInput" type="password" placeholder="钉钉企业内部应用的 ClientSecret(AppSecret)" style="width:320px" spellcheck="false">
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label class="field-label" style="width:104px">启用状态</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base)">
+                <input type="checkbox" id="dingEnabledInput"> 启用钉钉图片通道
+              </label>
+              <button class="btn btn-primary" id="dingSaveBtn">保存钉钉设置</button>
+              <span class="cfg-msg" id="dingMsg"></span>
+            </div>
+            <div class="field-hint" id="dingStateHint"></div>
           </div>
         </div>
 
@@ -1516,6 +1558,19 @@ tr:hover td{background:var(--n-25)}
     if(chipIm){
       chipIm.textContent=s.imConnected?'IM 已连接':'IM 不可用'
       chipIm.className='chip '+(s.imConnected?'chip-ok':'chip-warn')
+    }
+    var chipDing=document.getElementById('chipDing')
+    if(chipDing){
+      if(s.dingtalkStreamConnected){
+        chipDing.textContent='钉钉图片通道已连接'
+        chipDing.className='chip chip-ok'
+      }else if(s.dingtalkStreamEnabled){
+        chipDing.textContent=s.dingtalkStreamConfigured?'钉钉连接中':'钉钉缺凭据'
+        chipDing.className='chip chip-warn'
+      }else{
+        chipDing.textContent='钉钉图片通道未启用'
+        chipDing.className='chip'
+      }
     }
     var chipQr=document.getElementById('chipQr')
     if(chipQr)chipQr.style.display=s.qrPending?'':'none'
@@ -1846,6 +1901,43 @@ tr:hover td{background:var(--n-25)}
         if(d.ok)setTimeout(function(){location.reload()},800)
       })
       .catch(function(){msg.textContent='❌ 清空失败';msg.style.color='#B42318';clearHistoryBtn.disabled=false})
+  })
+
+  // ===== 钉钉图片通道设置 =====
+  // 走 Stream 长连接，不需要公网地址；凭据保存到 config.yaml 后需重启建立连接。
+  function dingLoad(){
+    var keyEl=document.getElementById('dingKeyInput')
+    var enEl=document.getElementById('dingEnabledInput')
+    var hint=document.getElementById('dingStateHint')
+    if(!keyEl)return
+    apiFetch('/api/dingtalk/settings').then(function(r){return r.json()}).then(function(d){
+      if(!d.ok)return
+      keyEl.value=d.appKey||''
+      if(enEl)enEl.checked=!!d.enabled
+      var sec=document.getElementById('dingSecretInput')
+      if(sec&&d.hasSecret)sec.placeholder='已保存（留空则不修改）'
+      if(hint)hint.textContent=d.hasSecret
+        ? '已配置 AppSecret（出于安全不回显，留空即保持不变）'
+        : '尚未配置 AppSecret'
+    }).catch(function(){})
+  }
+  dingLoad()
+  var dingSaveBtn=document.getElementById('dingSaveBtn')
+  if(dingSaveBtn)dingSaveBtn.addEventListener('click',function(){
+    var msg=document.getElementById('dingMsg')
+    var key=(document.getElementById('dingKeyInput')||{}).value||''
+    var sec=(document.getElementById('dingSecretInput')||{}).value||''
+    var en=!!(document.getElementById('dingEnabledInput')||{}).checked
+    dingSaveBtn.disabled=true;dingSaveBtn.textContent='保存中…'
+    apiFetch('/api/dingtalk/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({appKey:key,appSecret:sec,enabled:en})})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        dingSaveBtn.disabled=false;dingSaveBtn.textContent='保存钉钉设置'
+        if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'#178A5B':'#B42318'}
+        if(d.ok){var s=document.getElementById('dingSecretInput');if(s)s.value='';dingLoad()}
+      })
+      .catch(function(){dingSaveBtn.disabled=false;dingSaveBtn.textContent='保存钉钉设置';if(msg){msg.textContent='❌ 保存失败，请重试';msg.style.color='#B42318'}})
   })
 
   // ===== 运行设置（轮询/抖动/重试/半径/通知/免打扰/日报） =====

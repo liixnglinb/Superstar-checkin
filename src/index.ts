@@ -3,6 +3,7 @@ import { loadConfig } from './providers/config'
 import { initStorage } from './providers/storage'
 import { AccountManager } from './providers/account-manager'
 import { ImListener } from './listeners/im-listener'
+import { DingTalkStreamListener } from './listeners/dingtalk-listener'
 import { PollListener } from './listeners/poll-listener'
 import { CheckinHandler } from './handlers/checkin-handler'
 import { NotificationManager } from './notifiers'
@@ -284,6 +285,11 @@ async function main() {
         todayStats,
         cookieValid: !!primaryMeta.cookie,
         imConnected: watchdog.imConnected,
+        /** 钉钉图片通道（Stream 模式）状态：是否已启用 / 已配置凭据 / 已连接 */
+        dingtalkStreamEnabled: !!config.dingtalk?.stream?.enabled,
+        dingtalkStreamConfigured: !!(config.dingtalk?.appKey && config.dingtalk?.appSecret),
+        dingtalkStreamConnected: dingtalkStream ? dingtalkStream.isConnected() : false,
+        dingtalkLastMessageAt: dingtalkStream ? dingtalkStream.getLastMessageAt() : 0,
         qrPending: hasPendingQr(),
         notifyDesktop: config.notify.desktop !== false,
         quiet: config.notify.quiet,
@@ -728,40 +734,81 @@ async function main() {
     }
   }
 
-  // 9. 钉钉回调服务器图片处理（服务已在启动早期创建并启动，这里仅绑定 onImage 回调）
+  /**
+   * 二维码图片的统一处理入口。
+   *
+   * 所有「图片到达软件」的通道都汇入这里：钉钉 Stream 群消息、钉钉 HTTP 回调、
+   * 手机上传页 POST /upload/image、qrcode/ 目录监听。集中一处避免多份逻辑各自漂移
+   * （此前上传页与目录监听就是两份高度重复的代码）。
+   *
+   * @returns 面向用户的简短结果文案（上传页会直接显示给手机端）
+   */
+  const handleQrImage = async (imageBuffer: Buffer, source: string): Promise<string> => {
+    const payload = await decodeQrFromBuffer(imageBuffer, config.ocr)
+    if (!payload) {
+      logger.error(`未能从图片中解析出二维码 enc 参数（来源: ${source}）`)
+      await notifier.notify('❌ 二维码解析失败', `请确认发来的是学习通签到二维码图片（来源: ${source}）`)
+      return '❌ 未能识别二维码，请发送原图（不要截图压缩或转发压缩后的图）'
+    }
+
+    // 优先使用软件已检测到的待处理签到；否则直接用二维码自带的 aid
+    const pending = hasPendingQr() ? takeLatestPendingQr() : null
+    const aid = pending?.aid || payload.aid
+    if (!aid) {
+      logger.warn('未检测到待处理签到，且二维码未包含活动编号，无法确定签到活动')
+      await notifier.notify(
+        '⚠️ 无法确定签到活动',
+        '当前没有检测到待处理的签到，且该二维码未包含活动编号，请等签到发布后再发二维码',
+      )
+      return '⚠️ 二维码已识别，但不含活动编号且当前没有待处理签到，无法确定签到哪个活动'
+    }
+
+    logger.info(`二维码已识别（来源: ${source}，aid=${aid}），开始签到...`)
+    const results = await checkinHandler.handleQr(aid, payload.enc)
+    const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
+    await notifier.notify('✅ 二维码签到结果', summary)
+    const allFailed = results.length > 0 && results.every(r => !r.success)
+    if (allFailed) allowRetryOnFailure(aid)
+    else clearFail(aid)
+
+    const first = results[0]
+    return first
+      ? `${first.success ? '✅ 签到成功' : '❌ 签到失败'}: ${first.message}`
+      : '⚠️ 没有可用账号，未能提交签到'
+  }
+
+  // 钉钉 HTTP 回调（Stream 模式不需要它，但保留以兼容已配置公网回调的用户）
   if (dtServer) {
     dtServer.onImage(async (imageBuffer: Buffer) => {
-      // 二维码签到：解析图片中的二维码（enc + aid），支持拖拽/上传任意签到码
-      const payload = await decodeQrFromBuffer(imageBuffer, config.ocr)
-
-      if (!payload) {
-        logger.error('未能从图片中解析出二维码 enc 参数')
-        await notifier.notify('❌ 二维码解析失败', '请确认拖入/上传的是学习通签到二维码图片')
-        return
-      }
-
-      // 优先使用软件已检测到的待处理签到；否则直接使用二维码自带的 aid（二维码更新后任意拖入即可）
-      const pending = hasPendingQr() ? takeLatestPendingQr() : null
-      const aid = pending?.aid || payload.aid
-      if (!aid) {
-        logger.warn('未检测到待处理签到，且二维码未包含活动编号，无法确定签到活动')
-        await notifier.notify(
-          '⚠️ 无法确定签到活动',
-          '当前没有检测到待处理的签到，且该二维码未包含活动编号，请等签到发布后再拖入二维码',
-        )
-        return
-      }
-
-      logger.info(`解析到二维码 enc（aid=${aid}），开始签到...`)
-      const results = await checkinHandler.handleQr(aid, payload.enc)
-      const summary = results
-        .map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`)
-        .join('\n')
-      await notifier.notify('✅ 二维码签到结果', summary)
-      const allFailed = results.length > 0 && results.every(r => !r.success)
-      if (allFailed) allowRetryOnFailure(aid)
-      else clearFail(aid)
+      await handleQrImage(imageBuffer, '钉钉回调')
     })
+  }
+
+  // 9.5 钉钉 Stream 模式：群内发二维码图片即自动签到
+  // 这是「人不在现场、同学把码发群里」场景下最省事的一条路：无需公网地址，你在群里发图即可。
+  let dingtalkStream: DingTalkStreamListener | null = null
+  const dtCfg = config.dingtalk
+  if (dtCfg?.stream?.enabled && dtCfg.appKey && dtCfg.appSecret) {
+    dingtalkStream = new DingTalkStreamListener({
+      clientId: dtCfg.appKey,
+      clientSecret: dtCfg.appSecret,
+      debug: !!dtCfg.stream.debug,
+      downloadImage: async (code, robotCode) => {
+        if (!dtServer) return null
+        try {
+          return await dtServer.downloadImageByCode(code, robotCode)
+        } catch (e: any) {
+          logger.error(`钉钉图片下载失败: ${e.message}`)
+          return null
+        }
+      },
+      onImage: async (buffer, info) => {
+        await handleQrImage(buffer, `钉钉群消息(${info.from})`)
+      },
+    })
+    await dingtalkStream.start()
+  } else if (dtCfg?.stream?.enabled) {
+    logger.warn('钉钉 Stream 已启用但缺少 appKey/appSecret，图片通道不会启动')
   }
 
   // 9.5 看门狗：检测「漏签风险」并告警
@@ -1040,26 +1087,8 @@ async function main() {
     try {
       logger.info(`检测到图片: ${filename}`)
       const buffer = fs.readFileSync(filePath)
-
-      // 二维码签到：解析图片中的二维码（enc + aid）
-      const payload = await decodeQrFromBuffer(buffer, config.ocr)
-      if (!payload) {
-        logger.error('未能从文件夹图片中解析出二维码 enc 参数')
-        return
-      }
-      const pending = hasPendingQr() ? takeLatestPendingQr() : null
-      const aid = pending?.aid || payload.aid
-      if (!aid) {
-        logger.warn('未检测到待处理签到，且二维码未包含活动编号，无法确定签到活动')
-        return
-      }
-      logger.info(`解析到二维码 enc（aid=${aid}），开始签到...`)
-      const results = await checkinHandler.handleQr(aid, payload.enc)
-      const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
-      await notifier.notify('✅ 二维码签到结果', summary)
-      const allFailed = results.length > 0 && results.every(r => !r.success)
-      if (allFailed) allowRetryOnFailure(aid)
-      else clearFail(aid)
+      // 统一走 handleQrImage：与钉钉群消息、手机上传页共用同一套解码 + 签到逻辑
+      await handleQrImage(buffer, `qrcode 文件夹(${safeName})`)
     } catch (e: any) {
       logger.error(`图片处理失败: ${e.message}`)
     }

@@ -932,6 +932,71 @@ export class DingTalkServer {
         return
       }
 
+      // 钉钉图片通道设置（写 config.yaml；Stream 长连接需重启后建立）
+      if (req.method === 'POST' && routePath === '/api/dingtalk/stream') {
+        try {
+          const body = JSON.parse(await this.readBody(req))
+          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
+          const existing = fs.existsSync(cfgFile)
+            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
+            : {}
+          const appKey = String(body.appKey ?? existing.dingtalk?.appKey ?? '').trim()
+          const appSecret = String(body.appSecret ?? existing.dingtalk?.appSecret ?? '').trim()
+          const enabled = body.enabled !== undefined ? !!body.enabled : !!existing.dingtalk?.stream?.enabled
+
+          existing.dingtalk = {
+            ...(existing.dingtalk || {}),
+            appKey,
+            appSecret,
+            stream: { ...(existing.dingtalk?.stream || {}), enabled },
+          }
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
+
+          const missing: string[] = []
+          if (!appKey) missing.push('AppKey')
+          if (!appSecret) missing.push('AppSecret')
+          const message = enabled && missing.length
+            ? `已保存，但缺少 ${missing.join(' 和 ')}，图片通道无法连接`
+            : enabled
+              ? '已保存。请重启软件以建立钉钉长连接（重启后在顶部状态条查看是否"已连接"）'
+              : '已保存（图片通道已关闭）'
+          logger.info(`钉钉图片通道设置已保存：enabled=${enabled} 凭据${missing.length ? '不完整' : '完整'}`)
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({
+            ok: true,
+            message,
+            needsRestart: enabled && !missing.length,
+            // 回显 appKey 便于核对；appSecret 一律不回显
+            appKey,
+            hasSecret: !!appSecret,
+          }))
+        } catch (e: any) {
+          logger.error(`保存钉钉设置失败: ${e.message}`)
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `保存失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 钉钉图片通道设置：读取（appKey 回显、appSecret 只报是否存在）
+      if (req.method === 'GET' && routePath === '/api/dingtalk/settings') {
+        try {
+          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
+          const cfg = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({
+            ok: true,
+            appKey: cfg.dingtalk?.appKey || '',
+            hasSecret: !!cfg.dingtalk?.appSecret,
+            enabled: !!cfg.dingtalk?.stream?.enabled,
+          }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: e.message }))
+        }
+        return
+      }
+
       // 监听课程设置（保存 → 立即生效；此前是「写配置 + 提示重启」，实际点了没反应）
       if (req.method === 'POST' && routePath === '/api/watch') {
         try {
@@ -1084,13 +1149,20 @@ export class DingTalkServer {
 
           logger.debug(`钉钉消息: ${data.msgtype}`)
 
-          // 处理图片消息（rich text 中的图片 或 直接发图）
-          if (data.msgtype === 'richText' && data.richText?.richText) {
-            for (const item of data.richText.richText) {
-              if (item.pictureDownloadCode) {
-                await this.handleImageCode(item.pictureDownloadCode)
-              }
-            }
+          // 处理图片消息（富文本中的图片 或 直接发图）
+          // 兼容三种形态：{ richText: [...] }、{ content: { richText: [...] } }、{ content: { downloadCode } }
+          const robotCode = (data as any).robotCode || undefined
+          const imageCodes: string[] = []
+          const collect = (item: any) => {
+            const code = item?.pictureDownloadCode || item?.downloadCode
+            if (code && typeof code === 'string') imageCodes.push(code)
+          }
+          if (Array.isArray((data as any).richText)) (data as any).richText.forEach(collect)
+          if (Array.isArray((data as any).content?.richText)) (data as any).content.richText.forEach(collect)
+          if ((data as any).msgtype === 'picture') collect((data as any).content)
+
+          for (const code of imageCodes) {
+            await this.handleImageCode(code, robotCode)
           }
 
           // 处理文字指令
@@ -1163,7 +1235,15 @@ export class DingTalkServer {
           }
 
           if (this.imageHandler && buffer.length > 0) {
-            await this.imageHandler(buffer)
+            // 把处理结果回给上传页：此前一律返回"正在处理"，用户在手机上
+            // 既看不到识别失败，也看不到签到成功与否，只能回来翻日志
+            const r = String((await (this.imageHandler as any)(buffer)) || '')
+            const ok = !r || !/❌|⚠️|失败|未能/.test(r)
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify(ok
+              ? { success: true, message: r || '图片已接收' }
+              : { success: false, error: r || '处理失败' }))
+            return
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1193,42 +1273,44 @@ export class DingTalkServer {
    * 通过钉钉 API 下载图片（企业内部机器人）
    *
    * 链路：gettoken(appKey+appSecret) → messageFiles/download(downloadCode, robotCode)
-   *       → downloadUrl → 下载为 Buffer → imageHandler
+   *       → downloadUrl → 下载为 Buffer
    *
-   * 说明：robotCode 在多数企业内部机器人场景下等于 appKey；若下载失败，
-   * 钉钉会返回具体错误，此时请改用 /upload 页面直接上传图片。
+   * robotCode 优先用调用方传入的值（Stream 模式的消息里自带 robotCode，比 appKey 准确）；
+   * 未传时退回 appKey（HTTP 回调场景下多数企业内部机器人两者相等）。
    */
-  private async handleImageCode(downloadCode: string) {
+  async downloadImageByCode(downloadCode: string, robotCode?: string): Promise<Buffer | null> {
     if (!this.appKey || !this.appSecret) {
       logger.warn('未配置 appKey/appSecret，无法从钉钉下载图片，请改用 /upload 页面上传')
-      return
+      return null
     }
+    const tokenResp = await axios.get('https://oapi.dingtalk.com/gettoken', {
+      params: { appkey: this.appKey, appsecret: this.appSecret },
+      proxy: getProxyConfig(),
+    })
+    const accessToken: string = tokenResp.data?.access_token
+    if (!accessToken) throw new Error('获取钉钉 access_token 失败: ' + JSON.stringify(tokenResp.data))
 
+    const dl = await axios.post(
+      'https://oapi.dingtalk.com/robot/messageFiles/download',
+      { downloadCode, robotCode: robotCode || this.appKey },
+      {
+        headers: { 'x-acs-dingtalk-access-token': accessToken },
+        proxy: getProxyConfig(),
+      },
+    )
+    const downloadUrl: string | undefined = dl.data?.downloadUrl
+    if (!downloadUrl) throw new Error('钉钉未返回图片下载地址: ' + JSON.stringify(dl.data))
+
+    const imgResp = await axios.get(downloadUrl, { responseType: 'arraybuffer', proxy: getProxyConfig() })
+    return Buffer.from(imgResp.data)
+  }
+
+  /** HTTP 回调入口：下载后交给 imageHandler（Stream 模式不走这里，见 dingtalk-listener.ts） */
+  private async handleImageCode(downloadCode: string, robotCode?: string) {
     try {
       logger.info(`收到钉钉图片: ${downloadCode}`)
-
-      const tokenResp = await axios.get('https://oapi.dingtalk.com/gettoken', {
-        params: { appkey: this.appKey, appsecret: this.appSecret },
-        proxy: getProxyConfig(),
-      })
-      const accessToken: string = tokenResp.data?.access_token
-      if (!accessToken) throw new Error('获取钉钉 access_token 失败: ' + JSON.stringify(tokenResp.data))
-
-      const dl = await axios.post(
-        'https://oapi.dingtalk.com/robot/messageFiles/download',
-        { downloadCode, robotCode: this.appKey },
-        {
-          headers: { 'x-acs-dingtalk-access-token': accessToken },
-          proxy: getProxyConfig(),
-        },
-      )
-      const downloadUrl: string | undefined = dl.data?.downloadUrl
-      if (!downloadUrl) throw new Error('钉钉未返回图片下载地址: ' + JSON.stringify(dl.data))
-
-      const imgResp = await axios.get(downloadUrl, { responseType: 'arraybuffer', proxy: getProxyConfig() })
-      const buffer = Buffer.from(imgResp.data)
-
-      if (this.imageHandler) await this.imageHandler(buffer)
+      const buffer = await this.downloadImageByCode(downloadCode, robotCode)
+      if (buffer && this.imageHandler) await this.imageHandler(buffer)
     } catch (e: any) {
       logger.error(`下载钉钉图片失败: ${e.message}`)
       logger.warn('图片下载失败，请改用手机 /upload 页面直接上传二维码')
