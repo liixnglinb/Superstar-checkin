@@ -43,7 +43,9 @@ axios.get = async function (url, cfg = {}) {
   const nowHour = new Date().getHours()
   // 兜底小时选一个"不是当前小时"的值，否则兜底放行会掩盖窗口过滤效果
   const sweepHour = (nowHour + 5) % 24
-  c.signinWindow = { enabled: true, padMinutes: 15, sweepHour }
+  // 每周兜底同样避开今天，否则整周的课程都会被放行，测不出星期过滤
+  const weeklySweepDay = (new Date().getDay() + 3) % 7
+  c.signinWindow = { enabled: true, padMinutes: 15, sweepHour, weeklySweepDay }
   fs.writeFileSync('config.windowtest.yaml', YAML.stringify(c), 'utf-8')
   fs.mkdirSync('data-windowtest', { recursive: true })
 
@@ -59,21 +61,36 @@ axios.get = async function (url, cfg = {}) {
   const active = (cr.data.channelList || []).filter(ch => ch.content?.isretire !== 1 && ch.content?.course?.data?.[0])
   if (active.length < 3) { log('可用课程不足，无法测试'); process.exit(1) }
   const atNight = active.slice(0, 2).map(ch => String(ch.key))
-  const noSample = active.slice(2).map(ch => String(ch.key))
-  log(`当前 ${nowHour} 点，兜底扫描小时设为 ${sweepHour}（刻意避开当前小时）`)
-  log(`预置「凌晨 03:00 发签到」样本的课程: ${atNight.join(', ')}`)
+  const atOtherDay = active.slice(2, 4).map(ch => String(ch.key))
+  const noSample = active.slice(4).map(ch => String(ch.key))
+  // 注意：today/otherDay 必须在下面的日志之前声明，否则日志引用了尚未初始化的
+  // const（临时死区）会直接抛错，表现为"跑到某一行就没输出了"
+  const today = new Date().getDay()
+  const otherDay = (today + 3) % 7
+  log(`当前 ${nowHour} 点（周${today}），兜底小时 ${sweepHour}、每周兜底周${weeklySweepDay}（均刻意避开当前）`)
+  log(`预置「今天 03:00」样本的课程: ${atNight.join(', ')}`)
+  log(`预置「周${otherDay} 03:00」样本的课程: ${atOtherDay.join(', ')}`)
   log(`无样本（应全天轮询）的课程数: ${noSample.length}`)
 
-  // 3) 预置时段数据：给前两门课写 03:00 的样本（≥4 次才会生效）
-  const samples = []
-  for (let i = 1; i <= 5; i++) {
-    const d = new Date(); d.setDate(d.getDate() - i); d.setHours(3, 0, 0, 0)
-    samples.push(d.getTime())
+  // 3) 预置时段数据
+  //    - atNight: 今天 03:00 的样本（当前不是该时刻 → 时刻窗口外）
+  //    - atOtherDay: 只在「另一个星期」03:00 的样本 → 星期不匹配，应被跳过
+  const mkSamples = (dow, hh) => {
+    const arr = []
+    for (let i = 1; i <= 5; i++) {
+      const d = new Date()
+      d.setDate(d.getDate() - 7 * i)
+      d.setDate(d.getDate() - d.getDay() + dow)
+      d.setHours(hh, 0, 0, 0)
+      arr.push(d.getTime())
+    }
+    return arr
   }
   const winData = {}
-  for (const id of atNight) winData[id] = { samples: [...samples], updatedAt: Date.now() }
+  for (const id of atNight) winData[id] = { samples: mkSamples(today, 3), updatedAt: Date.now() }
+  for (const id of atOtherDay) winData[id] = { samples: mkSamples(otherDay, 3), updatedAt: Date.now() }
   fs.writeFileSync('data-windowtest/signin-windows.json', JSON.stringify(winData, null, 2), 'utf-8')
-  log(`已写入 data-windowtest/signin-windows.json（${atNight.length} 门课，各 5 次样本）`)
+  log(`已写入时段数据：时刻外 ${atNight.length} 门（今天 03:00）、星期不符 ${atOtherDay.length} 门（周${otherDay} 03:00）`)
 
   // 4) 启动服务
   log('\n启动被测服务...')
@@ -99,14 +116,16 @@ axios.get = async function (url, cfg = {}) {
   polled.clear()
   await new Promise(r => setTimeout(r, 26000))
   const hitNight = atNight.filter(id => polled.has(id))
+  const hitOtherDay = atOtherDay.filter(id => polled.has(id))
   const hitNoSample = noSample.filter(id => polled.has(id))
 
   log('\n=== 结果 ===')
   log(`  被请求的课程总数: ${polled.size}`)
-  log(`  设了凌晨窗口的课是否被请求: ${hitNight.length === 0 ? '否 ✅（窗口外正确跳过）' : '是 ❌ ' + hitNight.join(',')}`)
-  log(`  无样本的课是否被请求: ${hitNoSample.length}/${noSample.length} ${hitNoSample.length === noSample.length ? '✅（未限制）' : '⚠ 部分未被请求'}`)
-  const pass = hitNight.length === 0 && hitNoSample.length === noSample.length
-  log(pass ? '\n✅ 时段过滤按预期工作' : '\n❌ 时段过滤未按预期工作')
+  log(`  ① 时刻窗口外的课是否被请求: ${hitNight.length === 0 ? '否 ✅' : '是 ❌ ' + hitNight.join(',')}`)
+  log(`  ② 星期不符的课是否被请求:   ${hitOtherDay.length === 0 ? '否 ✅' : '是 ❌ ' + hitOtherDay.join(',')}`)
+  log(`  ③ 无样本的课是否被请求:     ${hitNoSample.length}/${noSample.length} ${hitNoSample.length === noSample.length ? '✅（未限制）' : '⚠ 部分未被请求'}`)
+  const pass = hitNight.length === 0 && hitOtherDay.length === 0 && hitNoSample.length === noSample.length
+  log(pass ? '\n✅ 时段 + 星期过滤均按预期工作' : '\n❌ 过滤未按预期工作')
 
   fs.writeFileSync(path.join('data-windowtest', 'report.log'), LOG.join('\n') + '\n', 'utf-8')
   process.exit(pass ? 0 : 1)

@@ -492,10 +492,16 @@ async function main() {
     if (!listening) return false
     if (course.isRetired) return false
     if (disabledCourses.has(String(course.courseId))) return false
-    // 签到时段过滤：只为「历史上会发签到的时段」轮询（含每日兜底扫描，见 signin-window.ts）
+    // 签到时段过滤：只为「历史上会发签到的时段/星期」轮询（含每日与每周兜底扫描，见 signin-window.ts）
     const win = config.signinWindow
     if (win?.enabled !== false) {
-      if (!shouldPollByWindow(course.courseId, new Date(), win?.padMinutes ?? 15, win?.sweepHour ?? 7)) {
+      if (!shouldPollByWindow(
+        course.courseId,
+        new Date(),
+        win?.padMinutes ?? 15,
+        win?.sweepHour ?? 7,
+        win?.weeklySweepDay ?? 0,
+      )) {
         return false
       }
     }

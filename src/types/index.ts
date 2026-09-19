@@ -209,8 +209,14 @@ export interface AppConfig {
     enabled: boolean
     /** 窗口两侧留白（分钟），默认 15 */
     padMinutes: number
-    /** 每日兜底扫描小时（0~23）；-1 关闭。防止时段算错后该课永远不再被轮询 */
+    /** 每日兜底扫描小时（0~23）；-1 关闭。用于发现「时刻」漂移 */
     sweepHour: number
+    /**
+     * 每周兜底扫描的星期（0=周日 … 6=周六）；-1 关闭。
+     * 用于发现「星期」漂移 —— 老师换到别的星期上课时，不做这次扫描的话
+     * 这门课会永远不再被查询（静默漏签到）。
+     */
+    weeklySweepDay: number
   }
   dingtalk?: {
     appKey: string
