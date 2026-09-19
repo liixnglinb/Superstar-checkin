@@ -29,6 +29,11 @@ try {
 
 type MessageHandler = (message: ImMessage, cookie: string) => void
 
+/** 平台侧确认未开放（系统维护中）时的探测间隔：6 小时。
+ *  IM 是「锦上添花」的实时通道，签到检测由轮询承担，因此低频探测即可，
+ *  既不放弃「服务恢复后自动接回」，也不对死接口高频空转。 */
+const PLATFORM_DOWN_RETRY_MS = 6 * 60 * 60 * 1000
+
 /**
  * 环信 IM 监听器
  *
@@ -48,6 +53,9 @@ export class ImListener {
   private refreshTimer: NodeJS.Timeout | null = null
   private reconnectAttempt = 0
   private reconnectFailCount = 0
+  /** 平台侧是否明确未开放（如 /webim/me 返回「系统维护中」）。
+   *  为 true 时所有重连路径（含环信握手失败触发的 onError）都走低频探测，不再高频重试。 */
+  private platformDown = false
   private tokenRefreshMs: number
   /** 连接状态回调（看门狗用） */
   onStatusChange: ((connected: boolean) => void) | null = null
@@ -165,11 +173,15 @@ export class ImListener {
       await this.openWithFreshToken()
       this.startTokenRefresh()
     } catch (e: any) {
-      // 首次连接失败（如学习通下线 webim/me token 接口 / Cookie 失效 / 网络抖动）：
-      // 记录日志并调度重连，不向调用方抛错，保证轮询/上传页流程正常继续。
       this.reconnectFailCount++
-      logger.error(`IM 连接失败（hybrid/poll 模式由轮询兜底）: ${e.message}`)
-      this.scheduleReconnect()
+      if (e?.retryAfterMs) {
+        // 平台侧未开放（系统维护中）：不是本机/账号问题，降为低频重试并且不当成错误刷屏
+        logger.warn(`IM 通道当前不可用（学习通服务端未开放）：${e.message}；已降为每 ${Math.round(e.retryAfterMs / 3600000)} 小时探测一次，签到检测由轮询承担`)
+      } else {
+        // 首次连接失败（Cookie 失效 / 网络抖动等）：记录日志并调度重连，不向调用方抛错
+        logger.error(`IM 连接失败（hybrid/poll 模式由轮询兜底）: ${e.message}`)
+      }
+      this.scheduleReconnect(e?.retryAfterMs)
     }
   }
 
@@ -187,10 +199,35 @@ export class ImListener {
 
   /** 断线后按退避间隔重连，避免雪崩。
    *  连续失败超过阈值（如 token 接口被服务端下线）时降为低频重试（30 分钟一次），
-   *  避免对已失效接口高频发送无效请求刷屏日志。 */
-  private scheduleReconnect(delayMs = 5000) {
+   *  避免对已失效接口高频发送无效请求刷屏日志。
+   *  @param platformDownMs 平台侧明确不可用时的固定重试间隔（如「系统维护中」→ 6 小时） */
+  private scheduleReconnect(delayMs = 5000, platformDownMs?: number) {
     if (this.reconnectTimer) return
     this.reconnectFailCount++
+
+    // 平台侧已确认未开放：无论从哪条路径进来（含环信握手失败触发的 onError）都统一低频探测，
+    // 否则 onError 会用 2s 的默认参数绕过这里的判断，把死接口重新拉回高频重试。
+    if (!platformDownMs && this.platformDown) platformDownMs = PLATFORM_DOWN_RETRY_MS
+
+    if (platformDownMs && platformDownMs > 0) {
+      // 平台侧未开放：不做指数退避，固定低频探测即可（避免日志与无效请求刷屏）
+      this.reconnectAttempt++
+      this.reconnectTimer = setTimeout(async () => {
+        this.reconnectTimer = null
+        try {
+          await this.openWithFreshToken()
+          this.reconnectAttempt = 0
+          this.reconnectFailCount = 0
+          this.platformDown = false
+          logger.info('IM 通道已恢复，重新开始实时监听')
+          this.startTokenRefresh()
+        } catch (e: any) {
+          this.scheduleReconnect(delayMs, e?.retryAfterMs || platformDownMs)
+        }
+      }, platformDownMs)
+      return
+    }
+
     if (this.reconnectFailCount > 5) {
       delayMs = 30 * 60 * 1000
     }
@@ -201,10 +238,11 @@ export class ImListener {
       try {
         logger.info(`IM 重连中（第 ${this.reconnectAttempt} 次）...`)
         await this.openWithFreshToken()
+        this.platformDown = false
         this.startTokenRefresh()
       } catch (e: any) {
         logger.error(`IM 重连失败: ${e.message}`)
-        this.scheduleReconnect()
+        this.scheduleReconnect(5000, e?.retryAfterMs)
       }
     }, backoff)
   }
@@ -237,6 +275,22 @@ export class ImListener {
       responseType: 'text',
       proxy: getProxyConfig(),
     })
+
+    /**
+     * 平台侧未开放：学习通会返回 HTTP 200 + 一张「信息提示 / 系统维护中，功能暂时无法使用」页，
+     * 而不是 4xx/5xx。这种情况下页面里当然没有 #myToken，若按普通失败处理会被当成网络抖动
+     * 反复重连。此处显式识别，交由 scheduleReconnect 走低频探测。
+     *
+     * 实测（2026-09-19）：带有效 Cookie 请求 → 200 + 该维护页；不带 Cookie → 302 跳
+     * passport2 登录页。即鉴权是通过的，是服务端关闭了 /webim/me 这条路由。
+     */
+    if (typeof res.data === 'string' && res.data.includes('系统维护中')) {
+      this.platformDown = true
+      const err: any = new Error('学习通返回「系统维护中，功能暂时无法使用」')
+      err.retryAfterMs = PLATFORM_DOWN_RETRY_MS
+      throw err
+    }
+
     const $ = cheerio.load(res.data)
     const token = $('#myToken').text()
     if (!token) throw new Error('未能获取 IM token（IM 通道暂不可用，已由轮询监听兜底）')

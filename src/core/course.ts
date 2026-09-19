@@ -80,9 +80,17 @@ export async function getCourseList(cookie: string): Promise<CourseInfo[]> {
       if (!data) continue
 
       const courseId = String(channel.key || data.courseId || '')
-      // 学习通结构：channel.key 是 courseId；classId 在 course.data[0].id（课程空间 ID）。
-      // 旧代码取 data.classId / channel.id，前者不存在、后者恒为 0，导致 classId 全空。
-      const classId = String(data.id || data.classId || channel.id || '')
+      /**
+       * classId 必须取 channel.content.id（老结构里等同于 channel.key，两者实测一致）。
+       *
+       * ⚠️ 2026-09-19 修复：此前取的是 data.id，而 data.id 是**课程ID**（如 210951295），
+       * 真正的 classId 是 channel.content.id（如 131533226）。用课程ID当 classId 请求
+       * mobilelearn 的活动列表会被判定为学生不在该班，25/25 门课全部返回
+       * {"result":0,"errorMsg":"非本班学生"}，轮询因此永远发现不了任何签到
+       * —— IM 通道下线后这就是唯一的检测通道，等同于全量漏签。
+       * 实测：改用 channel.content.id 后 25/25 门课返回 result=1。
+       */
+      const classId = String(channel.content?.id || channel.key || data.classId || '')
       const key = courseId + '|' + classId
       if (seen.has(key)) continue
       seen.add(key)
@@ -116,6 +124,11 @@ export async function getCourseList(cookie: string): Promise<CourseInfo[]> {
 
 /**
  * 获取课程的活动列表（用于轮询模式）
+ *
+ * ⚠️ 接口返回的是 **camelCase** 字段（startTime / endTime / nameOne，实测 2026-09-19），
+ * 此前只读小写的 starttime / endtime / name，导致时间与名称恒为空/0，
+ * 「签到是否已结束」也就无从判断（见 shouldPollActivity）。
+ * 这里两种写法都兼容，避免接口再次改名时静默失配。
  */
 export interface ActivityItem {
   activeId: string
@@ -124,6 +137,24 @@ export interface ActivityItem {
   startTime: number
   endTime: number
   status: number
+}
+
+/**
+ * 该活动是否值得交给签到流程处理。
+ *
+ * 过滤掉「已经结束」的签到：活动列表会把历史签到一并返回（实测高数一门课就有 36 条，
+ * 其中 42 条签到类活动全部是已结束的 status=2）。修好 classId 后这些历史活动会第一次
+ * 被真正读到，若不过滤就会被当成 42 个「新签到」逐个触发，签到失败重试还会各打 3 次，
+ * 形成一次性的无效请求风暴，并污染历史记录。
+ *
+ * @param now 当前时间戳（可注入，便于测试）
+ */
+export function shouldPollActivity(act: ActivityItem, now: number = Date.now()): boolean {
+  // 已结束：接口给了 endTime 时以它为准（恰好等于当前时刻也算已结束）
+  if (act.endTime > 0 && act.endTime <= now) return false
+  // 兜底：endTime 缺失时用 status 判断（实测已完成的历史签到 status=2）
+  if (act.endTime === 0 && act.status === 2) return false
+  return true
 }
 
 export async function getCourseActivities(
@@ -151,9 +182,9 @@ export async function getCourseActivities(
   return activeList.map((a: any) => ({
     activeId: String(a.id),
     activeType: a.activeType || 0,
-    name: a.name || '',
-    startTime: a.starttime || 0,
-    endTime: a.endtime || 0,
+    name: a.nameOne || a.name || '',
+    startTime: a.startTime ?? a.starttime ?? 0,
+    endTime: a.endTime ?? a.endtime ?? 0,
     status: a.status || 0,
   }))
 }

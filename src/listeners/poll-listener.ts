@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger'
-import { getCourseActivities, type ActivityItem, type CourseInfo } from '../core/course'
+import { getCourseActivities, shouldPollActivity, type ActivityItem, type CourseInfo } from '../core/course'
 import { CheckinEngine } from '../core/checkin-engine'
 import type { AccountMetaData } from '../types'
 import { isProcessed, trimProcessed } from '../providers/sign-state'
@@ -69,6 +69,13 @@ export class PollListener {
             // 只处理签到活动（activeType=2 或 activeType=0 但名字含"签到"）
             const isCheckin = act.activeType === 2 ||
               (act.activeType === 0 && act.name?.includes('签到'))
+
+            // 已结束的历史签到不处理：活动列表会把它们一并返回，
+            // 修好 classId 后会第一次被读到（见 course.ts shouldPollActivity 注释）
+            if (isCheckin && !shouldPollActivity(act)) {
+              logger.debug(`跳过已结束签到: ${course.courseName} - ${act.name} (aid: ${act.activeId})`)
+              continue
+            }
 
             // 只查不标：已处理（含 IM 已处理的情况）则跳过，标记交给 processCheckin
             if (isCheckin && !isProcessed(act.activeId)) {
