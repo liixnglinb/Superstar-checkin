@@ -16,7 +16,25 @@
 
 ## 1. 项目当前状态（v3.6.0）
 
-### 1.0 ⚠️ 2026-09-19 排查结论：IM 通道已下线，且轮询曾全量失效（必读）
+### 1.00 ⚠️ 安全须知：密钥曾进入公开仓库，务必先读
+
+**2026-09-19 事故（如实记录）**：排查钉钉图片通道时，把用户提供的**钉钉群机器人 webhook
+与加签密钥**硬编码进 `tests/verify-dingtalk-webhook.js` 并提交到**公开仓库**
+（commit `e023445`，已随 v3.7.0 发布）。**删除文件无法撤回历史**，该提交至今可查。
+
+处置状态：
+- ✅ 已在钉钉后台**重置该群机器人**（由用户操作），旧密钥失效
+- ✅ 钉钉 AppSecret 与学习通账号密码**从未入库**（前者只在 `config.yaml`，后者另有 DPAPI 加密）
+- ✅ 已加自动检查防复发：`scripts/check-secrets.js` + `.git/hooks/pre-commit`，
+  命中即阻止提交（规则经反向验证：真实 AppKey 与加签密钥均被拦下）
+
+**写代码时请遵守**：任何需要凭据的脚本，一律从 `config.yaml` 或 `process.env` 读取，
+**绝不硬编码**。若确实要提交验证脚本，凭据部分用占位符。
+GitHub 的 `git push` 若失败，见 6.6 的代理说明。
+
+---
+
+## 1.0 ⚠️ 2026-09-19 排查结论：IM 通道已下线，且轮询曾全量失效（必读）
 
 接手时请先看这一节。当天排查两件事，结论都直接影响「软件还能不能签到」：
 
@@ -138,6 +156,8 @@
 | `npm run typecheck` | `tsc --noEmit` | 只查类型，不产出 |
 | `npm run validate:ui` | 校验控制台页 | 依赖 `../build/server/*`，**必须在 build 之后跑** |
 | `npm test` | 纯逻辑回归（`node --test tests/*.test.js`） | 27 条用例：`shouldPollActivity` 闸门、二维码正则、钉钉消息解析（三种形态）、课表与扫描时段判定；无需网络/账号，**改检测或课表逻辑后必跑** |
+| `npm run security:check` | 提交前敏感信息检查（暂存区） | 已装为 `.git/hooks/pre-commit`，提交时自动跑；`security:check:all` 检查全仓库 |
+| `node tests/disclaimer-harness.js` | 免责声明流程验证 | 需先 `npm run build`；会启停服务 3 次验证"接受状态跨重启持久化"，用独立端口与数据目录 |
 
 - 控制台：`http://<host>:<web.port>/?token=<web.token>`，默认 `127.0.0.1:3456`。
 - 服务起来后 `GET /health` 可探活（无鉴权），Electron 主进程就是靠轮询 `/api/status` 决定何时开窗。
