@@ -27,6 +27,10 @@ export interface ConsoleStatus {
   disabledCourses?: string[]
   /** 当前实际在监听的课程数（已排除已结课与手动关闭的） */
   listeningCount?: number
+  /** 每门课学到的签到活跃时段摘要（courseId -> 描述） */
+  signinWindows?: Record<string, { known: boolean; text: string; samples: number }>
+  /** 签到时段配置（窗口留白、每日兜底扫描小时） */
+  signinWindowConfig?: { enabled: boolean; padMinutes: number; sweepHour: number }
   /** 课程扫描健康：courseId -> 连续轮询失败次数（≥3 时 UI 显示"扫描异常"） */
   courseHealth?: Record<string, number>
   /** 签到趋势（近 14 天逐日成功/失败） */
@@ -167,16 +171,23 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
           : fails >= 3
             ? '<span class="pill pill-warn" title="近期轮询多次失败，多为瞬时网络或网关限流，已自动重试；持续异常可点击「重新拉取课程列表」">扫描异常</span>'
             : '<span class="pill pill-ok">监控中</span>'
+        const w = (status.signinWindows || {})[String(c.courseId)]
+        const winCell = w
+          ? (w.known
+            ? `<span class="cell-mono" title="共 ${w.samples} 次观测；仅此时段轮询（另有每日兜底扫描）">${esc(w.text)}</span>`
+            : `<span class="cell-sub" title="观测不足，暂按全天轮询；积累 ${w.samples} 次后自动收敛">${esc(w.text)}</span>`)
+          : '<span class="cell-sub">—</span>'
         return `
       <tr>
         <td class="cell-main" data-label="课程">${esc(c.courseName)}</td>
         <td class="cell-mono" data-label="Course ID">${c.courseId}</td>
         <td class="cell-mono" data-label="Class ID">${c.classId}</td>
+        <td data-label="签到时段">${winCell}</td>
         <td data-label="状态">${statePill}</td>
         <td data-label="监听"><button class="watch-toggle ${watching ? 'on' : ''}" data-cid="${esc(String(c.courseId))}">${watching ? '关闭监听' : '开启监听'}</button></td>
       </tr>`
       }).join('')
-    : `<tr><td colspan="5" class="cell-empty">暂无课程数据</td></tr>`
+    : `<tr><td colspan="6" class="cell-empty">暂无课程数据</td></tr>`
 
   const recent2 = recent.map((r: any) => ({ ...r, timestamp: r.timestamp || r.time }))
   const recentRows = recent2.length
@@ -1018,7 +1029,7 @@ tr:hover td{background:var(--n-25)}
           </div>
           <div class="watch-bar">逐课开关：点按钮切换后点「保存并立即生效」；已结课的课程已自动排除</div>
           <table>
-            <thead><tr><th>课程名称</th><th>Course ID</th><th>Class ID</th><th>状态</th><th>监听</th></tr></thead>
+            <thead><tr><th>课程名称</th><th>Course ID</th><th>Class ID</th><th>签到时段</th><th>状态</th><th>监听</th></tr></thead>
             <tbody id="coursesBody">${courseRows}</tbody>
           </table>
           <div class="section-foot">
@@ -1504,13 +1515,16 @@ tr:hover td{background:var(--n-25)}
       var allOn2=ws2.length===0
       // 与服务端一致的判定：未被手动关闭，且（无白名单 或 在白名单内）
       var watchingOf=function(id){return !dis2[id] && (allOn2 || wset2[id])}
+      var wins=s.signinWindows||{}
       cb.innerHTML=cs2.length
         ? cs2.map(function(c){
             var cid=String(c.courseId)
             var watching=watchLocal[cid]!==undefined?watchLocal[cid]:watchingOf(cid)
-            return '<tr><td class="cell-main">'+esc(c.courseName)+'</td><td class="cell-mono">'+esc(String(c.courseId))+'</td><td class="cell-mono">'+esc(String(c.classId))+'</td><td><span class="pill '+(watching?'pill-ok':'pill-off')+'">'+(watching?'监控中':'已停用')+'</span></td><td><button class="watch-toggle '+(watching?'on':'')+'" data-cid="'+esc(cid)+'">'+(watching?'关闭监听':'开启监听')+'</button></td></tr>'
+            var w2=wins[cid]
+            var wc=w2?('<span class="cell-mono">'+esc(w2.text)+'</span>'):'<span class="cell-sub">—</span>'
+            return '<tr><td class="cell-main">'+esc(c.courseName)+'</td><td class="cell-mono">'+esc(String(c.courseId))+'</td><td class="cell-mono">'+esc(String(c.classId))+'</td><td>'+wc+'</td><td><span class="pill '+(watching?'pill-ok':'pill-off')+'">'+(watching?'监控中':'已停用')+'</span></td><td><button class="watch-toggle '+(watching?'on':'')+'" data-cid="'+esc(cid)+'">'+(watching?'关闭监听':'开启监听')+'</button></td></tr>'
           }).join('')
-        : '<tr><td colspan="5" class="cell-empty">暂无课程数据</td></tr>'
+        : '<tr><td colspan="6" class="cell-empty">暂无课程数据</td></tr>'
     }
     var cc=document.getElementById('courseCount')
     if(cc)cc.textContent=(s.courses||[]).length+' 门 · 轮询发现签到活动'
@@ -1662,9 +1676,11 @@ tr:hover td{background:var(--n-25)}
                 : (f2>=3
                     ? '<span class="pill pill-warn" title="近期轮询多次失败，多为瞬时网络或网关限流，已自动重试">扫描异常</span>'
                     : '<span class="pill pill-ok">监控中</span>')
-              return '<tr><td class="cell-main">'+esc(c.courseName)+'</td><td class="cell-mono">'+esc(String(c.courseId))+'</td><td class="cell-mono">'+esc(String(c.classId))+'</td><td>'+sp+'</td><td><button class="watch-toggle '+(w?'on':'')+'" data-cid="'+esc(id2)+'">'+(w?'关闭监听':'开启监听')+'</button></td></tr>'
+              var w2=(s.signinWindows||{})[id2]
+              var wc=w2?('<span class="cell-mono">'+esc(w2.text)+'</span>'):'<span class="cell-sub">—</span>'
+              return '<tr><td class="cell-main">'+esc(c.courseName)+'</td><td class="cell-mono">'+esc(String(c.courseId))+'</td><td class="cell-mono">'+esc(String(c.classId))+'</td><td>'+wc+'</td><td>'+sp+'</td><td><button class="watch-toggle '+(w?'on':'')+'" data-cid="'+esc(id2)+'">'+(w?'关闭监听':'开启监听')+'</button></td></tr>'
             }).join('')
-          : '<tr><td colspan="5" class="cell-empty">暂无课程数据</td></tr>'
+          : '<tr><td colspan="6" class="cell-empty">暂无课程数据</td></tr>'
       }).catch(function(){})
     })
   }

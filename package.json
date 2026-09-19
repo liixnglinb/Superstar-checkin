@@ -13,6 +13,7 @@
     "test:live": "node tests/live-detection-harness.js",
     "test:submit": "node tests/verify-submit-chain.js",
     "test:switch": "node tests/switch-harness.js",
+    "test:window": "node tests/window-harness.js",
     "pack": "node build-sea.js"
   },
   "keywords": [

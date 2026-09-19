@@ -201,6 +201,17 @@ export interface AppConfig {
     /** 夜间间隔倍数，默认 3 */
     nightMultiplier: number
   }
+  /**
+   * 签到时段学习：只为「历史上会发签到的时段」轮询对应课程，其余时间不发请求。
+   * 实测签到发布时间高度规律（76% 集中在少数几个时刻），可把每天数万次轮询降到千次级。
+   */
+  signinWindow?: {
+    enabled: boolean
+    /** 窗口两侧留白（分钟），默认 15 */
+    padMinutes: number
+    /** 每日兜底扫描小时（0~23）；-1 关闭。防止时段算错后该课永远不再被轮询 */
+    sweepHour: number
+  }
   dingtalk?: {
     appKey: string
     appSecret: string

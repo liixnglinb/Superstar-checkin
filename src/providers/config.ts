@@ -49,6 +49,8 @@ const DEFAULT_CONFIG: Partial<AppConfig> = {
   courseNotes: {},
   preCheck: { enabled: true, hour: 7 },
   smartPoll: { enabled: true, dayStart: 8, dayEnd: 22, nightMultiplier: 3 },
+  // 签到时段学习：默认开启（样本不足的课程会自动全天轮询，不会误伤新课程）
+  signinWindow: { enabled: true, padMinutes: 15, sweepHour: 7 },
   web: {
     port: 3456,
     host: '127.0.0.1',

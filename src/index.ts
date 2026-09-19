@@ -9,6 +9,13 @@ import { NotificationManager } from './notifiers'
 import { CheckinEngine } from './core/checkin-engine'
 import { getCourseList, type CourseInfo } from './core/course'
 import { initLocationStore } from './utils/location'
+import {
+  initWindowStore,
+  shouldPollByWindow,
+  recordSigninTime,
+  getWindow,
+  getWindowSummary,
+} from './providers/signin-window'
 import { DingTalkServer } from './server/dingtalk-server'
 import { decodeQrFromBuffer } from './utils/qr-decoder'
 import { setProxy } from './providers/runtime-config'
@@ -148,6 +155,7 @@ async function main() {
   initStorage(config.storage.dataDir)
   initSignState(config.storage.dataDir)
   initLocationStore(config.storage.dataDir)
+  initWindowStore(config.storage.dataDir)
   setProxy(config.proxy) // 代理全局生效（登录/签到请求均可走）
 
   // 控制台状态数据提供者（每次请求实时计算；闭包引用后续初始化的模块）
@@ -247,6 +255,10 @@ async function main() {
         disabledCourses: Array.from(disabledCourses),
         /** 当前实际在监听的课程数（已排除已结课与手动关闭的） */
         listeningCount: watchedCoursesNow().length,
+        /** 每门课学到的签到活跃时段（courseId -> { known, text, samples }），供控制台展示 */
+        signinWindows: getWindowSummary(),
+        /** 签到时段的当前配置（控制台提示文案用） */
+        signinWindowConfig: config.signinWindow || { enabled: true, padMinutes: 15, sweepHour: 7 },
         courseHealth: Object.fromEntries(courseHealth),
         courseStats,
         accountStats,
@@ -480,6 +492,13 @@ async function main() {
     if (!listening) return false
     if (course.isRetired) return false
     if (disabledCourses.has(String(course.courseId))) return false
+    // 签到时段过滤：只为「历史上会发签到的时段」轮询（含每日兜底扫描，见 signin-window.ts）
+    const win = config.signinWindow
+    if (win?.enabled !== false) {
+      if (!shouldPollByWindow(course.courseId, new Date(), win?.padMinutes ?? 15, win?.sweepHour ?? 7)) {
+        return false
+      }
+    }
     return true
   }
 

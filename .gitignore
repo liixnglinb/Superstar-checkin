@@ -322,3 +322,5 @@ config.smoke.yaml
 data-smoke/
 config.switchtest.yaml
 data-switchtest/
+config.windowtest.yaml
+data-windowtest/

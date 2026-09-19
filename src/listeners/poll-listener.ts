@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger'
 import { getCourseActivities, shouldPollActivity, type ActivityItem, type CourseInfo } from '../core/course'
+import { recordSigninTime } from '../providers/signin-window'
 import { CheckinEngine } from '../core/checkin-engine'
 import type { AccountMetaData } from '../types'
 import { isProcessed, trimProcessed } from '../providers/sign-state'
@@ -65,6 +66,8 @@ export class PollListener {
     logger.info(`轮询监听已启动, 间隔 ${this.interval / 1000}s, 监控 ${courses.length} 门课程`)
 
     const poll = async () => {
+      /** 本轮开始时刻：用于区分「本轮新出现的签到」与历史活动（详见下方记录逻辑） */
+      const pollStartedAt = Date.now()
       for (const course of courses) {
         // 运行时过滤：控制台关掉的课、已结课、当前不在签到时段内的课都不发请求
         if (this.shouldPoll && !this.shouldPoll(course)) continue
@@ -77,6 +80,16 @@ export class PollListener {
             // 只处理签到活动（activeType=2 或 activeType=0 但名字含"签到"）
             const isCheckin = act.activeType === 2 ||
               (act.activeType === 0 && act.name?.includes('签到'))
+
+            /**
+             * 学习「这门课什么时候发签到」——只在**本轮新出现**（发布时间晚于本次
+             * 轮询开始）时记录，否则服务重启后第一轮会把几十条历史活动的时间全灌进去，
+             * 样本立刻被历史数据污染。
+             * 用 startTime 作为发布时刻的近似（签到一般发布即开始）。
+             */
+            if (isCheckin && act.startTime > pollStartedAt && act.startTime <= Date.now()) {
+              recordSigninTime(course.courseId, act.startTime)
+            }
 
             // 已结束的历史签到不处理：活动列表会把它们一并返回，
             // 修好 classId 后会第一次被读到（见 course.ts shouldPollActivity 注释）
