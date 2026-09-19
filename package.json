@@ -14,6 +14,7 @@
     "test:submit": "node tests/verify-submit-chain.js",
     "test:switch": "node tests/switch-harness.js",
     "test:window": "node tests/window-harness.js",
+    "test:tt": "node tests/timetable-harness.js",
     "pack": "node build-sea.js"
   },
   "keywords": [

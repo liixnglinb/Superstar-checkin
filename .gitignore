@@ -317,10 +317,13 @@ dist-electron/
 # 注：第 315 行原为乱码 `ndist-electron-v36/，只挡住了 v36，v37 起会漏进 git status（2026-09-19 修正）
 dist-electron-v*/
 
-# 活体验证 harness 的临时产物（npm run test:live / test:switch 生成，会覆盖真实 config/data 之外的副本）
+# 活体验证 harness 的临时产物（npm run test:live / test:switch / test:tt 生成，
+# 都是真实 config/data 之外的副本，不入库）
 config.smoke.yaml
 data-smoke/
 config.switchtest.yaml
 data-switchtest/
 config.windowtest.yaml
 data-windowtest/
+config-tt.yaml
+data-tt/

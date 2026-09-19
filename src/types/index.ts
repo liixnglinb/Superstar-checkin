@@ -201,23 +201,6 @@ export interface AppConfig {
     /** 夜间间隔倍数，默认 3 */
     nightMultiplier: number
   }
-  /**
-   * 签到时段学习：只为「历史上会发签到的时段」轮询对应课程，其余时间不发请求。
-   * 实测签到发布时间高度规律（76% 集中在少数几个时刻），可把每天数万次轮询降到千次级。
-   */
-  signinWindow?: {
-    enabled: boolean
-    /** 窗口两侧留白（分钟），默认 15 */
-    padMinutes: number
-    /** 每日兜底扫描小时（0~23）；-1 关闭。用于发现「时刻」漂移 */
-    sweepHour: number
-    /**
-     * 每周兜底扫描的星期（0=周日 … 6=周六）；-1 关闭。
-     * 用于发现「星期」漂移 —— 老师换到别的星期上课时，不做这次扫描的话
-     * 这门课会永远不再被查询（静默漏签到）。
-     */
-    weeklySweepDay: number
-  }
   dingtalk?: {
     appKey: string
     appSecret: string

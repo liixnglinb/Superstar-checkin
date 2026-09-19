@@ -57,6 +57,12 @@ export interface DingTalkServerOptions {
    * 传入要监听的 courseId 列表；由宿主决定如何落到运行时状态，返回生效后的门数。
    */
   applyWatchCourses?: (ids: string[]) => { ok: boolean; listeningCount: number }
+  /** 读取课表（含节次定义、可填课程、完整度状态） */
+  getTimetablePayload?: () => any
+  /** 依据签到观测时间生成课表填充建议（用于「自动填充」按钮） */
+  suggestTimetable?: () => any
+  /** 保存课表；未填满时返回 ok=false 与提示（不落盘） */
+  saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
   /** 日志文件路径（软件内日志查看页用） */
   getLogFile?: () => string
   /** 主账号 Cookie（网络诊断用） */
@@ -89,6 +95,9 @@ export class DingTalkServer {
   private toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
   private resetCourses?: () => { ok: boolean; listeningCount: number }
   private applyWatchCourses?: (ids: string[]) => { ok: boolean; listeningCount: number }
+  private getTimetablePayload?: () => any
+  private suggestTimetable?: () => any
+  private saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
   private getLogFile?: () => string
   private getPrimaryCookie?: () => string
 
@@ -110,6 +119,9 @@ export class DingTalkServer {
     this.toggleCourse = options.toggleCourse
     this.resetCourses = options.resetCourses
     this.applyWatchCourses = options.applyWatchCourses
+    this.getTimetablePayload = options.getTimetablePayload
+    this.suggestTimetable = options.suggestTimetable
+    this.saveTimetable = options.saveTimetable
     this.getLogFile = options.getLogFile
     this.getPrimaryCookie = options.getPrimaryCookie
   }
@@ -1004,6 +1016,50 @@ export class DingTalkServer {
         } catch (e: any) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 课表：读取（含节次定义、可填课程、完整度）
+      if (req.method === 'GET' && routePath === '/api/timetable') {
+        try {
+          if (!this.getTimetablePayload) throw new Error('课表未接入')
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, ...this.getTimetablePayload() }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `读取课表失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 课表：按「最近签到时间」生成填充建议
+      if (req.method === 'POST' && routePath === '/api/timetable/suggest') {
+        try {
+          if (!this.suggestTimetable) throw new Error('课表未接入')
+          const r = this.suggestTimetable()
+          logger.info(`课表自动填充建议：${r.filled} 个格子（依据最近签到时间）`)
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, ...r }))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `生成建议失败: ${e.message}` }))
+        }
+        return
+      }
+
+      // 课表：保存（必须填满，否则拒绝并提示）
+      if (req.method === 'POST' && routePath === '/api/timetable/save') {
+        try {
+          const body = JSON.parse(await this.readBody(req) || '{}')
+          if (!this.saveTimetable) throw new Error('课表未接入')
+          const r = this.saveTimetable(body.table || body)
+          if (!r.ok) logger.warn(`课表未保存：${r.message}`)
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify(r))
+        } catch (e: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: false, message: `保存课表失败: ${e.message}` }))
         }
         return
       }

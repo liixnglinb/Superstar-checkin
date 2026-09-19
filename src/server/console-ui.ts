@@ -27,10 +27,8 @@ export interface ConsoleStatus {
   disabledCourses?: string[]
   /** 当前实际在监听的课程数（已排除已结课与手动关闭的） */
   listeningCount?: number
-  /** 每门课学到的签到活跃时段摘要（courseId -> 描述） */
+  /** 每门课学到的签到活跃时段摘要（courseId -> 描述）。仅用于展示与课表自动填充，不参与扫描决策 */
   signinWindows?: Record<string, { known: boolean; text: string; samples: number }>
-  /** 签到时段配置（窗口留白、每日兜底扫描小时） */
-  signinWindowConfig?: { enabled: boolean; padMinutes: number; sweepHour: number }
   /** 课程扫描健康：courseId -> 连续轮询失败次数（≥3 时 UI 显示"扫描异常"） */
   courseHealth?: Record<string, number>
   /** 签到趋势（近 14 天逐日成功/失败） */
@@ -718,6 +716,28 @@ tr:hover td{background:var(--n-25)}
 
 
 /* 课表页 */
+/* 课表填充网格：5 天（周一~周五）× 8 节，每格一个下拉框（每节仅一门课） */
+.tt-wrap{overflow-x:auto;padding:4px 18px 10px}
+.tt-table{border-collapse:separate;border-spacing:6px;width:100%;min-width:720px}
+.tt-table th{font-size:var(--fs-sm);color:var(--text-3);font-weight:var(--fw-semibold);padding:6px 4px;text-align:center;white-space:nowrap}
+.tt-table th.tt-slot-col{text-align:left;min-width:132px}
+.tt-table td{padding:0}
+.tt-slot{font-size:var(--fs-sm);color:var(--text-2);white-space:nowrap;padding:6px 8px}
+.tt-slot b{display:block;font-size:var(--fs-base);color:var(--text)}
+.tt-slot span{color:var(--text-3);font-size:var(--fs-xs)}
+.tt-half td{background:var(--surface-2);font-size:var(--fs-xs);color:var(--text-3);font-weight:var(--fw-semibold);text-align:center;padding:4px;border-radius:var(--r-xs)}
+.tt-cell{width:100%;box-sizing:border-box;font-family:var(--font);font-size:var(--fs-sm);padding:7px 6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text);cursor:pointer}
+.tt-cell:focus{outline:none;box-shadow:var(--focus)}
+.tt-cell.tt-filled{border-color:var(--a-300);background:var(--accent-weak);color:var(--text)}
+.tt-cell.tt-empty{border-color:#E6B8B8;background:#FDF6F6;color:#B42318}
+.tt-cell.tt-suggested{border-color:#7BC47F;background:#EAF7EC}
+.tt-count{font-size:var(--fs-sm);color:var(--text-3)}
+.tt-count b{color:var(--accent);font-size:var(--fs-lg)}
+.tt-warn{background:#FDF6F6;border:1px solid #E6B8B8;color:#B42318;border-radius:var(--radius);padding:12px 14px;margin:4px 18px 0;font-size:var(--fs-base);line-height:1.7}
+.tt-warn b{display:block;margin-bottom:4px}
+.tt-ok{background:#EAF7EC;border:1px solid #A9D8B0;color:#178A5B;border-radius:var(--radius);padding:12px 14px;margin:4px 18px 0;font-size:var(--fs-base)}
+.tt-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--text-3);padding:8px 18px 0}
+.tt-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:1px solid var(--border)}
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;padding:16px 18px}
 .stat-card{background:rgba(255,255,255,.88);border-radius:var(--radius);padding:16px 12px;text-align:center;border:1px solid var(--border);box-shadow:var(--shadow-sm);transition:transform .18s ease,box-shadow .18s ease}
 .stat-row .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
@@ -1050,6 +1070,39 @@ tr:hover td{background:var(--n-25)}
 
       <!-- 课表 -->
       <section class="view" data-view="schedule">
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">填写课表</span>
+            <span class="section-more">扫描将严格按这张课表进行 · 每节只能放一门课</span>
+          </div>
+          <div class="tt-warn" id="ttWarn" style="display:none"></div>
+          <div class="tt-ok" id="ttOk" style="display:none"></div>
+          <div class="tt-legend">
+            <span><i style="background:#FDF6F6;border-color:#E6B8B8"></i>未填（必须填完）</span>
+            <span><i style="background:var(--accent-weak);border-color:var(--a-300)"></i>已填</span>
+            <span><i style="background:#EAF7EC;border-color:#7BC47F"></i>自动填充建议</span>
+          </div>
+          <div class="tt-wrap">
+            <table class="tt-table">
+              <thead><tr><th class="tt-slot-col">节次</th><th>周一</th><th>周二</th><th>周三</th><th>周四</th><th>周五</th></tr></thead>
+              <tbody id="ttBody"><tr><td colspan="6" class="cell-empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="section-foot">
+            <button class="btn btn-ghost" id="ttAutoBtn">按最近签到时间自动填充</button>
+            <button class="btn btn-primary" id="ttSaveBtn">保存课表</button>
+            <button class="btn btn-ghost" id="ttClearBtn">清空重填</button>
+            <span class="cfg-msg tt-count" id="ttCount"></span>
+          </div>
+          <div class="cfg-msg" id="ttMsg" style="padding:0 18px 14px"></div>
+        </div>
+        <div class="section">
+          <div class="section-head"><span class="section-title">扫描时段说明</span><span class="section-more">软件只在这些时段扫描</span></div>
+          <div class="tt-legend" style="padding-bottom:14px">
+            <span>周一~周五 · 上午 <b>07:30–12:30</b>（4 节） · 下午 <b>14:00–21:00</b>（4 节）</span>
+            <span>其余时间（含周末）不发送任何请求</span>
+          </div>
+        </div>
         <div class="section">
           <div class="section-head"><span class="section-title">本周课表概览</span><span class="section-more">课程监听状态与签到统计</span></div>
           <div class="stat-row" id="scheduleStats">
@@ -2012,6 +2065,141 @@ tr:hover td{background:var(--n-25)}
         if(d.ok)setTimeout(function(){location.reload()},1500)
       })
       .catch(function(){msg.textContent='❌ 刷新失败';msg.style.color='#B42318';refreshCoursesBtn.disabled=false;refreshCoursesBtn.textContent='重新拉取课程列表'})
+  })
+
+  // ===== 填写课表（扫描的唯一依据） =====
+  // 课表是 5 天 × 8 节的下拉网格：每节只能放一门课。未填满时后端拒绝保存，
+  // 界面同步给出"务必全部填完，否则识别不到、只能手动签到"的提示。
+  var ttState={table:null,slots:[],weekdays:[],courses:[],suggested:{}}
+  function ttEsc(s){return esc(String(s==null?'':s))}
+  function ttRender(){
+    var body=document.getElementById('ttBody');if(!body)return
+    var slots=ttState.slots||[],days=ttState.weekdays||[]
+    if(!slots.length||!days.length){body.innerHTML='<tr><td colspan="6" class="cell-empty">课表数据加载失败</td></tr>';return}
+    var opts='<option value="">— 请选择课程 —</option>'+ttState.courses.map(function(c){
+      return '<option value="'+ttEsc(c.courseId)+'">'+ttEsc(c.courseName)+'</option>'
+    }).join('')
+    var html='',lastHalf=''
+    slots.forEach(function(s){
+      if(s.half!==lastHalf){
+        lastHalf=s.half
+        html+='<tr class="tt-half"><td colspan="6">'+(s.half==='morning'?'上午 07:30–12:30':'下午 14:00–21:00')+'</td></tr>'
+      }
+      html+='<tr><td class="tt-slot"><b>'+ttEsc(s.label)+'</b><span>'+ttEsc(s.startText)+'–'+ttEsc(s.endText)+'</span></td>'
+      days.forEach(function(d){
+        var cur=(ttState.table&&ttState.table[String(d.value)])?ttState.table[String(d.value)][s.index]:''
+        var cls=cur?'tt-filled':'tt-empty'
+        html+='<td><select class="tt-cell '+cls+'" data-dow="'+d.value+'" data-slot="'+s.index+'">'
+          +opts.replace('value="'+ttEsc(cur||'')+'"','value="'+ttEsc(cur||'')+'" selected')
+          +'</select></td>'
+      })
+      html+='</tr>'
+    })
+    body.innerHTML=html
+    ttUpdateCount()
+    // 选中值用 JS 明确设置，避免字符串替换在课程名含特殊字符时出错
+    body.querySelectorAll('select.tt-cell').forEach(function(sel){
+      var d=sel.getAttribute('data-dow'),i=Number(sel.getAttribute('data-slot'))
+      var v=(ttState.table&&ttState.table[d])?ttState.table[d][i]:''
+      if(v)sel.value=v
+    })
+  }
+  function ttCollect(){
+    var table={}
+    var body=document.getElementById('ttBody')
+    if(!body)return table
+    body.querySelectorAll('select.tt-cell').forEach(function(sel){
+      var d=sel.getAttribute('data-dow'),i=Number(sel.getAttribute('data-slot'))
+      if(!table[d])table[d]=[]
+      table[d][i]=sel.value||null
+    })
+    return table
+  }
+  function ttUpdateCount(){
+    var body=document.getElementById('ttBody');if(!body)return
+    var all=body.querySelectorAll('select.tt-cell'),filled=0
+    all.forEach(function(s){if(s.value)filled++})
+    var el=document.getElementById('ttCount')
+    if(el)el.innerHTML='已填 <b>'+filled+'</b> / '+all.length+' 格'
+    var warn=document.getElementById('ttWarn'),ok=document.getElementById('ttOk')
+    if(warn)warn.style.display=filled<all.length?'':'none'
+    if(ok)ok.style.display=(all.length>0&&filled===all.length)?'':'none'
+  }
+  function ttLoad(){
+    apiFetch('/api/timetable').then(function(r){return r.json()}).then(function(d){
+      if(!d.ok){var b=document.getElementById('ttBody');if(b)b.innerHTML='<tr><td colspan="6" class="cell-empty">'+ttEsc(d.message||'加载失败')+'</td></tr>';return}
+      ttState.table=d.table||{}
+      ttState.slots=d.slots||[]
+      ttState.weekdays=d.weekdays||[]
+      ttState.courses=d.courses||[]
+      ttRender()
+      var st=d.status||{}
+      var warn=document.getElementById('ttWarn'),ok=document.getElementById('ttOk')
+      if(warn){
+        warn.style.display=st.complete?'none':''
+        if(!st.complete){
+          var names=(st.emptySlots||[]).slice(0,12).map(function(e){return e.weekdayName+e.label}).join('、')
+          var more=(st.emptySlots||[]).length>12?' 等 '+(st.emptySlots.length-12)+' 处':''
+          warn.innerHTML='<b>⚠ 课表未填完（'+st.filled+'/'+st.total+'）</b>'
+            +'务必把所有格子填完，否则该时段的签到无法被识别，只能手动签到。<br>未填：'+ttEsc(names)+ttEsc(more)
+        }
+      }
+      if(ok&&st.complete)ok.innerHTML='✅ 课表已填完（'+st.filled+'/'+st.total+'），扫描将严格按这张课表进行'
+    }).catch(function(){
+      var b=document.getElementById('ttBody');if(b)b.innerHTML='<tr><td colspan="6" class="cell-empty">加载失败</td></tr>'
+    })
+  }
+  var ttBodyEl=document.getElementById('ttBody')
+  if(ttBodyEl){
+    ttBodyEl.addEventListener('change',function(e){
+      var sel=e.target.closest('select.tt-cell');if(!sel)return
+      sel.className='tt-cell '+(sel.value?'tt-filled':'tt-empty')
+      ttUpdateCount()
+    })
+    ttLoad()
+  }
+  var ttAutoBtn=document.getElementById('ttAutoBtn')
+  if(ttAutoBtn)ttAutoBtn.addEventListener('click',function(){
+    var msg=document.getElementById('ttMsg')
+    ttAutoBtn.disabled=true;ttAutoBtn.textContent='生成中…'
+    apiFetch('/api/timetable/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        ttAutoBtn.disabled=false;ttAutoBtn.textContent='按最近签到时间自动填充'
+        if(!d.ok){if(msg){msg.textContent='❌ '+(d.message||'生成失败');msg.style.color='#B42318'}return}
+        ttState.table=d.table||ttState.table
+        ttRender()
+        var det=(d.details||[])
+        if(msg){
+          msg.style.color='#178A5B'
+          msg.textContent=det.length
+            ? '✅ 已按最近签到时间填了 '+det.length+' 格：'+det.slice(0,6).map(function(x){return x.courseName+'→周'+x.weekday+'第'+(x.slot+1)+'节('+x.from+')'}).join('；')+(det.length>6?' 等':'')+'。请核对并补全剩余空格后保存。'
+            : 'ℹ 没有可用的签到记录来推断课表（或对应格子已被占用）。请手动选择课程并填完所有格子。'
+        }
+      })
+      .catch(function(){ttAutoBtn.disabled=false;ttAutoBtn.textContent='按最近签到时间自动填充';if(msg){msg.textContent='❌ 生成失败';msg.style.color='#B42318'}})
+  })
+  var ttSaveBtn=document.getElementById('ttSaveBtn')
+  if(ttSaveBtn)ttSaveBtn.addEventListener('click',function(){
+    var msg=document.getElementById('ttMsg')
+    var table=ttCollect()
+    ttSaveBtn.disabled=true;ttSaveBtn.textContent='保存中…'
+    apiFetch('/api/timetable/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:table})})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        ttSaveBtn.disabled=false;ttSaveBtn.textContent='保存课表'
+        if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'#178A5B':'#B42318'}
+        if(d.ok){ttState.table=table;ttLoad()}
+      })
+      .catch(function(){ttSaveBtn.disabled=false;ttSaveBtn.textContent='保存课表';if(msg){msg.textContent='❌ 保存失败，请重试';msg.style.color='#B42318'}})
+  })
+  var ttClearBtn=document.getElementById('ttClearBtn')
+  if(ttClearBtn)ttClearBtn.addEventListener('click',function(){
+    var body=document.getElementById('ttBody');if(!body)return
+    body.querySelectorAll('select.tt-cell').forEach(function(s){s.value='';s.className='tt-cell tt-empty'})
+    ttUpdateCount()
+    var msg=document.getElementById('ttMsg')
+    if(msg){msg.textContent='已清空，请重新选择课程后点「保存课表」（必须全部填完）';msg.style.color='#B42318'}
   })
 
   // ===== 运行日志查看 =====
