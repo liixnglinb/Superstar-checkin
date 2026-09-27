@@ -115,11 +115,6 @@ export class CheckinHandler {
         }
 
         results.push(cr)
-        this.history.push(cr)
-        if (this.history.length > DEFAULTS.MAX_HISTORY) {
-          this.history = this.history.slice(-DEFAULTS.MAX_HISTORY)
-        }
-        storage.set('checkinHistory', this.history)
         logger.info(`${meta.name}: ${cr.success ? '成功' : cr.message}`)
       } catch (e: any) {
         const cr: CheckinResult = {

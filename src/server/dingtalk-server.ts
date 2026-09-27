@@ -25,6 +25,21 @@ type ImageHandler = (imageBuffer: Buffer) => Promise<string | void>
 /** 控制台首页数据提供者（每次请求时实时获取） */
 export type StatusProvider = () => Record<string, any>
 
+/** 抹掉代理地址里的凭据（http://user:pass@host:port → http://***@host:port） */
+function maskProxyUrl(p: string): string {
+  if (!p) return ''
+  try {
+    const u = new URL(p)
+    if (u.username || u.password) {
+      u.username = u.username ? '***' : ''
+      u.password = ''
+    }
+    return u.toString()
+  } catch {
+    return p.replace(/\/\/[^@/]+@/, '//***@')
+  }
+}
+
 export interface DingTalkServerOptions {
   /** 企业内部应用的 AppKey（用于获取 access_token 与图片下载） */
   appKey?: string
@@ -67,6 +82,8 @@ export interface DingTalkServerOptions {
   getConsent?: () => { accepted: boolean; acceptedAt?: string; version?: number; currentVersion: number }
   /** 免责声明：记录用户已接受（带时间与服务端持久化，便于事后举证） */
   acceptDisclaimer?: () => { accepted: boolean; acceptedAt: string; version: number }
+  /** 「签到前确认」倒计时里用户点了取消链接：把 aid 交回给主流程的取消集合 */
+  cancelCheckin?: (aid: string) => void
   /**
    * 立即扫描一次全部课程（忽略课表时段与监听开关）。
    * 手机端在教室外拿到二维码、或想立刻确认有没有新签到时用 ——
@@ -110,6 +127,7 @@ export class DingTalkServer {
   private saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
   private getConsent?: () => { accepted: boolean; acceptedAt?: string; version?: number; currentVersion: number }
   private acceptDisclaimer?: () => { accepted: boolean; acceptedAt: string; version: number }
+  private cancelCheckin?: (aid: string) => void
   private scanNow?: () => Promise<{ ok: boolean; scanned: number; found: number; message: string }>
   private getLogFile?: () => string
   private getPrimaryCookie?: () => string
@@ -137,6 +155,7 @@ export class DingTalkServer {
     this.saveTimetable = options.saveTimetable
     this.getConsent = options.getConsent
     this.acceptDisclaimer = options.acceptDisclaimer
+    this.cancelCheckin = options.cancelCheckin
     this.scanNow = options.scanNow
     this.getLogFile = options.getLogFile
     this.getPrimaryCookie = options.getPrimaryCookie
@@ -614,7 +633,7 @@ export class DingTalkServer {
           const SENSITIVE_KEYS = new Set([
             'password', 'cookie', 'token', 'secret', 'secretId', 'secretKey',
             'appSecret', 'webhook', 'key', 'smtpPass', 'smtpPassword', 'accessKey',
-            'botToken', 'sendKey',
+            'botToken', 'sendKey', 'amapKey', 'baiduKey',
           ])
           const scrub = (value: any) => {
             if (Array.isArray(value)) return value.map(scrub)
@@ -642,7 +661,19 @@ export class DingTalkServer {
         try {
           const imported = JSON.parse(await this.readBody(req))
           const existing = YAML.parse(fs.readFileSync(cfgFile, 'utf-8'))
-          const merged = { ...existing, ...imported }
+          // 只接受已知的顶层配置键：导入文件可能来自别人，盲合并等于把任意内容写进 config.yaml
+          const ALLOWED = new Set([
+            'proxy', 'accounts', 'listener', 'checkin', 'geo', 'notify', 'ocr', 'dingtalk',
+            'web', 'storage', 'log', 'ignoreCourses', 'watchCourses', 'courseNotes',
+            'preCheck', 'report', 'smartPoll', 'timetable',
+          ])
+          const picked: any = {}
+          const skipped: string[] = []
+          for (const k of Object.keys(imported || {})) {
+            if (ALLOWED.has(k)) picked[k] = imported[k]
+            else skipped.push(k)
+          }
+          const merged = { ...existing, ...picked }
           if (existing.accounts) merged.accounts = existing.accounts
           if (existing.dingtalk?.appSecret) merged.dingtalk = { ...merged.dingtalk, appSecret: existing.dingtalk.appSecret }
           if (existing.web?.token) merged.web = { ...merged.web, token: existing.web.token }
@@ -650,7 +681,11 @@ export class DingTalkServer {
           if (existing.ocr) merged.ocr = existing.ocr
           writeFileAtomic(cfgFile, YAML.stringify(merged))
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: '配置已导入，重启后生效' }))
+          res.end(JSON.stringify({
+            ok: true,
+            message: '配置已导入，重启后生效'
+              + (skipped.length ? `（忽略了 ${skipped.length} 个无法识别的项：${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? ' 等' : ''}）` : ''),
+          }))
         } catch (e: any) {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: '导入失败: ' + e.message }))
@@ -689,8 +724,8 @@ export class DingTalkServer {
           const u = new URL(req.url || '', 'http://localhost')
           const aid = u.searchParams.get('aid') || ''
           if (aid) {
-            ;(this as any)._cancelledAids = (this as any)._cancelledAids || new Set()
-            ;(this as any)._cancelledAids.add(aid)
+            // 必须交回主流程的取消集合：此前写的是本类自己的临时 Set，没人读，链接点了没反应
+            if (this.cancelCheckin) this.cancelCheckin(aid)
             logger.info('用户取消签到: aid=' + aid)
           }
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
@@ -815,7 +850,8 @@ export class DingTalkServer {
           await probe('签到接口', 'https://mobilelearn.chaoxing.com/newsign/preSign')
           await probe('IM 实时通道', 'https://im.chaoxing.com/webim/me')
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, cookie: !!cookie, proxy: getProxy() || '', results }))
+          // 诊断结果常被整段贴给别人求助，代理里的 user:pass 必须先抹掉
+          res.end(JSON.stringify({ ok: true, cookie: !!cookie, proxy: maskProxyUrl(getProxy() || ''), results }))
         } catch (e: any) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: '诊断失败: ' + e.message }))
@@ -1191,6 +1227,8 @@ export class DingTalkServer {
         const scriptNonce = crypto.randomBytes(18).toString('base64url')
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
+          // 不给缓存：否则升级后浏览器仍拿旧界面（实测出现过改版后页面纹丝不动）
+          'Cache-Control': 'no-store',
           'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-${scriptNonce}'; connect-src 'self'`,
           'X-Frame-Options': 'DENY',
         })
@@ -1247,6 +1285,7 @@ export class DingTalkServer {
         const scriptNonce = crypto.randomBytes(18).toString('base64url')
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
           'Content-Security-Policy': `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'nonce-${scriptNonce}'; connect-src 'self'`,
           'X-Frame-Options': 'DENY',
         })
@@ -1318,6 +1357,14 @@ export class DingTalkServer {
     })
 
     const host = process.env.WEB_HOST || '127.0.0.1'
+    // 没有 error 处理时，端口冲突会以未捕获异常退出，用户只看到「软件打不开」
+    this.server.on('error', (e: any) => {
+      if (e?.code === 'EADDRINUSE') {
+        logger.error(`端口 ${this.port} 已被占用：可能同时开着两份本软件，或别的服务占用了 ${host}:${this.port}。关掉多余的一份，或在 config.yaml 改 web.port 后重启`)
+      } else {
+        logger.error(`本地服务监听失败: ${e?.message || e}`)
+      }
+    })
     this.server.listen(this.port, host, () => {
       logger.success(`本地服务已启动: http://${host}:${this.port}`)
       logger.info(`消息回调: POST /dingtalk/callback${this.token ? ' （需 token）' : ''}`)
@@ -1450,7 +1497,8 @@ input[type=file]{display:none}
     <div id="placeholder">${placeholder}</div>
     <img id="preview" style="display:none">
   </div>
-  <input type="file" id="fileInput" accept="image/*" capture="environment">
+  <!-- 不加 capture：二维码常常是截图/相册里的图，强制开摄像头会让人传不了 -->
+  <input type="file" id="fileInput" accept="image/*">
   <button class="btn" id="submitBtn" disabled>上传并签到</button>
   <div id="status"></div>
 </div>

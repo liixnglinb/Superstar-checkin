@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFB170"/>
+      <stop offset=".45" stop-color="#F27B34"/>
+      <stop offset="1" stop-color="#C95C14"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".30"/>
+      <stop offset=".40" stop-color="#fff" stop-opacity=".03"/>
+      <stop offset="1" stop-color="#6B2A00" stop-opacity=".12"/>
+    </linearGradient>
+    <radialGradient id="disc" cx=".38" cy=".30" r=".88">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".70" stop-color="#FFFCF8"/>
+      <stop offset="1" stop-color="#FFE7CE"/>
+    </radialGradient>
+    <linearGradient id="check" x1="0" y1="0" x2=".9" y2="1">
+      <stop offset="0" stop-color="#F79C5D"/>
+      <stop offset="1" stop-color="#DD661F"/>
+    </linearGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#6B2A00" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#field)"/>
+  <rect width="512" height="512" rx="118" fill="url(#sheen)"/>
+  <rect x="19" y="19" width="474" height="474" rx="101" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="4"/>
+  <g transform="rotate(-104 256 256)">
+    <circle cx="256" cy="256" r="152" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="11" stroke-linecap="round" stroke-dasharray="168 787"/>
+  </g>
+  <g filter="url(#lift)">
+    <circle cx="256" cy="256" r="126" fill="url(#disc)"/>
+  </g>
+  <path d="M193 255l47 48 82-98" fill="none" stroke="url(#check)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -50,12 +50,18 @@ export function unmarkProcessed(aid: string): void {
 // 这里为每个 aid 记录失败次数，超过上限后不再撤销标记（放弃重试）。
 
 const MAX_FAIL_RETRY = 3
+/** 失败计数也会写进状态文件，不设上限会随学期无限膨胀 */
+const MAX_FAIL_KEYS = 500
 const failCounts = new Map<string, number>()
 
 /** 记录一次签到处理失败，返回累计失败次数 */
 export function recordFail(aid: string): number {
   const n = (failCounts.get(aid) || 0) + 1
+  failCounts.delete(aid)
   failCounts.set(aid, n)
+  if (failCounts.size > MAX_FAIL_KEYS) {
+    for (const k of Array.from(failCounts.keys()).slice(0, failCounts.size - MAX_FAIL_KEYS)) failCounts.delete(k)
+  }
   scheduleStatePersist()
   return n
 }
@@ -105,6 +111,10 @@ export function initSignState(dataDir: string): void {
   } catch {
     // 状态文件损坏时继续运行，签到仍可用
   }
+  // 'exit' 里只能做同步写盘，writeFileAtomic 全程同步，因此任何退出路径（含 process.exit）都能落盘
+  process.on('exit', () => {
+    try { flushSignState() } catch { /* 退出阶段不再抛错 */ }
+  })
 }
 
 function scheduleStatePersist(): void {
@@ -125,6 +135,15 @@ function persistState(): void {
   writeFileAtomic(stateFile, JSON.stringify(payload, null, 2))
 }
 
+/** 退出/崩溃前把 1 秒防抖里的改动落盘，否则重启后会对已处理过的签到重复动手 */
+export function flushSignState(): void {
+  if (statePersistTimer) {
+    clearTimeout(statePersistTimer)
+    statePersistTimer = null
+  }
+  persistState()
+}
+
 /** 待处理项过期时间（30 分钟），避免陈旧签到永久占用 */
 const PENDING_TTL = 30 * 60 * 1000
 
@@ -143,12 +162,12 @@ export function setPendingQr(aid: string, info: Omit<PendingQr, 'createdAt'>): v
   scheduleStatePersist()
 }
 
-export function getPendingQr(aid: string): PendingQr | undefined {
-  return pendingQr.get(aid)
-}
-
 /** 是否还有待处理的二维码签到 */
 export function hasPendingQr(): boolean {
+  // 不先过期的话，控制台会一直挂着「有二维码待签」
+  const before = pendingQr.size
+  sweepPending(pendingQr)
+  if (pendingQr.size !== before) scheduleStatePersist()
   return pendingQr.size > 0
 }
 
@@ -162,16 +181,6 @@ export function takeLatestPendingQr(): { aid: string; info: PendingQr } | null {
   pendingQr.delete(aid)
   scheduleStatePersist()
   return { aid, info }
-}
-
-/** 取出指定 aid 的待处理二维码（精确匹配时使用） */
-export function takePendingQr(aid: string): PendingQr | null {
-  sweepPending(pendingQr)
-  const info = pendingQr.get(aid)
-  if (!info) return null
-  pendingQr.delete(aid)
-  scheduleStatePersist()
-  return info
 }
 
 

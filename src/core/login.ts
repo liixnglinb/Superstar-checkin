@@ -69,16 +69,24 @@ export async function getUserInfo(cookie: string): Promise<UserInfo> {
  * 一旦页面结构变动就会误判。改为请求 userLogin4Uname.do（需登录态），
  * 只有 Cookie 有效时 result 才为 1。
  */
-export async function validateCookie(cookie: string): Promise<boolean> {
+export type CookieCheck = 'valid' | 'invalid' | 'unknown'
+
+/**
+ * 三态 Cookie 校验。
+ *
+ * 'unknown' 表示请求本身没成功（断网、超时、被风控挡下），此时**不能**判定 Cookie 失效——
+ * 误判会触发一次密码登录，而学习通对密码登录的风控更严，反而可能把可用会话挤掉。
+ */
+export async function checkCookie(cookie: string): Promise<CookieCheck> {
   try {
     const res = await axios.get(API.USER_INFO, {
       headers: { Cookie: cookie, 'User-Agent': PC_AGENT },
       timeout: 10000,
       proxy: getProxyConfig(),
     })
-    return res.data?.result === 1
+    return res.data?.result === 1 ? 'valid' : 'invalid'
   } catch (e) {
     logger.error('Cookie 验证请求失败', e)
-    return false
+    return 'unknown'
   }
 }

@@ -77,10 +77,6 @@ export class ImListener {
     return this.connected
   }
 
-  getLastConnectedAt(): number {
-    return this.lastConnectedAt
-  }
-
   private setupWebIM() {
     const W: any = window as any
 

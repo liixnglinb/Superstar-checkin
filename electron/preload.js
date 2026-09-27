@@ -19,5 +19,8 @@ contextBridge.exposeInMainWorld('updateCtl', {
   check: () => ipcRenderer.invoke('update-check'),
   download: () => ipcRenderer.invoke('update-download'),
   install: () => ipcRenderer.invoke('update-install'),
+  // 主进程是更新状态的唯一真源：界面进来先拉一次，之后靠推送
+  getState: () => ipcRenderer.invoke('update-state'),
+  onState: (cb) => ipcRenderer.on('update-state', (_e, d) => cb(d)),
   onProgress: (cb) => ipcRenderer.on('update-progress', (_e, d) => cb(d)),
 })

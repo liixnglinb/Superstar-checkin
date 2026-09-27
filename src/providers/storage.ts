@@ -42,18 +42,6 @@ export function set<T>(key: string, value: T) {
   schedulePersist()
 }
 
-export function remove(key: string) {
-  delete data[key]
-  schedulePersist()
-}
-
-export function getAll(): Record<string, any> {
-  return Object.fromEntries(Object.entries(data).map(([key, value]) => [
-    key,
-    key.startsWith('cookie_') ? '[REDACTED]' : value,
-  ]))
-}
-
 /** 防抖落盘：1 秒内多次写入只实际写一次，避免频繁 IO 阻塞事件循环 */
 function schedulePersist() {
   if (persistTimer) return

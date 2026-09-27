@@ -63,7 +63,9 @@ export interface ConsoleStatus {
 }
 
 const ICONS = {
-  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg>',
+  // 应用标记：与安装图标同源的小尺寸版（实心橙块 + 粗白勾）。
+  // 界面里一律内联矢量，不再用 512px 位图缩到 16px —— 那正是「图标发糊」的根因。
+  appMark: '<svg class="app-mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="104" fill="#EF7429"/><path d="M148 264l74 78 142-168" fill="none" stroke="#fff" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   courses: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
@@ -76,8 +78,6 @@ const ICONS = {
   radio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>',
   server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
-  // 品牌闹钟（与安装图标同语义：自动签到 + 准时）
-  alarm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="6.5"/><path d="M12 10.5v3.2l2.2 1.4"/><path d="M8.8 2.8 7 5.4M15.2 2.8 17 5.4"/></svg>',
   // 窗口控制（自绘标题栏）
   winMin: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1"><path d="M2 6h8"/></svg>',
   winMax: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="2.5" y="2.5" width="7" height="7"/></svg>',
@@ -87,6 +87,8 @@ const ICONS = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
   log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h16v18H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>',
+  // 更新：方框加号（刻意不用下载箭头——用户明确要求更新提示里不要出现下载小箭头）
+  update: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12h8M12 8v8"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
   power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5.5 3.8 9.7 8 11 4.2-1.3 8-5.5 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg>',
@@ -97,16 +99,6 @@ const ICONS = {
 
 function esc(s: any): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function fmtUptime(sec: number): string {
-  const s = Math.floor(sec || 0)
-  const d = Math.floor(s / 86400)
-  const h = Math.floor((s % 86400) / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  if (d > 0) return `${d} 天 ${h} 小时`
-  if (h > 0) return `${h} 小时 ${m} 分`
-  return `${m} 分 ${s % 60} 秒`
 }
 
 function fmtTime(ts: any): string {
@@ -272,15 +264,15 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <label class="field-label" for="setQuiet" style="width:104px">免打扰时段</label>
         <button class="switch ${quiet.enabled ? 'on' : ''}" id="setQuiet" type="button" role="switch"><span class="knob"></span></button>
-        <input class="field-input" id="setQuietStart" type="time" value="${esc(quiet.start)}" style="width:110px">
+        <input class="field-input tp-field" id="setQuietStart" type="time" readonly data-tp="hm" inputmode="none" aria-haspopup="dialog" value="${esc(quiet.start)}" style="width:110px">
         <span class="field-hint">至</span>
-        <input class="field-input" id="setQuietEnd" type="time" value="${esc(quiet.end)}" style="width:110px">
+        <input class="field-input tp-field" id="setQuietEnd" type="time" readonly data-tp="hm" inputmode="none" aria-haspopup="dialog" value="${esc(quiet.end)}" style="width:110px">
         <span class="field-hint" style="line-height:1.5">期间不弹桌面通知，签到照常进行</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <label class="field-label" for="setReport" style="width:104px">每日签到日报</label>
         <button class="switch ${status.report && status.report.enabled !== false ? 'on' : ''}" id="setReport" type="button" role="switch"><span class="knob"></span></button>
-        <input class="field-input" id="setReportHour" type="number" min="0" max="23" value="${(status.report && status.report.hour) || 22}" style="width:80px">
+        <input class="field-input tp-field" id="setReportHour" type="number" readonly data-tp="h" inputmode="none" aria-haspopup="dialog" min="0" max="23" value="${(status.report && status.report.hour) || 22}" style="width:80px">
         <span class="field-hint">点推送当天签到总结（成功/失败/未成功课程）</span>
       </div>
 
@@ -314,7 +306,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
         <label class="field-label" for="setPreCheck" style="width:104px">课前预检查</label>
         <button class="switch ${status.preCheck?.enabled !== false ? 'on' : ''}" id="setPreCheck" type="button" role="switch"><span class="knob"></span></button>
         <span class="field-hint" style="line-height:1.5">每天指定时间检查账号登录和网络，有问题提前推送</span>
-        <input type="number" id="setPreCheckHour" min="0" max="23" value="${status.preCheck?.hour ?? 7}" style="width:52px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--r-xs);font-size:var(--fs-base)">
+        <input class="field-input tp-field" type="number" id="setPreCheckHour" readonly data-tp="h" inputmode="none" aria-haspopup="dialog" min="0" max="23" value="${status.preCheck?.hour ?? 7}" style="width:64px">
         <span class="field-hint">时</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -365,7 +357,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
       </div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <button class="btn btn-primary" id="cfgSaveBtn">添加账号</button>
-        <span class="cfg-msg" id="cfgMsg"></span>
+        <span class="cfg-msg" id="accountMsg"></span>
       </div>
       <p class="field-hint">添加/删除/切换主账号后需重启软件生效。第一个账号（主账号）负责课程轮询监听，所有账号都会自动签到。账号保存在 config.yaml，请妥善保管。</p>
     </div>`
@@ -485,7 +477,6 @@ body{font-family:var(--font);background:
 /* ===== 自绘标题栏（替代系统深色标题栏） ===== */
 .titlebar{height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.78);border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none;backdrop-filter:blur(18px)}
 .titlebar-title{display:flex;align-items:center;gap:8px;padding-left:14px;font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--text-2);letter-spacing:.01em}
-.titlebar-title svg{width:14px;height:14px;color:var(--accent)}
 .titlebar-controls{display:flex;height:100%;-webkit-app-region:no-drag}
 .win-btn{width:46px;height:100%;display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--text-2);cursor:pointer;transition:background .1s ease,color .1s ease}
 .win-btn svg{width:11px;height:11px}
@@ -496,13 +487,11 @@ body{font-family:var(--font);background:
 .app{flex:1;display:flex;min-height:0}
 /* ===== 左侧栏 ===== */
 .side{width:232px;flex-shrink:0;background:rgba(255,255,255,.82);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 12px;backdrop-filter:blur(18px)}
-.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 16px}
-.brand-logo{width:40px;height:40px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:var(--shadow-sm)}
-.brand-logo svg{width:22px;height:22px}
-.brand-logo-img{width:100%;height:100%;border-radius:var(--r-sm);object-fit:cover;display:block}
-.titlebar-icon{width:18px;height:18px;border-radius:var(--r-xs);object-fit:cover;display:inline-block;vertical-align:middle;margin-right:6px}
-.brand-name{font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:-.01em}
-.brand-ver{font-size:var(--fs-xs);color:var(--text-3);margin-top:1px}
+.app-mark{width:18px;height:18px;flex-shrink:0;display:block}
+/* 浏览器里打开（没有自绘标题栏）时，才在侧栏底部补一份软件身份与版本 */
+.foot-brand{display:none}
+body.no-titlebar .foot-brand{display:flex;gap:8px;align-items:center;font-weight:var(--fw-medium)}
+body.no-titlebar .foot-brand .app-mark{width:16px;height:16px}
 .nav{display:flex;flex-direction:column;gap:2px;flex:1}
 .nav-item{position:relative;display:flex;align-items:center;gap:10px;padding:10px 10px;border-radius:var(--radius-sm);color:var(--text-2);font-size:var(--fs-base);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .16s ease,color .16s ease,transform .16s ease}
 .nav-item svg{width:17px;height:17px;flex-shrink:0}
@@ -570,6 +559,81 @@ body{font-family:var(--font);background:
 .field-input{height:40px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:var(--fs-base);color:var(--text);background:#fff;outline:none;transition:border-color .16s ease,box-shadow .16s ease;box-sizing:border-box}
 .field-input:focus{border-color:var(--accent);box-shadow:var(--focus)}
 .field-hint{font-size:var(--fs-sm);color:var(--text-3);line-height:1.7;margin:0}
+/* ===== 时刻滚轮选择器 =====
+   自绘而不用系统弹层：系统弹层是白底直角 + 蓝色选中，与本软件的暖橙材质/语义色不一致；
+   列用 scroll-snap，滚轮、拖拽、方向键都能改值，触屏下改为底部弹层。 */
+.tp-field{cursor:pointer;user-select:none;padding-right:30px;background-repeat:no-repeat;background-position:right 9px center;background-size:14px 14px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B95317' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5l3 2'/%3E%3C/svg%3E")}
+.tp-field::-webkit-calendar-picker-indicator{display:none}
+.tp-mask{position:fixed;inset:0;z-index:1200;display:none;background:rgba(29,26,22,.06)}
+.tp-mask.show{display:block}
+.tp-pop{position:absolute;width:236px;background:linear-gradient(180deg,var(--surface),#FFFBF5);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-lg),inset 0 1px 0 rgba(255,255,255,.6);padding:10px;animation:tpIn .16s cubic-bezier(.2,.8,.2,1)}
+@keyframes tpIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes tpSheetIn{from{transform:translateY(100%);opacity:.6}to{transform:none;opacity:1}}
+.tp-head{display:flex;align-items:baseline;justify-content:space-between;padding:2px 4px 8px;font-size:var(--fs-sm);color:var(--text-3)}
+.tp-head b{font-size:var(--fs-md);color:var(--text);font-variant-numeric:tabular-nums}
+.tp-cols{position:relative;display:flex;gap:6px;height:188px}
+.tp-band{position:absolute;left:0;right:0;top:80px;height:28px;border-radius:var(--r-sm);background:var(--accent-weak);pointer-events:none}
+.tp-col{flex:1;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;padding:80px 0;box-sizing:border-box;-webkit-mask-image:linear-gradient(180deg,transparent,#000 24%,#000 76%,transparent);mask-image:linear-gradient(180deg,transparent,#000 24%,#000 76%,transparent)}
+.tp-col:focus-visible{outline:none}
+.tp-col:focus-visible~.tp-band,.tp-cols.act .tp-band{background:var(--a-200)}
+.tp-col::-webkit-scrollbar{display:none}
+.tp-item{height:28px;line-height:28px;text-align:center;scroll-snap-align:center;font-size:var(--fs-md);font-variant-numeric:tabular-nums;color:var(--text-3)}
+.tp-item.sel{color:var(--accent-strong);font-weight:var(--fw-semibold)}
+.tp-foot{display:flex;gap:8px;margin-top:10px}
+.tp-foot .btn{flex:1;height:32px;font-size:var(--fs-sm);padding-left:8px;padding-right:8px}
+/* ===== 应用内对话框与轻提示（替代系统 confirm/prompt） =====
+   系统弹窗标题会露出「127.0.0.1:3456 显示」、按钮是系统蓝，和本软件的材质/语义色无关；
+   统一收进自家浮层，手机端自动走底部弹层（复用 .modal-mask/.modal 的既有规则）。 */
+.dlg-text{margin:0;font-size:var(--fs-base);color:var(--text-2);line-height:1.7;white-space:pre-wrap}
+.dlg .modal-body{display:flex;flex-direction:column;gap:12px}
+.btn-danger{border:1px solid #E6B8B8;background:#FDF6F6;color:#B42318}
+.btn-danger:hover{background:#FBEDED;border-color:#D9A2A2}
+.toast-wrap{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1400;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{max-width:min(80vw,420px);padding:10px 16px;border-radius:var(--r-full);background:rgba(29,26,22,.92);color:#FFF6EE;font-size:var(--fs-sm);line-height:1.5;box-shadow:var(--shadow-lg);animation:toastIn .2s cubic-bezier(.2,.8,.2,1)}
+.toast-ok{background:rgba(18,84,52,.94)}
+.toast-err{background:rgba(140,32,28,.94)}
+/* ===== 更新提示：状态条固定芯片 + 常驻下载小框（环形进度，不用下载箭头） ===== */
+.chip-update{cursor:pointer;background:var(--a-100);color:var(--a-700);border:1px solid var(--a-200);font-weight:var(--fw-semibold)}
+.chip-update:hover{background:var(--a-200)}
+.upd-box{position:fixed;right:22px;bottom:22px;z-index:900;display:none;align-items:center;gap:10px;padding:10px 14px 10px 10px;border-radius:var(--r-lg);background:linear-gradient(180deg,var(--surface),#FFFBF5);border:1px solid var(--border);box-shadow:var(--shadow-lg),inset 0 1px 0 rgba(255,255,255,.6);cursor:pointer;transition:transform .16s var(--ease-spring),box-shadow .16s ease}
+.upd-box.show{display:flex}
+.upd-box:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg),0 6px 18px rgba(28,25,21,.10)}
+.upd-box:focus-visible{outline:none;box-shadow:var(--focus)}
+.upd-box.ready{border-color:var(--a-300)}
+.upd-ring{position:relative;width:42px;height:42px;flex-shrink:0}
+.upd-ring svg{width:42px;height:42px;transform:rotate(-90deg);display:block}
+.upd-ring .bg{fill:none;stroke:var(--a-100);stroke-width:5}
+.upd-ring .fg{fill:none;stroke:var(--accent);stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .3s ease}
+.upd-ring .txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:var(--fw-semibold);color:var(--a-700);font-variant-numeric:tabular-nums}
+.upd-meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+.upd-title{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text);white-space:nowrap}
+.upd-sub{font-size:var(--fs-xs);color:var(--text-3);white-space:nowrap}
+.upd-hover{position:fixed;z-index:901;width:330px;max-width:min(88vw,380px);display:none;padding:12px 14px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-lg);animation:tpIn .14s cubic-bezier(.2,.8,.2,1)}
+.upd-hover.show{display:block}
+.upd-hover h4{margin:0 0 6px;font-size:var(--fs-md);color:var(--text)}
+.upd-hover .upd-hover-meta{font-size:var(--fs-xs);color:var(--text-3);margin:0 0 8px}
+.upd-hover pre{margin:0;max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:var(--fs-sm);line-height:1.7;color:var(--text-2)}
+@media (pointer:coarse){
+  /* 触屏没有 hover，且右下角被悬浮按钮占着：小框挪到左下，只留环形进度 */
+  .upd-box{left:14px;right:auto;bottom:calc(78px + env(safe-area-inset-bottom,0px));padding:8px;border-radius:var(--r-md)}
+  .upd-meta{display:none}
+  .upd-hover{display:none!important}
+  .upd-ring,.upd-ring svg{width:46px;height:46px}
+}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (pointer:coarse){
+  .tp-mask.show{display:flex;align-items:flex-end;background:rgba(29,26,22,.32)}
+  .tp-pop{position:relative;width:100%;border-radius:var(--r-xl) var(--r-xl) 0 0;border-left:none;border-right:none;border-bottom:none;padding:22px 16px calc(18px + env(safe-area-inset-bottom));animation:tpSheetIn .26s cubic-bezier(.2,.8,.2,1)}
+  .tp-pop::before{content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);width:36px;height:4px;border-radius:var(--r-full);background:var(--n-250)}
+  .tp-field{min-height:44px;font-size:16px}
+  .tp-cols{height:252px}
+  .tp-band{top:108px;height:36px}
+  .tp-col{padding:108px 0}
+  .tp-item{height:36px;line-height:36px;font-size:17px}
+  .tp-foot .btn{height:44px;font-size:var(--fs-md)}
+  .toast-wrap{bottom:calc(28px + env(safe-area-inset-bottom,0px))}
+  .toast{font-size:var(--fs-md);padding:12px 18px}
+}
 .cfg-msg{font-size:var(--fs-sm);font-weight:var(--fw-semibold)}
 .drag-mask{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;background:rgba(247,138,70,.07);pointer-events:none}
 .drag-mask.show{display:flex}
@@ -644,10 +708,10 @@ tr:hover td{background:var(--n-25)}
 .about-key{width:56px;flex-shrink:0;color:var(--text-3);font-size:var(--fs-sm)}
 /* ===== 免责声明弹窗 ===== */
 .disclaimer-modal{max-width:680px;width:min(680px,92vw)}
-.disclaimer-scroll{max-height:56vh;overflow-y:auto;padding:2px 4px 2px 0;line-height:1.8;font-size:var(--fs-base);color:var(--text-1)}
+.disclaimer-scroll{max-height:56vh;overflow-y:auto;padding:2px 4px 2px 0;line-height:1.8;font-size:var(--fs-base);color:var(--text)}
 .disclaimer-scroll::-webkit-scrollbar{width:10px}
 .disclaimer-scroll::-webkit-scrollbar-thumb{background:#D8CFC6;border-radius:var(--r-xs)}
-.disclaimer-scroll h3{font-size:var(--fs-lg);font-weight:var(--fw-bold);margin:0 0 10px;color:var(--text-1)}
+.disclaimer-scroll h3{font-size:var(--fs-lg);font-weight:var(--fw-bold);margin:0 0 10px;color:var(--text)}
 .disclaimer-scroll h4{font-size:var(--fs-base);font-weight:var(--fw-semibold);margin:14px 0 6px;color:var(--accent-deep,#C2601F)}
 .disclaimer-scroll p{margin:4px 0;text-align:justify}
 /* ===== 检查更新弹窗 ===== */
@@ -811,7 +875,7 @@ tr:hover td{background:var(--n-25)}
     backdrop-filter:blur(24px) saturate(180%);
     box-shadow:0 -1px 16px rgba(28,25,21,.07);
   }
-  .brand,.side-foot{display:none}
+  .side-foot{display:none}
   .nav{flex-direction:row;flex:1;gap:0;justify-content:space-around;align-items:stretch;min-width:0;overflow-x:auto;scrollbar-width:none}
   .nav::-webkit-scrollbar{display:none}
   .nav-item{
@@ -970,7 +1034,7 @@ tr:hover td{background:var(--n-25)}
 <body>
 <div class="shell">
   <div class="titlebar">
-    <div class="titlebar-title"><img src="/assets/app-icon.png" class="titlebar-icon" alt=""><span>学习通自动签到 · v${esc(status.version || '—')}</span></div>
+    <div class="titlebar-title">${ICONS.appMark}<span>学习通自动签到 · v${esc(status.version || '—')}</span></div>
     <div class="titlebar-controls">
       <button class="win-btn" id="btnMin" title="最小化">${ICONS.winMin}</button>
       <button class="win-btn" id="btnMax" title="最大化">${ICONS.winMax}</button>
@@ -979,15 +1043,8 @@ tr:hover td{background:var(--n-25)}
   </div>
   <div class="app">
   <aside class="side">
-    <div class="brand">
-      <div class="brand-logo"><img src="/assets/app-icon.png" class="brand-logo-img" alt=""></div>
-      <div>
-        <div class="brand-name">学习通自动签到</div>
-        <div class="brand-ver">v${esc(status.version || '—')}</div>
-      </div>
-    </div>
     <nav class="nav" id="nav">
-      <button class="nav-item active" data-view="overview">${ICONS.home}<span>总览</span></button>
+      <button class="nav-item active" data-view="overview">${ICONS.appMark}<span>总览</span></button>
       <button class="nav-item" data-view="courses">${ICONS.courses}<span>课程</span></button>
       <button class="nav-item" data-view="schedule">${ICONS.calendar}<span>课表</span></button>
       <button class="nav-item" data-view="history">${ICONS.history}<span>历史记录</span></button>
@@ -995,6 +1052,7 @@ tr:hover td{background:var(--n-25)}
       <button class="nav-item" data-view="settings">${ICONS.settings}<span>设置</span></button>
     </nav>
     <div class="side-foot">
+      <div class="foot-row foot-brand">${ICONS.appMark}<span>学习通自动签到</span><span class="muted">v${esc(status.version || '—')}</span></div>
       <div class="foot-row"><span class="dot" id="footDot"></span><span id="footState">运行中</span></div>
       <div class="foot-row">${ICONS.user}<span id="footAccounts">${accounts.length} 个账号</span></div>
       <div class="foot-row">${ICONS.server}<span class="foot-port">端口 ${esc(String(status.port || '3456'))}</span></div>
@@ -1019,6 +1077,7 @@ tr:hover td{background:var(--n-25)}
               : '钉钉图片通道未启用'
         }</span>
         ${status.qrPending ? '<span class="chip chip-warn" id="chipQr">有二维码待签</span>' : '<span class="chip chip-warn" id="chipQr" style="display:none">有二维码待签</span>'}
+        <span class="chip chip-update" id="chipUpdate" style="display:none" role="button" tabindex="0" title="有新版本可用，点击查看">有新版本</span>
       </div>
       <div class="top-actions">
         <button class="btn btn-primary" id="btnQrModal">${ICONS.qr}<span>二维码签到</span></button>
@@ -1162,7 +1221,7 @@ tr:hover td{background:var(--n-25)}
             <tbody id="historyBody">${recentRows}</tbody>
           </table>
           <div class="section-foot">
-            <a class="btn btn-ghost" href="/api/history/export" download="checkin-history.csv">${ICONS.download}<span>导出 CSV</span></a>
+            <a class="btn btn-ghost" href="/api/history/export${qs}" download="checkin-history.csv">${ICONS.download}<span>导出 CSV</span></a>
             <button class="btn btn-ghost btn-danger" id="clearHistoryBtn">${ICONS.trash}<span>清空记录</span></button>
             <span class="cfg-msg" id="historyMsg"></span>
           </div>
@@ -1176,7 +1235,7 @@ tr:hover td{background:var(--n-25)}
           <div class="log-box" id="logBox"><div class="log-empty">加载中…</div></div>
           <div class="section-foot">
 
-            <a class="btn btn-ghost" href="/api/logs/export" download="app.log">${ICONS.download}<span>导出日志</span></a>
+            <a class="btn btn-ghost" href="/api/logs/export${qs}" download="app.log">${ICONS.download}<span>导出日志</span></a>
 
             <button class="btn btn-ghost" id="logRefreshBtn">${ICONS.refresh}<span>刷新日志</span></button>
             <span class="cfg-msg" id="logMsg"></span>
@@ -1274,7 +1333,7 @@ tr:hover td{background:var(--n-25)}
         <div class="section">
           <div class="section-head"><span class="section-title">关于</span></div>
           <div class="about-box">
-            <div class="about-line"><span class="about-key">版本</span><span>学习通自动签到 v${esc(status.version || '—')}</span><button class="btn btn-ghost btn-sm" id="updateCheckBtn" style="margin-left:auto">${ICONS.download}<span>检查更新</span></button></div>
+            <div class="about-line"><span class="about-key">版本</span><span>学习通自动签到 v${esc(status.version || '—')}</span><button class="btn btn-ghost btn-sm" id="updateCheckBtn" style="margin-left:auto">${ICONS.refresh}<span>检查更新</span></button></div>
             <div class="about-line"><span class="about-key">仓库</span><span class="cell-mono">github.com/liixnglinb/superstar-checkin</span></div>
             <div class="about-line"><span class="about-key">说明</span><span>仅用于个人学习场景的自动签到辅助，请遵守学校考勤规定。</span></div>
             <div class="about-line"><span class="about-key">声明</span><button class="btn btn-ghost btn-sm" id="disclaimerView">${ICONS.shield}<span>查看免责声明</span></button></div>
@@ -1287,13 +1346,30 @@ tr:hover td{background:var(--n-25)}
 <div class="drag-mask" id="dragMask"><div class="drag-box">松开即可上传二维码签到图片<small>支持任意签到二维码，识别后自动完成签到</small></div></div>
 
 <!-- 检查更新：设置页「检查更新」按钮弹出 -->
+<!-- 更新小框：常驻在界面里，环形进度表示下载进度（刻意不用下载箭头图标） -->
+<div class="upd-box" id="updBox" style="display:none" role="button" tabindex="0" aria-label="软件更新">
+  <div class="upd-ring">
+    <svg viewBox="0 0 44 44" aria-hidden="true"><circle class="bg" cx="22" cy="22" r="18"/><circle class="fg" id="updRing" cx="22" cy="22" r="18" stroke-dasharray="113.1" stroke-dashoffset="113.1"/></svg>
+    <span class="txt" id="updPct">0%</span>
+  </div>
+  <div class="upd-meta">
+    <span class="upd-title" id="updTitle">发现新版本</span>
+    <span class="upd-sub" id="updSub">正在准备…</span>
+  </div>
+</div>
+<div class="upd-hover" id="updHover" role="tooltip">
+  <h4 id="updHoverTitle">更新内容</h4>
+  <p class="upd-hover-meta" id="updHoverMeta"></p>
+  <pre id="updHoverBody">—</pre>
+</div>
+
 <div class="modal-mask" id="updateModal" style="display:none">
   <div class="modal update-modal">
     <div class="modal-head">
-      <span class="modal-title">${ICONS.download}<span>检查更新</span></span>
+      <span class="modal-title">${ICONS.update}<span>软件更新</span></span>
     </div>
     <div class="modal-body" style="min-height:110px">
-      <div id="updateBody" style="font-size:var(--fs-base);color:var(--text-1);line-height:1.8"></div>
+      <div id="updateBody" style="font-size:var(--fs-base);color:var(--text);line-height:1.8"></div>
       <div id="updateBar" style="display:none;margin-top:14px">
         <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
           <div id="updateBarFill" style="height:100%;width:0%;background:var(--accent,#F78A46);transition:width .2s"></div>
@@ -1359,6 +1435,33 @@ tr:hover td{background:var(--n-25)}
 <button class="fab" id="fabQr" title="二维码签到" aria-label="二维码签到">${ICONS.qr}</button>
 
 <!-- 二维码签到弹窗：拖入任意签到码图片即完成签到 -->
+<!-- 课程签到记录详情 -->
+<div class="detail-modal" id="courseDetailModal" style="display:none" role="dialog" aria-modal="true" aria-label="课程签到记录">
+  <div class="detail-modal-box">
+    <div class="detail-modal-head">
+      <span class="detail-modal-title" id="detailTitle">签到记录</span>
+      <button class="detail-modal-close" id="detailClose" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="detail-modal-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- 应用内确认/输入对话框（替代系统 confirm 与 prompt） -->
+<div class="modal-mask" id="dialogMask" style="display:none">
+  <div class="modal dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="modal-head"><span id="dlgTitle">请确认</span><button class="modal-close" id="dlgClose" type="button" aria-label="关闭">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <p class="dlg-text" id="dlgText"></p>
+      <input class="field-input" id="dlgInput" style="width:100%;display:none" autocomplete="off">
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="dlgCancel" type="button">取消</button>
+      <button class="btn btn-primary" id="dlgOk" type="button">确定</button>
+    </div>
+  </div>
+</div>
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+
 <div class="modal-mask" id="qrModal" style="display:none">
   <div class="modal">
     <div class="modal-head">
@@ -1450,8 +1553,18 @@ tr:hover td{background:var(--n-25)}
   })
   ensureDisclaimer()
 
-  // ===== 检查更新（electron-updater：差分下载 + 静默安装） =====
-  var updateCheckBtn=document.getElementById('updateCheckBtn')
+  // ===== 软件更新（electron-updater：测速选源 + 差分下载 + 静默安装） =====
+  // 主进程是唯一真源：界面只渲染它推来的状态，这样关掉面板也不会丢「已下载好」。
+  var updBox=document.getElementById('updBox')
+  var updRing=document.getElementById('updRing')
+  var updPct=document.getElementById('updPct')
+  var updTitle=document.getElementById('updTitle')
+  var updSub=document.getElementById('updSub')
+  var updHover=document.getElementById('updHover')
+  var updHoverTitle=document.getElementById('updHoverTitle')
+  var updHoverMeta=document.getElementById('updHoverMeta')
+  var updHoverBody=document.getElementById('updHoverBody')
+  var chipUpdate=document.getElementById('chipUpdate')
   var updateModal=document.getElementById('updateModal')
   var updateBody=document.getElementById('updateBody')
   var updateGo=document.getElementById('updateGo')
@@ -1459,107 +1572,205 @@ tr:hover td{background:var(--n-25)}
   var updateBar=document.getElementById('updateBar')
   var updateBarFill=document.getElementById('updateBarFill')
   var updateBarText=document.getElementById('updateBarText')
-  var updateState={downloaded:false}
+  var RING_LEN=113.1
+  var upd={phase:'idle',current:'',latest:'',notes:'',source:'',pct:0,speedBps:0,transferred:0,total:0,message:'',lastResult:null}
+  /** 用户在确认框里点了「下载并重启」：下载完成的那一刻自动接上安装 */
+  var updInstallIntent=false
   function fmtSize(b){
     if(!b||b<0)return ''
     if(b<1048576)return Math.round(b/1024)+'KB'
     return (b/1048576).toFixed(b<10485760?1:0)+'MB'
   }
-  if(updateGo)updateGo.addEventListener('click',function(){
-    // 更新包已就绪：重启并静默安装（不弹安装向导）
-    if(updateState.downloaded){
-      updateGo.disabled=true;updateGo.textContent='正在重启…'
-      window.updateCtl.install().then(function(r){
-        if(!r||!r.ok){
-          updateGo.disabled=false;updateGo.textContent='重启并更新'
-          updateBody.innerHTML='<div class="cell-empty">安装启动失败：'+(r&&r.message?esc(r.message):'未知错误')+'，可稍后重试</div>'
-        }
-      }).catch(function(){
-        updateGo.disabled=false;updateGo.textContent='重启并更新'
-        updateBody.innerHTML='<div class="cell-empty">安装启动失败，请稍后重试</div>'
-      })
-      return
+  function hasNewVersion(s){return s.phase==='available'||s.phase==='downloading'||s.phase==='ready'}
+  function updSubText(s){
+    if(s.phase==='downloading'){
+      var parts=[(s.pct||0)+'%']
+      if(s.speedBps)parts.push((s.speedBps/1048576).toFixed(1)+'MB/s')
+      return parts.join(' · ')
     }
-    // 开始下载：electron-updater 自动差分，只下载发生变化的块
-    if(!window.updateCtl){updateBody.innerHTML='<div class="cell-empty">更新组件不可用（请使用安装版）</div>';return}
-    updateGo.disabled=true;updateGo.textContent='下载中…'
-    updateBar.style.display=''
-    updateBarFill.style.width='0%'
-    updateBarText.textContent='正在准备下载…'
-    window.updateCtl.download().then(function(r){
-      if(r&&r.ok){
-        updateState.downloaded=true
-        updateBar.style.display='none'
-        updateBody.innerHTML='<div style="padding:6px 0"><b>更新包已就绪</b><br><span style="color:var(--text-3);font-size:var(--fs-sm)">点击「重启并更新」，软件会自动完成安装并重新打开，无需重走安装向导。</span></div>'
-        updateGo.disabled=false;updateGo.textContent='重启并更新'
-        updateLater.textContent='稍后再说'
-      }else{
-        updateBar.style.display='none'
-        updateGo.disabled=false;updateGo.textContent='重新下载'
-        updateBody.innerHTML='<div class="cell-empty">下载失败：'+(r&&r.message?esc(r.message):'网络异常，请重试')+'</div>'
+    if(s.phase==='ready')return '已下载完成，点击更新'
+    if(s.phase==='available')return '准备下载…'
+    if(s.phase==='error')return s.message||'更新失败，可重试'
+    return '正在检查…'
+  }
+  /** 面板里那颗主按钮该显示什么、点了做什么 */
+  function updateActionFor(s){
+    if(s.phase==='downloading')return{label:'下载中…',disabled:true}
+    if(s.phase==='ready')return{label:'安装并重启',disabled:false,act:'install'}
+    if(s.phase==='error')return{label:'重试更新',disabled:false,act:'download'}
+    if(s.phase==='available')return{label:'更新并重启',disabled:false,act:'download'}
+    return null
+  }
+  function updateBodyHtml(s){
+    if(s.phase==='checking')return '<div style="display:flex;gap:10px;align-items:center"><span class="spinner"></span>正在检查更新，并实测各下载源速度…</div>'
+    if(s.phase==='idle')return '<div class="cell-empty">尚未检查过更新</div>'
+    if(s.phase==='uptodate')return '<div style="padding:6px 0">当前已是最新版本 <b>v'+esc(s.current||'')+'</b>，无需更新。</div>'
+    var head=s.phase==='ready'
+      ? '<div style="font-size:var(--fs-md);font-weight:var(--fw-semibold);margin-bottom:8px">更新包已就绪</div>'
+      : s.phase==='error'
+        ? '<div style="font-size:var(--fs-md);font-weight:var(--fw-semibold);margin-bottom:8px;color:#B42318">更新失败</div>'
+        : '<div style="font-size:var(--fs-md);font-weight:var(--fw-semibold);margin-bottom:8px">发现新版本 <b>v'+esc(s.latest||'')+'</b>（当前 v'+esc(s.current||'')+'）</div>'
+    var hint=s.phase==='ready'
+      ? '<div style="color:var(--text-3);font-size:var(--fs-sm);margin-bottom:8px">点击「重启并更新」，软件会自动完成安装并重新打开，无需重走安装向导。</div>'
+      : s.phase==='downloading'
+        ? '<div style="color:var(--text-3);font-size:var(--fs-sm);margin-bottom:8px">正在后台下载（自动差分，只下载变化的块），可以关掉这个窗口，下载不会中断。</div>'
+        : ''
+    var msg=s.message?'<div style="color:'+(s.phase==='error'?'#B42318':'var(--text-3)')+';font-size:var(--fs-sm);margin-bottom:8px">'+esc(s.message)+'</div>':''
+    var notes='<div style="max-height:220px;overflow-y:auto;white-space:pre-wrap;background:var(--bg2,#FBF9F7);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-size:var(--fs-sm);color:var(--text-2)">'+esc((s.notes||'').trim()||'暂无更新说明')+'</div>'
+    var srcLine=s.source?'<div style="font-size:var(--fs-sm);color:var(--text-3);margin-top:8px">下载源：'+esc(s.source)+'</div>':''
+    return '<div style="padding:4px 0">'+head+msg+hint+notes+srcLine+'</div>'
+  }
+  function renderUpdateModal(s){
+    if(!updateModal||updateModal.style.display!=='flex')return
+    if(updateBar){
+      var busy=s.phase==='downloading'
+      updateBar.style.display=busy?'':'none'
+      if(busy){
+        updateBarFill.style.width=(s.pct||0)+'%'
+        var extra=[]
+        if(s.transferred&&s.total)extra.push(fmtSize(s.transferred)+' / '+fmtSize(s.total))
+        if(s.speedBps)extra.push((s.speedBps/1048576).toFixed(1)+'MB/s')
+        updateBarText.textContent='正在下载更新… '+(s.pct||0)+'%'+(extra.length?'（'+extra.join(' · ')+'）':'')
       }
-    }).catch(function(){
-      updateBar.style.display='none'
-      updateGo.disabled=false;updateGo.textContent='重新下载'
-      updateBody.innerHTML='<div class="cell-empty">下载失败，请检查网络后重试</div>'
+    }
+    if(updateBody)updateBody.innerHTML=updateBodyHtml(s)
+    if(!updateGo)return
+    var a=updateActionFor(s)
+    if(!a){updateGo.style.display='none';return}
+    updateGo.style.display=''
+    updateGo.disabled=!!a.disabled
+    updateGo.textContent=a.label
+    if(updateLater)updateLater.textContent=(s.phase==='ready'?'稍后再说':'关闭')
+  }
+  function renderUpd(s){
+    if(!s)return
+    upd=s
+    var show=hasNewVersion(s)||s.phase==='error'
+    if(chipUpdate){
+      chipUpdate.style.display=hasNewVersion(s)?'':'none'
+      if(hasNewVersion(s))chipUpdate.textContent=(s.phase==='ready'?'更新已就绪 v':'有新版本 v')+(s.latest||'')
+    }
+    if(updBox){
+      updBox.style.display=show?'flex':'none'
+      updBox.classList.toggle('ready',s.phase==='ready')
+      var pct=s.phase==='ready'?100:(s.pct||0)
+      if(updRing)updRing.setAttribute('stroke-dashoffset',String(RING_LEN*(1-pct/100)))
+      if(updPct)updPct.textContent=s.phase==='ready'?'✓':(pct+'%')
+      if(updTitle)updTitle.textContent=s.phase==='ready'?'更新已就绪':(s.phase==='error'?'更新失败':'正在下载 v'+(s.latest||''))
+      if(updSub)updSub.textContent=updSubText(s)
+    }
+    if(updHoverBody){
+      updHoverTitle.textContent='v'+(s.latest||'')+' 更新内容'
+      updHoverMeta.textContent=(s.current?'当前 v'+s.current:'')+(s.source?' · '+s.source:'')
+      updHoverBody.textContent=(s.notes||'').trim()||'本次更新没有附带说明。'
+    }
+    renderUpdateModal(s)
+    // 用户确认过「下载并重启」：下载一完成就自动接上安装，不用再点一次
+    if(s.phase==='ready'&&updInstallIntent){updInstallIntent=false;doInstallNow()}
+  }
+  function showUpdHover(){
+    if(!updHover||!updBox||window.matchMedia('(pointer: coarse)').matches)return
+    if(!hasNewVersion(upd))return
+    updHover.classList.add('show')
+    var r=updBox.getBoundingClientRect()
+    var w=updHover.offsetWidth,h=updHover.offsetHeight
+    var left=Math.max(8,Math.min(r.right-w,window.innerWidth-w-8))
+    var top=r.top-h-10
+    if(top<8)top=Math.min(r.bottom+10,window.innerHeight-h-8)
+    updHover.style.left=left+'px';updHover.style.top=top+'px'
+  }
+  function hideUpdHover(){if(updHover)updHover.classList.remove('show')}
+  function doInstallNow(){
+    if(!window.updateCtl)return
+    toast('正在重启并安装更新…','ok')
+    window.updateCtl.install().then(function(r){
+      if(!r||!r.ok)toast('安装启动失败：'+((r&&r.message)||'未知错误'),'err')
+    }).catch(function(){toast('安装启动失败，请稍后重试','err')})
+  }
+  /** 点按钮 → 直接问「是否安装并重启」；确认后才开始下载/安装（下载进度在小框与面板里看） */
+  function showUpdateConfirm(){
+    if(!window.updateCtl){toast('自动更新只在安装版里可用（浏览器打开时无效）','err');return}
+    if(!hasNewVersion(upd)&&upd.phase!=='error'){openUpdateModal();return}
+    var size=upd.total?'（更新包约 '+fmtSize(upd.total)+'）':''
+    var head=upd.phase==='ready'
+      ? '新版本 v'+(upd.latest||'')+' 已下载完成'+size+'。\\n\\n是否现在安装并重启？软件会自动完成安装并重新打开，无需重走安装向导。'
+      : '发现新版本 v'+(upd.latest||'')+'（当前 v'+(upd.current||'')+'）'+size+'。\\n\\n是否现在更新并重启？确认后软件会自动下载、安装并重新打开。'
+    var notes=(upd.notes||'').trim()
+    if(notes)head+='\\n\\n更新内容：\\n'+notes.slice(0,600)+(notes.length>600?'…':'')
+    if(upd.phase==='error'&&upd.message)head+='\\n\\n上次失败原因：'+upd.message
+    askConfirm({
+      title:upd.phase==='ready'?'安装更新并重启':'更新并重启',
+      text:head,
+      okText:upd.phase==='ready'?'安装并重启':'下载并重启',
+    }).then(function(yes){
+      if(!yes)return
+      if(upd.phase==='ready'){doInstallNow();return}
+      // 还没下载：确认即视为同意「下完就装」，下完自动接上安装
+      updInstallIntent=true
+      openUpdateModal()
+      window.updateCtl.download().then(function(r){
+        if(r&&!r.ok){updInstallIntent=false;toast(r.message||'下载失败，请稍后重试','err')}
+      }).catch(function(){updInstallIntent=false;toast('下载失败，请稍后重试','err')})
     })
+  }
+  function openUpdateModal(){
+    if(!updateModal)return
+    updateModal.style.display='flex'
+    renderUpdateModal(upd)
+  }
+  function refreshUpdState(){
+    if(window.updateCtl&&window.updateCtl.getState){
+      window.updateCtl.getState().then(renderUpd).catch(function(){})
+    }
+  }
+  if(updBox){
+    updBox.addEventListener('click',function(){showUpdateConfirm()})
+    updBox.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();updBox.click()}
+    })
+    updBox.addEventListener('mouseenter',showUpdHover)
+    updBox.addEventListener('mouseleave',hideUpdHover)
+    updBox.addEventListener('focus',showUpdHover)
+    updBox.addEventListener('blur',hideUpdHover)
+  }
+  if(chipUpdate){
+    chipUpdate.addEventListener('click',function(){showUpdateConfirm()})
+    chipUpdate.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();showUpdateConfirm()}
+    })
+  }
+  if(updateGo)updateGo.addEventListener('click',function(){
+    var a=updateActionFor(upd)
+    if(!a||a.disabled)return
+    showUpdateConfirm()
   })
   if(updateLater)updateLater.addEventListener('click',function(){
     if(updateModal)updateModal.style.display='none'
-    updateLater.textContent='以后再说'
+    hideUpdHover()
   })
-  // 下载进度（仅注册一次）：展示已下载量 / 总量 / 速度，便于确认差分生效
-  if(window.updateCtl&&window.updateCtl.onProgress){
-    window.updateCtl.onProgress(function(d){
-      if(!d)return
-      if(d.phase==='connecting'){
-        updateBarFill.style.width='0%'
-        updateBarText.textContent='正在连接 '+ (d.source||'下载源') +'…'
-      }else if(d.phase==='downloading'&&updateBarFill){
-        var pct=d.pct||0
-        updateBarFill.style.width=pct+'%'
-        var extra=[]
-        if(d.transferred&&d.total)extra.push(fmtSize(d.transferred)+' / '+fmtSize(d.total))
-        if(d.speedBps)extra.push((d.speedBps/1048576).toFixed(1)+'MB/s')
-        updateBarText.textContent='正在下载更新… '+pct+'%'+(extra.length?'（'+extra.join(' · ')+'）':'')
-      }else if(d.phase==='error'&&d.message){
-        updateBar.style.display='none'
-        if(updateGo){updateGo.disabled=false;updateGo.textContent='重新下载'}
-        updateBody.innerHTML='<div class="cell-empty">下载出错：'+esc(d.message)+'</div>'
-      }
-    })
-  }
   if(updateCheckBtn)updateCheckBtn.addEventListener('click',function(){
-    if(!window.updateCtl){return}
-    updateState.downloaded=false
-    if(updateModal)updateModal.style.display='flex'
-    updateGo.style.display='none'
-    updateLater.textContent='以后再说'
-    updateBar.style.display='none'
-    updateBody.innerHTML='<div style="display:flex;gap:10px;align-items:center"><span class="spinner"></span>正在检查更新…</div>'
-    window.updateCtl.check().then(function(r){
-      if(!r||!r.ok){
-        updateGo.style.display='none'
-        updateLater.textContent='知道了'
-        updateBody.innerHTML='<div class="cell-empty">'+(r&&r.message?esc(r.message):'检查更新失败，请检查网络后重试')+'</div>'
-        return
-      }
-      if(!r.hasUpdate){
-        updateGo.style.display='none'
-        updateLater.textContent='知道了'
-        updateBody.innerHTML='<div style="padding:6px 0">当前已是最新版本 <b>v'+esc(r.current)+'</b>，无需更新。</div>'
-        return
-      }
-      updateGo.style.display=''
-      updateGo.disabled=false;updateGo.textContent='下载更新'
-      var srcLine=r.source?'<div style="font-size:var(--fs-sm);color:var(--text-3);margin-top:8px">下载源：'+esc(r.source)+'（自动差分，只下载变化的文件块）</div>':''
-      updateBody.innerHTML='<div style="padding:4px 0"><div style="font-size:var(--fs-md);font-weight:var(--fw-semibold);margin-bottom:8px">发现新版本 <b>v'+esc(r.latest)+'</b>（当前 v'+esc(r.current)+'）</div><div style="max-height:220px;overflow-y:auto;white-space:pre-wrap;background:var(--bg2,#FBF9F7);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-size:var(--fs-sm);color:var(--text-2)">'+(r.body?esc(r.body):'暂无更新说明')+'</div>'+srcLine+'</div>'
+    if(!window.updateCtl){toast('自动更新只在安装版里可用（浏览器打开时无效）','err');return}
+    openUpdateModal()
+    renderUpd({phase:'checking',current:upd.current,latest:upd.latest,notes:upd.notes,source:upd.source})
+    window.updateCtl.check().then(function(){
+      refreshUpdState()
     }).catch(function(){
-      updateGo.style.display='none'
-      updateLater.textContent='知道了'
-      updateBody.innerHTML='<div class="cell-empty">检查更新失败，请检查网络后重试</div>'
+      toast('检查更新失败，请检查网络后重试','err')
+      refreshUpdState()
     })
   })
+  if(window.updateCtl&&window.updateCtl.onState)window.updateCtl.onState(function(s){renderUpd(s)})
+  refreshUpdState()
+  // 兜底轮询：页面比主进程的检查晚加载、或推送丢了，也能自己收敛到真实状态
+  setInterval(refreshUpdState,20000)
+  // 上次「更新并重启」的结果：成功/失败都给一次明确回执（失败时用户只会看到版本没变，必须说话）
+  setTimeout(function(){
+    var lr=upd.lastResult
+    if(!lr)return
+    if(lr.ok)toast('已更新到 v'+lr.now,'ok')
+    else toast('上次更新未生效（仍是 v'+lr.now+'，目标 v'+lr.to+'），可以再更新一次','err')
+  },500)
+
   function render(s){
     document.getElementById('stat-courses').textContent=(s.courses||[]).length
     document.getElementById('stat-records').textContent=s.recordCount||0
@@ -1643,13 +1854,25 @@ tr:hover td{background:var(--n-25)}
       // 与服务端一致的判定：未被手动关闭，且（无白名单 或 在白名单内）
       var watchingOf=function(id){return !dis2[id] && (allOn2 || wset2[id])}
       var wins=s.signinWindows||{}
+      var health=s.courseHealth||{}
       cb.innerHTML=cs2.length
         ? cs2.map(function(c){
             var cid=String(c.courseId)
             var watching=watchLocal[cid]!==undefined?watchLocal[cid]:watchingOf(cid)
             var w2=wins[cid]
-            var wc=w2?('<span class="cell-mono">'+esc(w2.text)+'</span>'):'<span class="cell-sub">—</span>'
-            return '<tr><td class="cell-main">'+esc(c.courseName)+'</td><td class="cell-mono">'+esc(String(c.courseId))+'</td><td class="cell-mono">'+esc(String(c.classId))+'</td><td>'+wc+'</td><td><span class="pill '+(watching?'pill-ok':'pill-off')+'">'+(watching?'监控中':'已停用')+'</span></td><td><button class="watch-toggle '+(watching?'on':'')+'" data-cid="'+esc(cid)+'">'+(watching?'关闭监听':'开启监听')+'</button></td></tr>'
+            var wc=w2
+              ? (w2.known
+                ? '<span class="cell-mono" title="共 '+esc(String(w2.samples))+' 次观测；仅此时段轮询（另有每日兜底扫描）">'+esc(w2.text)+'</span>'
+                : '<span class="cell-sub" title="观测不足，暂按全天轮询；积累 '+esc(String(w2.samples))+' 次后自动收敛">'+esc(w2.text)+'</span>')
+              : '<span class="cell-sub">—</span>'
+            // 与服务端同一套状态胶囊：轮询连续失败要显示「扫描异常」，否则每 5 秒重绘会把它抹掉
+            var fails=health[cid]||0
+            var pill=!watching
+              ? '<span class="pill pill-off">已停用</span>'
+              : (fails>=3
+                ? '<span class="pill pill-warn" title="近期轮询多次失败，多为瞬时网络或网关限流，已自动重试；持续异常可点击「重新拉取课程列表」">扫描异常</span>'
+                : '<span class="pill pill-ok">监控中</span>')
+            return '<tr><td class="cell-main" data-label="课程">'+esc(c.courseName)+'</td><td class="cell-mono" data-label="Course ID">'+esc(cid)+'</td><td class="cell-mono" data-label="Class ID">'+esc(String(c.classId))+'</td><td data-label="签到时段">'+wc+'</td><td data-label="状态">'+pill+'</td><td data-label="监听"><button class="watch-toggle '+(watching?'on':'')+'" data-cid="'+esc(cid)+'">'+(watching?'关闭监听':'开启监听')+'</button></td></tr>'
           }).join('')
         : '<tr><td colspan="6" class="cell-empty">暂无课程数据</td></tr>'
     }
@@ -1741,7 +1964,7 @@ tr:hover td{background:var(--n-25)}
   if(saveBtn)saveBtn.addEventListener('click',function(){
     var u=document.getElementById('cfgUsername').value.trim()
     var p=document.getElementById('cfgPassword').value
-    var msg=document.getElementById('cfgMsg')
+    var msg=document.getElementById('accountMsg')
     if(!u||!p){msg.textContent='账号和密码不能为空';msg.style.color='#B42318';return}
     saveBtn.disabled=true;saveBtn.textContent='保存中…'
     apiFetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
@@ -1773,8 +1996,10 @@ tr:hover td{background:var(--n-25)}
     window.addEventListener('resize',syncMax)
     syncMax()
   } else {
-    // 非 Electron（浏览器调试）时隐藏自绘标题栏
+    // 非 Electron（浏览器调试）时隐藏自绘标题栏：此时软件名与版本号改由侧栏底部承担，
+    // 否则整个界面里就没有任何地方说明「这是哪个软件、什么版本」。
     var tb=document.querySelector('.titlebar');if(tb)tb.style.display='none'
+    document.body.classList.add('no-titlebar')
   }
   // ===== 课程监听开关 =====
   var watchLocal={}  // 本地未保存的开关修改（{courseId: bool}）
@@ -1821,6 +2046,12 @@ tr:hover td{background:var(--n-25)}
       if(on)onList.push(cid);else allOn=false
     })
     var msg=document.getElementById('watchMsg')
+    if(!allOn&&onList.length===0){
+      // 空数组 = 监听全部，直接发会把用户刚关掉的全打开
+      msg.textContent='⚠️ 至少要保留一门监听的课程'
+      msg.style.color='#B7791F'
+      return
+    }
     watchSaveBtn.disabled=true;watchSaveBtn.textContent='保存中…'
     apiFetch('/api/watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({watchCourses:allOn?[]:onList})})
       .then(function(r){return r.json()})
@@ -1901,7 +2132,7 @@ tr:hover td{background:var(--n-25)}
   if(accountList)accountList.addEventListener('click',function(e){
     var pBtn=e.target.closest('[data-primary]')
     var dBtn=e.target.closest('[data-remove]')
-    var msg=document.getElementById('cfgMsg')
+    var msg=document.getElementById('accountMsg')
     if(pBtn){
       var un=pBtn.getAttribute('data-primary')
       pBtn.disabled=true
@@ -1917,33 +2148,37 @@ tr:hover td{background:var(--n-25)}
     }
     if(dBtn){
       var un2=dBtn.getAttribute('data-remove')
-      if(!confirm('确定删除账号 '+un2+' 吗？'))return
-      dBtn.disabled=true
-      apiFetch('/api/accounts/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un2})})
-        .then(function(r){return r.json()})
-        .then(function(d){
-          msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
-          msg.style.color=d.ok?'#178A5B':'#B42318'
-          if(d.ok)setTimeout(function(){location.reload()},1200)
-        })
-        .catch(function(){msg.textContent='❌ 操作失败';msg.style.color='#B42318';dBtn.disabled=false})
+      askConfirm({title:'删除账号',text:'确定删除账号 '+un2+' 吗？该账号保存在本地的加密密码会一并移除。',okText:'删除',danger:true}).then(function(yes){
+        if(!yes)return
+        dBtn.disabled=true
+        apiFetch('/api/accounts/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un2})})
+          .then(function(r){return r.json()})
+          .then(function(d){
+            msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
+            msg.style.color=d.ok?'#178A5B':'#B42318'
+            if(d.ok)setTimeout(function(){location.reload()},1200)
+          })
+          .catch(function(){msg.textContent='❌ 操作失败';msg.style.color='#B42318';dBtn.disabled=false})
+      })
     }
   })
 
   // ===== 历史记录：清空 =====
   var clearHistoryBtn=document.getElementById('clearHistoryBtn')
   if(clearHistoryBtn)clearHistoryBtn.addEventListener('click',function(){
-    if(!confirm('确定清空全部签到记录吗？此操作不可恢复。'))return
-    var msg=document.getElementById('historyMsg')
-    clearHistoryBtn.disabled=true
-    apiFetch('/api/history/clear',{method:'POST'})
-      .then(function(r){return r.json()})
-      .then(function(d){
-        msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
-        msg.style.color=d.ok?'#178A5B':'#B42318'
-        if(d.ok)setTimeout(function(){location.reload()},800)
-      })
-      .catch(function(){msg.textContent='❌ 清空失败';msg.style.color='#B42318';clearHistoryBtn.disabled=false})
+    askConfirm({title:'清空签到记录',text:'确定清空全部签到记录吗？此操作不可恢复。',okText:'清空',danger:true}).then(function(yes){
+      if(!yes)return
+      var msg=document.getElementById('historyMsg')
+      clearHistoryBtn.disabled=true
+      apiFetch('/api/history/clear',{method:'POST'})
+        .then(function(r){return r.json()})
+        .then(function(d){
+          msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败')
+          msg.style.color=d.ok?'#178A5B':'#B42318'
+          if(d.ok)setTimeout(function(){location.reload()},800)
+        })
+        .catch(function(){msg.textContent='❌ 清空失败';msg.style.color='#B42318';clearHistoryBtn.disabled=false})
+    })
   })
 
   // ===== 钉钉图片通道设置 =====
@@ -2022,10 +2257,258 @@ tr:hover td{background:var(--n-25)}
   }
 
   bindSwitch('setDesktop');bindSwitch('setQuiet');bindSwitch('setReport');bindSwitch('setVerify');bindSwitch('setWeeklyReport');bindSwitch('setPreCheck');bindSwitch('setSmartPoll');bindSwitch('setHumanDelay');bindSwitch('setConfirmBefore')
+
+  /* ---------- 时刻滚轮选择器 ----------
+     不用系统弹层：它是白底直角 + 蓝色选中，与本软件的暖橙材质、圆角与语义色都不一致，
+     而且必须先点到「时/分」分段里才能改值。这里点字段即弹出滚轮，滚动/拖拽/方向键都能选。 */
+  var tpState=null
+  function tpPad(n){return (n<10?'0':'')+n}
+  function tpIndex(col){
+    var ih=col.__ih||28
+    return Math.max(0,Math.min((col.__n||24)-1,Math.round(col.scrollTop/ih)))
+  }
+  function tpSync(){
+    var m=document.getElementById('tpMask')
+    if(!m||!tpState)return
+    var cols=m.querySelectorAll('.tp-col'),idx=[]
+    for(var i=0;i<cols.length;i++){
+      var col=cols[i],sel=tpIndex(col),items=col.children
+      for(var j=0;j<items.length;j++)items[j].classList.toggle('sel',j===sel)
+      idx.push(sel)
+    }
+    tpState.idx=idx
+    var read=document.getElementById('tpRead')
+    if(read)read.textContent=tpState.mode==='hm'?tpPad(idx[0]||0)+':'+tpPad(idx[1]||0):tpPad(idx[0]||0)+' 时'
+  }
+  function tpSnap(col){
+    var ih=col.__ih||28
+    col.scrollTo({top:tpIndex(col)*ih,behavior:'smooth'})
+  }
+  function tpStep(col,d){
+    var ih=col.__ih||28
+    var i=Math.max(0,Math.min((col.__n||24)-1,tpIndex(col)+d))
+    col.scrollTo({top:i*ih,behavior:'smooth'})
+    tpSync()
+  }
+  function tpBindCol(col){
+    var drag=false,sy=0,ss=0
+    col.addEventListener('pointerdown',function(e){
+      drag=true;sy=e.clientY;ss=col.scrollTop
+      try{col.setPointerCapture(e.pointerId)}catch(_){}
+      col.style.scrollSnapType='none'
+    })
+    col.addEventListener('pointermove',function(e){if(drag)col.scrollTop=ss-(e.clientY-sy)})
+    col.addEventListener('pointerup',function(){
+      if(!drag)return
+      drag=false;col.style.scrollSnapType='';tpSnap(col)
+      // 拖动结束时往往已经在目标格上，scrollTo 不再产生 scroll 事件，这里必须自己同步一次
+      tpSync()
+    })
+    col.addEventListener('pointercancel',function(){
+      drag=false;col.style.scrollSnapType=''
+    })
+    col.addEventListener('scroll',tpSync,{passive:true})
+    col.addEventListener('keydown',function(e){
+      var d=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0
+      if(!d)return
+      e.preventDefault();tpStep(col,d)
+    })
+  }
+  function tpCommit(){
+    if(!tpState)return
+    var f=tpState.field,idx=tpState.idx||[0,0]
+    f.value=tpState.mode==='hm'?tpPad(idx[0])+':'+tpPad(idx[1]||0):String(idx[0])
+    try{
+      f.dispatchEvent(new Event('input',{bubbles:true}))
+      f.dispatchEvent(new Event('change',{bubbles:true}))
+    }catch(_){}
+  }
+  function tpClose(commit){
+    var m=document.getElementById('tpMask')
+    if(!m)return
+    if(commit)tpCommit()
+    m.classList.remove('show')
+    var f=tpState&&tpState.field
+    tpState=null
+    if(f){try{f.focus({preventScroll:true})}catch(_){}}
+  }
+  function tpEl(){
+    var m=document.getElementById('tpMask')
+    if(m)return m
+    m=document.createElement('div')
+    m.id='tpMask';m.className='tp-mask'
+    m.innerHTML='<div class="tp-pop" role="dialog" aria-modal="true" aria-label="选择时间">'
+      +'<div class="tp-head"><span>选择时间</span><b id="tpRead">--:--</b></div>'
+      +'<div class="tp-cols"><div class="tp-band"></div>'
+      +'<div class="tp-col" tabindex="0" role="listbox" aria-label="时"></div>'
+      +'<div class="tp-col" tabindex="0" role="listbox" aria-label="分"></div></div>'
+      +'<div class="tp-foot">'
+      +'<button type="button" class="btn btn-ghost" id="tpNow">现在</button>'
+      +'<button type="button" class="btn btn-ghost" id="tpCancel">取消</button>'
+      +'<button type="button" class="btn btn-primary" id="tpOk">确定</button></div></div>'
+    document.body.appendChild(m)
+    var cols=m.querySelectorAll('.tp-col')
+    tpBindCol(cols[0]);tpBindCol(cols[1])
+    m.addEventListener('pointerdown',function(e){if(e.target===m)tpClose(false)})
+    m.addEventListener('keydown',function(e){
+      if(e.key==='Escape'){e.preventDefault();tpClose(false)}
+      else if(e.key==='Enter'){e.preventDefault();tpClose(true)}
+    })
+    document.getElementById('tpOk').addEventListener('click',function(){tpClose(true)})
+    document.getElementById('tpCancel').addEventListener('click',function(){tpClose(false)})
+    document.getElementById('tpNow').addEventListener('click',function(){
+      var d=new Date()
+      cols[0].scrollTo({top:d.getHours()*(cols[0].__ih||28),behavior:'smooth'})
+      cols[1].scrollTo({top:d.getMinutes()*(cols[1].__ih||28),behavior:'smooth'})
+      setTimeout(tpSync,160)
+    })
+    return m
+  }
+  function tpColumn(col,n){
+    var html=''
+    for(var k=0;k<n;k++)html+='<div class="tp-item" role="option">'+tpPad(k)+'</div>'
+    col.innerHTML=html
+    col.__n=n
+  }
+  function tpOpen(field){
+    var mode=field.getAttribute('data-tp')==='h'?'h':'hm'
+    var m=tpEl(),cols=m.querySelectorAll('.tp-col'),pop=m.querySelector('.tp-pop')
+    tpColumn(cols[0],24)
+    tpColumn(cols[1],60)
+    cols[1].style.display=mode==='hm'?'':'none'
+    document.getElementById('tpNow').style.display=mode==='hm'?'':'none'
+    var raw=String(field.value||'').trim(),h=0,mi=0
+    if(mode==='hm'){
+      // 整页 HTML 是 TS 模板字符串，正则里的反斜杠+d 会被模板吃掉，所以这里用 split 解析
+      var p=raw.split(':')
+      h=Math.max(0,Math.min(23,parseInt(p[0],10)||0))
+      mi=Math.max(0,Math.min(59,parseInt(p[1],10)||0))
+    }else{
+      h=Math.max(0,Math.min(23,parseInt(raw,10)||0))
+    }
+    tpState={field:field,mode:mode,idx:[h,mi]}
+    m.classList.add('show')
+    // 用计算样式而不是 getBoundingClientRect：弹层正在跑入场动画（scale .98）时
+    // 量到的是缩放后的高度，snap 会漂移、松手后跳回上一格
+    var ih=parseFloat(getComputedStyle(cols[0].firstChild).height)||28
+    cols[0].__ih=ih;cols[1].__ih=ih
+    cols[0].scrollTop=h*ih
+    cols[1].scrollTop=mi*ih
+    if(window.matchMedia('(pointer: coarse)').matches){
+      pop.style.left='';pop.style.top=''
+    }else{
+      var r=field.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight
+      var left=Math.max(8,Math.min(r.left,window.innerWidth-pw-8))
+      var top=r.bottom+6
+      if(top+ph>window.innerHeight-8)top=Math.max(8,r.top-ph-6)
+      pop.style.left=left+'px';pop.style.top=top+'px'
+    }
+    tpSync()
+    try{cols[0].focus({preventScroll:true})}catch(_){}
+    // 弹层刚由 display:none 转 block，这一帧的布局还不稳，直接赋 scrollTop 会被吞掉
+    // （表现为永远从 00:00 开始）。下一帧再定位一次。
+    requestAnimationFrame(function(){
+      if(!tpState||tpState.field!==field)return
+      cols[0].scrollTop=h*ih
+      cols[1].scrollTop=mi*ih
+      tpSync()
+    })
+  }
+  function tpBindFields(){
+    var list=document.querySelectorAll('.tp-field')
+    for(var i=0;i<list.length;i++){
+      (function(f){
+        f.setAttribute('aria-haspopup','dialog')
+        f.addEventListener('mousedown',function(e){e.preventDefault();tpOpen(f)})
+        f.addEventListener('touchstart',function(e){e.preventDefault();tpOpen(f)},{passive:false})
+        f.addEventListener('click',function(e){e.preventDefault()})
+        f.addEventListener('keydown',function(e){
+          if(e.key==='Enter'||e.key===' '||e.key==='ArrowDown'){e.preventDefault();tpOpen(f)}
+        })
+      })(list[i])
+    }
+  }
+  tpBindFields()
+
+  /* ---------- 轻提示与应用内对话框 ---------- */
+  function toast(msg,kind){
+    var wrap=document.getElementById('toastWrap')
+    if(!wrap)return
+    var t=document.createElement('div')
+    t.className='toast'+(kind==='ok'?' toast-ok':kind==='err'?' toast-err':'')
+    t.textContent=msg
+    wrap.appendChild(t)
+    setTimeout(function(){
+      t.style.transition='opacity .25s ease';t.style.opacity='0'
+      setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t)},280)
+    },kind==='err'?4200:2600)
+  }
+  function askDialog(o){
+    return new Promise(function(resolve){
+      var mask=document.getElementById('dialogMask')
+      if(!mask){resolve(null);return}
+      var title=document.getElementById('dlgTitle'),text=document.getElementById('dlgText')
+      var input=document.getElementById('dlgInput'),ok=document.getElementById('dlgOk')
+      var cancel=document.getElementById('dlgCancel'),close=document.getElementById('dlgClose')
+      title.textContent=o.title||'请确认'
+      text.textContent=o.text||''
+      text.style.display=o.text?'':'none'
+      var wantInput=!!o.input
+      input.style.display=wantInput?'':'none'
+      if(wantInput){input.value=o.value||'';input.placeholder=o.placeholder||''}
+      ok.textContent=o.okText||'确定'
+      ok.className='btn '+(o.danger?'btn-danger':'btn-primary')
+      cancel.style.display=o.cancel===false?'none':''
+      mask.style.display='flex'
+      function done(v){
+        mask.style.display='none'
+        mask.onkeydown=ok.onclick=cancel.onclick=close.onclick=mask.onclick=null
+        resolve(v)
+      }
+      ok.onclick=function(){done(wantInput?input.value:true)}
+      cancel.onclick=function(){done(null)}
+      close.onclick=function(){done(null)}
+      mask.onclick=function(e){if(e.target===mask)done(null)}
+      mask.onkeydown=function(e){
+        if(wantInput&&e.key==='Enter'){e.preventDefault();done(input.value)}
+      }
+      setTimeout(function(){
+        if(wantInput){input.focus();input.select()}else{ok.focus()}
+      },60)
+    })
+  }
+  function askConfirm(o){return askDialog(o).then(function(v){return v===true})}
+
+  /* ---------- 监听范围：从课程页的开关算出目标集合，再提交 ---------- */
+  function watchListFromDom(skipCid,flip){
+    var on=[],allOn=true
+    document.querySelectorAll('#coursesBody .watch-toggle').forEach(function(btn){
+      var id=btn.getAttribute('data-cid')
+      var s=btn.classList.contains('on')
+      if(id===skipCid&&flip)s=!s
+      if(s)on.push(id);else allOn=false
+    })
+    return {on:on,allOn:allOn}
+  }
+  function applyWatchList(list,allOn,done){
+    if(!allOn&&list.length===0){
+      // /api/watch 里空数组的语义是「监听全部」，照发会把所有课程都打开，与用户意图相反
+      toast('至少要保留一门监听的课程','err')
+      if(done)done(null)
+      return
+    }
+    apiFetch('/api/watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({watchCourses:allOn?[]:list})})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        toast((d.ok?'✅ ':'❌ ')+(d.message||'保存失败'),d.ok?'ok':'err')
+        if(done)done(d)
+      })
+      .catch(function(){toast('❌ 保存失败，请检查网络','err');if(done)done(null)})
+  }
   // 配置导出
   var cfgExportBtn=document.getElementById('cfgExportBtn')
   if(cfgExportBtn)cfgExportBtn.addEventListener('click',function(){
-    window.location.href='/api/config/export'
+    window.location.href='/api/config/export${qs}'
   })
   // 配置导入
   var cfgImportBtn=document.getElementById('cfgImportBtn')
@@ -2368,11 +2851,13 @@ tr:hover td{background:var(--n-25)}
           var cid=card.dataset.cid
           var cname=card.dataset.cname
           var cur=notes[cid]||''
-          var val=prompt(cname+' 的备注：',cur)
-          if(val!==null){
-            var payload={};payload[cid]=val.trim()
-            apiFetch('/api/course-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(){loadSchedule()})
-          }
+          askDialog({title:cname+' 的备注',input:true,value:cur,placeholder:'例如：周三第 3 节，教学楼 B203',okText:'保存'}).then(function(val){
+            if(val===null)return
+            var payload={};payload[cid]=String(val).trim()
+            apiFetch('/api/course-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+              .then(function(){loadSchedule()})
+              .catch(function(){toast('❌ 备注保存失败','err')})
+          })
         })
       })
       // 详情按钮
@@ -2382,14 +2867,13 @@ tr:hover td{background:var(--n-25)}
           showCourseDetail(btn.dataset.cname)
         })
       })
-      // 卡片点击切换监听
+      // 卡片点击切换监听：直接落到 /api/watch（此前只写 localStorage，没人读，点了等于没点）
       grid.querySelectorAll('.course-card').forEach(function(card){
+        card.style.cursor='pointer'
         card.addEventListener('click',function(){
-          var cid=card.dataset.cid
-          var ws=JSON.parse(localStorage.getItem('watchLocal')||'{}')
-          ws[cid]=ws[cid]===undefined?false:!ws[cid]
-          localStorage.setItem('watchLocal',JSON.stringify(ws))
-          loadSchedule()
+          var cid=card.dataset.cid;if(!cid)return
+          var w=watchListFromDom(cid,true)
+          applyWatchList(w.on,w.allOn,function(d){if(d&&d.ok)loadSchedule()})
         })
       })
     }).catch(function(){grid.innerHTML='<div class="grid-empty">加载失败，请检查服务状态</div>'})
@@ -2443,7 +2927,7 @@ function loadLogs(){
   // ===== 二维码签到弹窗（拖入/选择图片即签） =====
   var qrModal=document.getElementById('qrModal')
   var qrStatus=document.getElementById('qrStatus')
-  function openQrModal(){qrModal.style.display='flex';if(qrStatus){qrStatus.textContent='';qrStatus.className='qr-status'}}
+  function openQrModal(){if(dragMask)dragMask.classList.remove('show');qrModal.style.display='flex';if(qrStatus){qrStatus.textContent='';qrStatus.className='qr-status'}}
   function closeQrModal(){qrModal.style.display='none'}
   var btnQrModal=document.getElementById('btnQrModal')
   if(btnQrModal)btnQrModal.addEventListener('click',openQrModal)
@@ -2471,6 +2955,34 @@ function loadLogs(){
   var qrModalClose=document.getElementById('qrModalClose')
   if(qrModalClose)qrModalClose.addEventListener('click',closeQrModal)
   if(qrModal)qrModal.addEventListener('click',function(e){if(e.target===qrModal)closeQrModal()})
+
+  /* ---------- 浮层统一关闭（Esc / 点遮罩） ---------- */
+  var detailModal=document.getElementById('courseDetailModal')
+  var detailClose=document.getElementById('detailClose')
+  if(detailClose)detailClose.addEventListener('click',function(){detailModal.style.display='none'})
+  if(detailModal)detailModal.addEventListener('click',function(e){if(e.target===detailModal)detailModal.style.display='none'})
+  if(updateModal)updateModal.addEventListener('click',function(e){if(e.target===updateModal)updateModal.style.display='none'})
+  function closeTopOverlay(){
+    var uhp=document.getElementById('updHover')
+    if(uhp&&uhp.classList.contains('show')){uhp.classList.remove('show');return true}
+    var tp=document.getElementById('tpMask')
+    if(tp&&tp.classList.contains('show')){tpClose(false);return true}
+    var dlg=document.getElementById('dialogMask')
+    if(dlg&&dlg.style.display==='flex'){var b=document.getElementById('dlgCancel');if(b)b.click();return true}
+    if(detailModal&&detailModal.style.display==='flex'){detailModal.style.display='none';return true}
+    if(qrModal&&qrModal.style.display==='flex'){closeQrModal();return true}
+    if(updateModal&&updateModal.style.display==='flex'){updateModal.style.display='none';return true}
+    // 免责声明是同意闸门，不给 Esc 绕过
+    if(dragMask&&dragMask.classList.contains('show')){dragMask.classList.remove('show');return true}
+    return false
+  }
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&closeTopOverlay())e.preventDefault()
+  })
+  // 兜底：未捕获的 Promise 失败必须可见，否则用户点了按钮只是「静默没反应」
+  window.addEventListener('unhandledrejection',function(e){
+    toast('操作失败：'+((e.reason&&e.reason.message)||e.reason||'未知错误'),'err')
+  })
   function uploadQrFile(file){
     if(!file)return
     if(file.type.indexOf('image/')!==0){qrStatus.textContent='请选择图片文件';qrStatus.className='qr-status err';return}
@@ -2506,7 +3018,7 @@ function loadLogs(){
   setInterval(poll,5000)
 })();
 </script>
-<script>
+<script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
 /* PWA：注册 Service Worker，让手机浏览器可「添加到主屏幕」并以独立 App 形态打开。
    注册失败静默忽略，不影响控制台任何功能。 */
 if ('serviceWorker' in navigator) {

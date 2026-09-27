@@ -12,12 +12,3 @@ export function writeFileAtomic(filePath: string, data: string | Buffer): void {
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
   }
 }
-
-export function readJson<T>(filePath: string, fallback: T): T {
-  try {
-    if (!fs.existsSync(filePath)) return fallback
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T
-  } catch {
-    return fallback
-  }
-}

@@ -8,7 +8,6 @@ export const MOBILE_AGENT =
 export const API = {
   LOGIN: 'https://passport2-api.chaoxing.com/v11/loginregister',
   USER_INFO: 'https://sso.chaoxing.com/apis/login/userLogin4Uname.do',
-  IM_TOKEN: 'https://im.chaoxing.com/webim/me',
 
   // 签到相关
   PRE_SIGN: 'https://mobilelearn.chaoxing.com/newsign/preSign',
@@ -16,10 +15,6 @@ export const API = {
   ANALYSIS2: 'https://mobilelearn.chaoxing.com/pptSign/analysis2',
   SIGN_AJAX: 'https://mobilelearn.chaoxing.com/pptSign/stuSignajax',
   CHECKIN_DETAIL: 'https://mobilelearn.chaoxing.com/v2/apis/active/getPPTActiveInfo',
-
-  // 拍照签到：超星云盘上传
-  PHOTO_TOKEN: 'https://pan-yz.chaoxing.com/api/token/uservalid',
-  PHOTO_UPLOAD: 'https://pan-yz.chaoxing.com/upload',
 
   // 课程
   COURSE_LIST: 'https://mooc1-api.chaoxing.com/mycourse/backclazzdata',
@@ -48,13 +43,6 @@ export const DEFAULTS = {
   VERIFY_ENABLED: true,         // 签到后二次核对：提交成功后查询平台确认已签到
   MAX_HISTORY: 500,           // 签到历史最大条数
   MAX_LEARNED_LOC: 50,        // 已学坐标最大条数
-} as const
-
-// 签到类型映射（otherId）；手势(3)/拍照 已移除，自动忽略并提示手动签到
-export const CHECKIN_TYPE_MAP: Record<number, string> = {
-  0: 'normal',
-  2: 'qr',
-  4: 'location',
 } as const
 
 // 二维码正则（enc 为 Hex，大小写均匹配）

@@ -304,6 +304,10 @@ skills-study/
 !assets/app-icon.png
 !assets/app-icon-192.png
 !assets/favicon-checkin.png
+# 图标矢量母版：build-icons.js 的输入，必须入库（否则克隆下来无法重建图标）
+!assets/icon.svg
+!assets/icon-24.svg
+!assets/icon-16.svg
 
 
 # 安装版运行解包产物

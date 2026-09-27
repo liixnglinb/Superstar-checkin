@@ -443,6 +443,8 @@ async function main() {
     /** 免责声明：读取接受状态 / 记录接受（服务端持久化，桌面与手机共用一份） */
     getConsent: () => getConsent(),
     acceptDisclaimer: () => acceptDisclaimer(),
+    // 通知里的「点击取消」链接走这里：写进 processCheckin 读的同一个集合
+    cancelCheckin: (aid: string) => { cancelledAids.add(aid) },
     /**
      * 立即扫描一次全部课程（供手机端/控制台手动触发）。
      *
@@ -506,7 +508,12 @@ async function main() {
   const earlyImages: Buffer[] = []
   if (dtServer) {
     dtServer.onImage(async (buf: Buffer) => {
-      if (earlyImages.length < 20) earlyImages.push(buf)
+      if (earlyImages.length >= 20) {
+        // 说「已暂存」却什么都没存 = 用户以为传成功了，比直接报错更糟
+        logger.warn('启动期图片队列已满（20），本次上传被丢弃')
+        return '⚠️ 软件仍在启动，暂存队列已满，请稍后重新上传这张图'
+      }
+      earlyImages.push(buf)
       logger.warn(`服务尚未初始化完成，二维码图片已暂存（待初始化后自动处理，队列 ${earlyImages.length}）`)
       return '⏳ 软件正在启动，图片已暂存，稍后自动处理'
     })

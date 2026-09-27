@@ -1,4 +1,4 @@
-# 学习通自动签到 —— 项目交接文档（v3.6.0）
+# 学习通自动签到 —— 项目交接文档（v3.7.0）
 
 > 本文档写给**接手或后续维护该项目的人**，不写给用户。
 > 不包含帐号/密钥等敏感内容。
@@ -6,7 +6,7 @@
 > 当前状态概要：
 > - 仓库：`https://github.com/liixnglinb/Superstar-checkin`
 > - 本地路径：`C:\Users\李星历\Desktop\学习通自动签到`
-> - 版本：**v3.6.0**
+> - 版本：**v3.7.0**
 > - 协议：GPL-3.0
 > - 形态：Electron 44 桌面壳 + 内嵌 Node 服务（本地端口 3456，由 `web.port` 配置、`web.host` 控制监听地址）
 > - 源码：TypeScript 在 `src/`，编译产物到 `build/`（`npm run build` = tsc + 拷 SDK + embed-config）
@@ -14,7 +14,7 @@
 
 ---
 
-## 1. 项目当前状态（v3.6.0）
+## 1. 项目当前状态（v3.7.0）
 
 ### 1.00 ⚠️ 安全须知：密钥曾进入公开仓库，务必先读
 
@@ -117,6 +117,31 @@ GitHub 的 `git push` 若失败，见 6.6 的代理说明。
 
 - `npm run validate:ui`：校验控制台页 CSS 括号配平、嵌入脚本语法、关键 DOM 钩子是否存在、以及已移除功能是否残留界面入口。
 
+### 1.3 v3.7.0 之后这一轮改了什么（2026-09-27）
+
+**图标系统重做**（详见 4.1）：三档分级母版 + 按原生尺寸栅格化，界面内改用内联矢量。之前的糊是因为拿 512px 位图往 16px 压，且 ICO 里的小尺寸是大图缩出来的。
+
+**侧栏品牌块移除**：`.brand`（大图标 + 软件名 + 版本号）整块删掉，App 标记改放「总览」导航项左侧；软件名/版本在 Electron 里由自绘标题栏承担，在浏览器里由侧栏底部新增的 `.foot-brand` 承担（`body.no-titlebar` 控制）。
+
+**时刻滚轮选择器**：免打扰起止（HH:MM）与日报/预检时间（0–23 时）改为点字段即弹出的自绘滚轮（细指针=浮层、粗指针=底部弹层），字段 `readonly`，值仍写回原 `<input>`，保存链路未动。不用系统弹层的原因：白底直角 + 蓝色选中与这套材质不一致，且必须先点到「时/分」分段才能改值。
+
+**体检修掉的失效点**（都先经代码/浏览器复核，不是照报告照抄）：
+- 三处导出（历史记录 / 日志 / 配置）是裸链接不带 token → 点了必 401，等于功能不存在。
+- 「详情」按钮引用的 `courseDetailModal/detailTitle/detailBody` 页面里根本没有 → 补上弹窗（JS 早就写好了）。
+- 注册 Service Worker 的 `<script>` 缺 nonce → 被 CSP 静默拦死，PWA 从来没生效过。
+- 两个 `id="cfgMsg"` → 添加账号/删号的反馈串到配置区。
+- 5 秒轮询重绘课程表丢 `data-label` 与「扫描异常」胶囊 → 手机端约 5 秒后卡片标签消失。
+- 课表卡片点击只写 `localStorage['watchLocal']`（没人读）→ 改为真正提交 `/api/watch`。
+- **`/api/watch` 的空数组语义是「监听全部」**：把所有开关关掉再保存，结果是全开。两处入口都加了拦截。
+- 弹窗无 Escape、拖拽遮罩残留、`/api/history` 成功记录双写（统计翻倍）、`PollListener.stop()` 停不掉在途轮询、`/api/confirm/cancel` 与主流程的取消集合没连通、DPAPI/退出落盘等，见第 6、9 节。
+- 系统 `confirm()`/`prompt()` 全部换成应用内对话框 + 轻提示（`askDialog`/`toast`）。
+- 控制台与上传页 HTML 加 `Cache-Control: no-store`：实测过改版后浏览器仍拿旧页面。
+- 手机上传页去掉 `capture="environment"`：原来只能现拍，相册里的截图传不进去。
+
+**安全面**：`/api/diag` 不再回显带 `user:pass` 的代理串；配置导出脱敏补 `amapKey/baiduKey`；`/api/config/import` 改为顶层键白名单合并。`/dingtalk/callback` 保留（默认被 token 关死，删掉属于砍能力而不是收安全面），但它不校验钉钉签名，真要对外暴露必须先补。
+
+**防回归**：`scripts/validate-ui.js` 新增 5 项断言 —— 整页无重复 id、导出链接必须带 token、内联 `<script>` 必须带 nonce、时刻字段必须挂选择器、源码里禁止出现会被模板字符串吃掉的 `\d`/`\w`/`\s`。
+
 ---
 
 ## 2. 已知问题与局限
@@ -134,7 +159,7 @@ GitHub 的 `git push` 若失败，见 6.6 的代理说明。
 
 ### 2.3 网络/部署上的已知特性
 - GitHub 连接有时会间歇性不通（`github.com:443`），但 `api.github.com` 正常。**本地推送/上传大文件时容易中断或超时**，不要假设一次 `git push` 必然成功。
-- v3.6.0 的 Release 已在 GitHub 上，但**本地最新提交（含手机端闭环）推送可能未完成**，要看 `git push` 是否成功。
+- v3.6.0 / v3.7.0 的 Release 均已在 GitHub 上，`main` 与 `origin/main` 同步。仍要假设**一次 `git push` 可能失败**，按 3.7 的顺序处理。
 
 ---
 
@@ -168,7 +193,7 @@ GitHub 的 `git push` 若失败，见 6.6 的代理说明。
 2. `git tag vX.Y.Z` —— 与 Release 一一对应。
 
 发布一次要同步动：`package.json` version、`docs/releases/vX.Y.Z.md`（发布说明归档）、tag。  
-已知不一致：`src/index.ts` 启动横幅与 `config.example.yaml` 头部仍写着 "v3.1" 字样，纯文案，顺手清理即可。
+启动横幅与控制台里的版本号都从 `package.json` 动态读取，不再有第二处写死的版本串。
 
 ### 3.4 打安装包（发布主产物）
 
@@ -178,6 +203,7 @@ npm run validate:ui
 npx electron-builder --win --x64
 ```
 
+- **改过 `assets/icon*.svg` 就先跑 `node scripts/build-icons.js`**（见 4.1），否则打出来的安装包还是旧图标。
 - 输出目录由 `package.json` 的 `build.directories.output` 决定，当前是 `dist-electron/`。产物：`SuperstarCheckin-Setup-<版本>.exe`、同名 `.exe.blockmap`、`latest.yml`、`win-unpacked/`。
 - **建议每个版本单独快照一份输出目录**，避免下一次构建把上一版 exe 覆盖掉（`latest.yml` 与 exe 必须同批，混了就签不上校验）：
   ```bash
@@ -217,6 +243,7 @@ npx electron-builder --win --x64
 6. Release 标题命名历史上不统一（v3.5.0 叫「学习通自动签到 v3.5.0」，v3.6.0 叫「v3.6.0」）。自动更新**只看 tag 和资产名**，不看标题，但为了一眼分辨建议统一用 `vX.Y.Z`。
 7. Release 上还有个不带版本号的 `SuperstarCheckin-Setup.exe`：历史遗留的手工别名资产，**不被 `latest.yml` 引用**，不代表最新版，可以删掉。
 8. 发布说明复制一份进 `docs/releases/vX.Y.Z.md` 归档（v3.6.0 已有示例）。
+9. **把真正的更新条目写进这个 Release 的正文**：软件内「更新小框」悬停看到的说明就是它（走 GitHub API 抓取）；正文写成自动生成的 "Full Changelog" 两行，用户就只看得到那两行。
 
 ### 3.7 网络不通时的处理顺序
 
@@ -227,6 +254,26 @@ npx electron-builder --win --x64
   3. 长期不通再考虑 `git remote set-url origin git@github.com:liixnglinb/Superstar-checkin.git`（需本机配好 SSH key，属于改用户环境，先征询）。
 - **当前状态（2026-09-19 复核）**：`main` 与 `origin/main` **已同步**，领先的 `cf5a01c`（手机端访问闭环）已推送成功，v3.6.0 的 Release 在 GitHub 上。
 - 自动更新下载端会依次探测：`gh-proxy.com` 镜像 → `ghfast.top` 镜像 → GitHub 官方（`electron/main.js` 的 feed 列表）。镜像挂了不影响「检查更新」，只是慢。
+
+### 3.8 自动更新（客户端侧，2026-09-27 重做）
+
+三段式：**主进程是唯一真源**（`electron/main.js` 的 `updateState`），界面只渲染它推来的状态。
+
+- **选源**：`CANDIDATES` = 两枚国内镜像 + GitHub 直连，**三个一起测速**（`measureSource`：先取 `latest.yml` 拿 exe 名，再 Range 拉 1.2MB 算吞吐），按 `bps` 排序取最快。旧实现是"按固定顺序取第一个能连通的"，直连永远轮不到，也从不比较快慢。
+- **降级**：`startUpdateDownload()` 里循环 `rankedSources`，某个源下载失败就换下一个，全失败才报错。
+- **时机**：启动后 12 秒自动检查一次（不抢启动资源），之后每 6 小时一次。**只检测不擅自下载**。
+- **交互顺序**：点小框/芯片 → 应用内确认框「是否现在更新并重启？」（正文含更新内容与包体大小）→ 确认后才开始下载 → 下完自动接上静默安装并重启。用户在确认框里点过"下载并重启"后，下载完成会自动触发安装（`updInstallIntent`），不用再点第二次。
+- **状态推送**：`pushUpdateState()` 走 `update-state` IPC；窗口 `did-finish-load` 时补推一次；界面另有 20 秒兜底轮询（页面晚加载/推送丢失也能收敛）。
+- **界面三件套**（`src/server/console-ui.ts`）：
+  1. 状态条固定芯片 `#chipUpdate`（有新版才出现，点开面板）；
+  2. 常驻更新小框 `#updBox`：**环形进度**（`#updRing` 的 `stroke-dashoffset`，周长 113.1）+ 百分比 + 速度，**刻意不用下载箭头图标**（`ICONS.update` 是方框加号，validate-ui 有断言）；
+  3. 悬停浮层 `#updHover` 显示版本对比、更新说明与当前下载源（触屏没有 hover，内容在面板里看）。
+- **安装**：就绪后点小框 → `askConfirm('是否现在更新并重启？')` → `quitAndInstall(false, true)` 静默装并自动重启。
+- **装后回查**：装之前把 `{from, to}` 写进 `userData/update-state.json`，下次启动比对 `app.getVersion()`，成功/失败各给一次 toast —— 否则安装失败时用户只会看到版本没变，没人报错。
+
+发布侧配套：Release 必须带 `latest.yml` + `.blockmap`（见 3.6）；**更新说明优先从 GitHub API 抓 release body**（`api.github.com` 通、内容最全），取不到才退回 `latest.yml` 的 `releaseNotes`（`package.json` 的 `build.releaseInfo` 已配一句话兜底）。所以发版时请把真正的更新条目写进 GitHub Release 正文，软件里悬停看到的就是它。
+
+验证方式（不需要真下载）：在浏览器里给 `window.updateCtl` 打桩（`getState` 返回可控状态），点「检查更新」触发渲染，即可核对芯片/小框/悬停/确认弹窗四处的表现。
 
 ---
 
@@ -248,6 +295,24 @@ npx electron-builder --win --x64
 | `docs/ARCHITECTURE.md` | v3.0 的架构与 API 分析报告 | 架构部分已过时，**「核心 API 分析」一节仍然有效**，是逆向学习通接口的参考 |
 | `docs/releases/` | 各版本发布说明归档 | |
 | `data/`、`qrcode/`、`config.yaml` | 运行时产物与用户配置 | 都不该进发布包 |
+
+### 4.1 图标系统（改图标只看这里）
+
+| 文件 | 角色 |
+|---|---|
+| `assets/icon.svg` | 母版（≥48px 用）：渐变面 + 顶部高光 + 细内环 + 定时扫描弧 + 带投影的白圆盘 |
+| `assets/icon-24.svg` | 24–32px：只留圆盘与加粗的勾，去掉高光/内环/弧/投影 |
+| `assets/icon-16.svg` | ≤20px：实心橙块 + 一根粗白勾，无圆盘 |
+| `scripts/build-icons.js` | 把三张母版**按目标尺寸原生栅格化**，产出 PNG 与 ICO |
+| `assets/app-icon.png` / `-192.png` / `favicon-checkin.png` | 界面与 PWA 用（512 / 192 / 256） |
+| `assets/app-icon.ico` | 安装包与 exe 图标，7 档（16/24/32/48/64/128/256） |
+
+要点：
+- **不要改成「一张 512 母版缩到各尺寸」**，那正是之前发糊的成因；小尺寸要靠独立母版做减法。
+- `sharp` 光栅化 SVG 时**不要传 `density`**：librsvg 按 72dpi 解释 px，`density:96` 会把 16px 渲成 21px 再被缩放。脚本里已加断言，尺寸不对直接报错。
+- ICO 一律用 **32bpp BMP/DIB 条目**，不要用 PNG-in-ICO：exe 内嵌图标（electron-builder 走 resedit 写资源）不认 PNG 条目。脚本会自检「ICO 解回 vs 直接渲染」逐像素一致，改打包逻辑后跑一次看是否仍为 0 差异。
+- 界面里的图标是**内联 SVG**（`ICONS.appMark`），不走 `/assets/*.png`；改样式注意 `.nav-item svg` 的优先级高于 `.app-mark`。
+- 产物核对：`node scripts/build-icons.js` 会在系统临时目录生成一张 1x/8x 近邻放大对照图，肉眼看小尺寸是否糊。
 
 ---
 
@@ -307,7 +372,8 @@ npx electron-builder --win --x64
 npm run build && npm run typecheck && npm run validate:ui
 ```
 
-- `validate:ui` 实际检查：控制台 `<style>` 花括号是否配平（含 `@media` 嵌套）、每个 `<script>` 能否通过 `new Function()` 语法检查、约 14 个关键 DOM 钩子（FAB、状态条 chip、导航项、底部弹层…）是否存在、以及**已移除的「拍照 / 手势」入口是否残留**、上传页是否仍是二维码专用。
+- `validate:ui` 实际检查：控制台 `<style>` 花括号是否配平（含 `@media` 嵌套）、每个 `<script>` 能否通过 `new Function()` 语法检查、约 20 个关键 DOM 钩子（FAB、状态条 chip、导航项、底部弹层、课表网格…）是否存在、**已移除的「拍照 / 手势」入口是否残留**、上传页是否仍是二维码专用；以及这一轮新加的 5 项：整页无重复 id、导出链接带 token、内联 script 带 nonce、时刻字段接入滚轮、源码不含被模板吃掉的 `\d`/`\w`/`\s`。
+- 该脚本读的是 `build/server/*`，**必须先 `npm run build`**；调用 `getConsolePage` 时要传 `{scriptNonce}`，否则校验的是「无 CSP 的另一种产物」。
 - 手动 smoke：
   1. `npm start` → `/health` 返回 200，控制台能打开且状态条四枚 chip 正常刷新；
   2. 手机访问 `http://<lanIp>:3456/upload?token=...`，拖一张二维码图，看服务日志是否解出 `enc`；
@@ -337,6 +403,6 @@ npm run build && npm run typecheck && npm run validate:ui
 - [ ] `npm install && npm run build && npm run validate:ui` 全 PASS
 - [ ] `npm start`，本机开 `http://127.0.0.1:3456/?token=<config.yaml 里的 web.token>`，能看到账号与课程
 - [ ] 手机能开上传页并成功回传一张二维码图
-- [ ] `git log --oneline -5` 与 `gh release list` 对得上；确认 `main` 是否仍领先 `origin/main`（本文档撰写时领先 1 个提交）
+- [ ] `git log --oneline -5` 与 `gh release list` 对得上；确认 `main` 与 `origin/main` 是否同步
 - [ ] 跑一次 `npx electron-builder --win --x64` 到独立输出目录，产物三件套齐全（exe / blockmap / latest.yml）
 - [ ] 通读 `docs/ARCHITECTURE.md` 的「核心 API 分析」一节 —— 学习通接口字段以它为准

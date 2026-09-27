@@ -10,14 +10,6 @@ export function randomDelay(minSec: number, maxSec: number): Promise<void> {
 }
 
 /**
- * 随机毫秒延迟
- */
-export function randomDelayMs(minMs: number, maxMs: number): Promise<void> {
-  const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-/**
  * GPS 漂移：在目标坐标附近 5~30 米随机偏移，模拟手机 GPS 误差
  */
 export function addGpsDrift(lat: number, lon: number, radius?: number): { lat: number; lon: number } {

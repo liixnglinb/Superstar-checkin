@@ -1,4 +1,4 @@
-import { login, validateCookie, getUserInfo } from '../core/login'
+import { login, checkCookie, getUserInfo } from '../core/login'
 import * as storage from './storage'
 import { logger } from '../utils/logger'
 import { retry } from '../utils/retry'
@@ -33,9 +33,13 @@ export class AccountManager {
     const meta = this.getMeta(account.username)
 
     if (!force && meta?.cookie) {
-      const valid = await validateCookie(meta.cookie)
-      if (valid) {
+      const state = await checkCookie(meta.cookie)
+      if (state === 'valid') {
         logger.success(`${meta.name} 的 Cookie 仍然有效`)
+        return
+      }
+      if (state === 'unknown') {
+        logger.warn(`${meta.name} 的 Cookie 校验请求未成功（网络或风控），本轮不重新登录，保留现有 Cookie`)
         return
       }
       logger.warn(`${account.username} 的 Cookie 已失效`)
@@ -48,8 +52,13 @@ export class AccountManager {
       storage.set(`uid_${account.username}`, account.uid || 0)
       storage.set(`fid_${account.username}`, account.fid || 0)
 
-      const valid = await validateCookie(account.cookie)
-      if (valid) {
+      const state = await checkCookie(account.cookie)
+      if (state === 'unknown') {
+        // 配置里手填的 Cookie 本来就是用来绕开登录风控的：校验请求失败时保留它，别去动密码登录
+        logger.warn(`配置 Cookie 校验请求未成功（网络或风控），暂按有效继续使用`)
+        return
+      }
+      if (state === 'valid') {
         try {
           const userInfo = await getUserInfo(account.cookie)
           storage.set(`name_${account.username}`, userInfo.name)
@@ -104,13 +113,6 @@ export class AccountManager {
   }
 
   /**
-   * 获取主账号（第一个）
-   */
-  getPrimary(): Account {
-    return this.accounts[0]
-  }
-
-  /**
    * 启动 Cookie 定时自动刷新
    *
    * 旧实现只在启动时校验一次 Cookie；运行中途 Cookie 过期会导致静默签到失败。
@@ -141,21 +143,6 @@ export class AccountManager {
         logger.error(`账号 ${account.username} 刷新失败: ${e.message}`)
         this.onRefreshFail?.(account.username, e)
       }
-    }
-  }
-
-  /**
-   * 手动强制刷新某个账号（签到失败疑似 Cookie 失效时可由外部调用）
-   */
-  async forceRefresh(username: string): Promise<boolean> {
-    const account = this.accounts.find(a => a.username === username)
-    if (!account) return false
-    try {
-      await this.refreshIfNeeded(account, true)
-      return true
-    } catch (e: any) {
-      logger.error(`强制刷新 ${username} 失败: ${e.message}`)
-      return false
     }
   }
 }

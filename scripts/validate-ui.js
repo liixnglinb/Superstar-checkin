@@ -57,7 +57,8 @@ const status = {
   confirmBefore: { enabled: false, waitSeconds: 10 },
 }
 
-const html = getConsolePage(status, 'test-token')
+// 服务端总会带 nonce，这里照做，否则校验的是「无 CSP 的另一种产物」
+const html = getConsolePage(status, 'test-token', { scriptNonce: 'test-nonce' })
 
 // 1. CSS 括号配平
 const styles = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map(m => m[1])
@@ -131,6 +132,62 @@ uploadScripts.forEach((code, i) => {
   }
 })
 check('上传页仅支持二维码（无 photo 分支）', !upload.includes("'photo'"))
+
+// 6. 重复 id：getElementById 只命中第一个，第二个元素的反馈会串到别处（曾出现两个 cfgMsg）
+{
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1])
+  const dup = ids.filter((v, i) => ids.indexOf(v) !== i)
+  check('整页无重复 id', dup.length === 0, dup.length ? `重复: ${[...new Set(dup)].join(', ')}` : '')
+}
+
+// 7. 导出类链接必须自带 token：/api/* 全在鉴权白名单里，裸链接点了就是 401
+{
+  const bad = [...html.matchAll(/href="(\/api\/[^"]*)"/g)].map(m => m[1]).filter(u => !u.includes('token='))
+  check('导出/下载链接都带 token', bad.length === 0, bad.length ? bad.join(', ') : '')
+}
+
+// 8. 内联 <script> 必须带 nonce：CSP 是 script-src 'nonce-…'，漏了就被静默拦死（SW 注册曾因此从未生效）
+{
+  const noNonce = [...html.matchAll(/<script([^>]*)>/g)].filter(m => !/nonce=/.test(m[1]))
+  check('所有内联 script 都带 nonce', noNonce.length === 0, `${noNonce.length} 个缺 nonce`)
+}
+
+// 9. 时刻字段必须挂到滚轮选择器（readonly + tp-field + data-tp），否则又回到「点分段才能改值」
+{
+  const fields = ['setQuietStart', 'setQuietEnd', 'setReportHour', 'setPreCheckHour']
+  const bad = fields.filter(id => {
+    const m = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))
+    return !m || !/class="[^"]*tp-field/.test(m[0]) || !/readonly/.test(m[0]) || !/data-tp=/.test(m[0])
+  })
+  check('时刻字段全部接入滚轮选择器', bad.length === 0, bad.length ? bad.join(', ') : '')
+  check('选择器实现存在', html.includes('function tpOpen') && html.includes('function tpSync'))
+}
+
+// 10. 模板字符串里的 \d \w \s 会被 TS 模板吃掉（曾让时间解析永远不匹配），源码里一律禁止
+{
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'server', 'console-ui.ts'), 'utf8')
+  const hits = src.match(/(^|[^\\])\\[dwsWSDWS]/g) || []
+  check('源码未使用会被模板吞掉的反斜杠类', hits.length === 0, `${hits.length} 处`)
+}
+
+// 11. 更新提示：固定位置 + 小框（环形进度、无下载箭头）+ 悬停说明 + 安装前确认
+{
+  check('更新固定提示存在（状态条 chip）', html.includes('id="chipUpdate"'))
+  check('更新小框存在（环形进度）', html.includes('id="updBox"') && html.includes('id="updRing"') && html.includes('id="updPct"'))
+  check('更新悬停说明存在', html.includes('id="updHover"') && html.includes('id="updHoverBody"'))
+  // 小框刻意不用下载箭头：它的 SVG 里只允许 circle（环形进度），不许出现 path
+  const boxSvg = (html.match(/<div class="upd-box"[\s\S]*?<\/svg>/) || [''])[0]
+  check('更新小框内没有下载箭头图标', boxSvg.length > 0 && !/<path/.test(boxSvg))
+  const uiSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'server', 'console-ui.ts'), 'utf8')
+  // 交互顺序：点小框/芯片 → 直接弹「是否现在更新并重启」确认 → 确认后才下载/安装
+  check('点击更新入口直接弹确认框（不是先开面板）', /updBox\.addEventListener\('click',function\(\)\{showUpdateConfirm\(\)\}\)/.test(uiSrc))
+  check('确认框问的是「是否现在更新并重启」', /是否现在更新并重启/.test(uiSrc))
+  check('确认后才开始下载，下完自动接安装', /updInstallIntent=true/.test(uiSrc) && /if\(s\.phase==='ready'&&updInstallIntent\)/.test(uiSrc))
+  const mainSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'electron', 'main.js'), 'utf8')
+  check('下载源按实测速度排序（不是取第一个能连通的）', /sort\(\(a, b\) => b\.bps - a\.bps\)/.test(mainSrc))
+  check('下载失败会降级到下一个源', /rankedSources\.length - 1\) continue/.test(mainSrc))
+  check('检测到新版本不擅自下载', !/^\s*startUpdateDownload\(\)\.catch/m.test(mainSrc))
+}
 
 console.log(failures === 0 ? '\n全部校验通过 ✓' : `\n${failures} 项校验失败 ✗`)
 process.exit(failures === 0 ? 0 : 1)

@@ -134,6 +134,8 @@ dingtalk:
                         # web.host 为 127.0.0.1 时回退为 http://127.0.0.1:3456 —— 只能在本机浏览器打开，手机点链接打不开！
   appSecret: ""         # 选填：企业内部应用 AppSecret（仅「直接发图给机器人」高级方式需要）
   appKey: ""            # 选填：企业内部应用 AppKey（仅「直接发图给机器人」方式需要，robotCode 一般等于 appKey）
+  stream:
+    debug: false        # 排障用：打印钉钉 Stream 长连接的原始收发包（日志会很吵，平时关掉）
 
 # ---- Web API（可选，用于远程二维码签到）----
 web:
@@ -141,6 +143,8 @@ web:
   # 上传页 / 控制台 / API 统一使用该端口
   host: 127.0.0.1     # 默认只允许本机访问；改为 0.0.0.0 时请确保 token 保密
   watchClipboard: false # 复制/截图含签到二维码的图片后自动识别（桌面壳 Electron 生效）
+  hotkey: "Control+Alt+Q" # 全局热键：把剪贴板里的二维码图片直接送进签到（钉钉通道的备用入口）
+                      # 设为 "" 即关闭；被其它软件占用时会启动日志提示换一个
   token: ""           # Bearer Token 认证；首次运行会自动生成随机值并写回本文件
                       # ⚠️ 留空 ≠ 不鉴权：留空时控制台/上传页/API 全部返回 401
   allowedOrigin: "http://localhost"  # CORS 允许来源

@@ -24,6 +24,8 @@ function isTransientError(e: any): boolean {
  */
 export class PollListener {
   private timer: NodeJS.Timeout | null = null
+  /** stop() 与「在途的那一轮」之间需要同步：只清 timer 的话，正在 await 的轮询结束后会再排一次，监听器复活 */
+  private running = false
   private interval: number
   /** 随机抖动（毫秒）：每次轮询在固定间隔上叠加 0~jitter 随机值，降低规律性（防风控） */
   private jitterMs: number
@@ -125,10 +127,14 @@ export class PollListener {
       this.timer = setTimeout(chain, this.interval + jitter)
     }
     const chain = async () => {
+      if (!this.running) return
       await poll()
+      // 轮询途中被 stop()：不要续排，否则「已停止」的监听器会自己复活并重复轮询
+      if (!this.running) return
       if (this.timer) clearTimeout(this.timer)
       scheduleNext()
     }
+    this.running = true
     chain()
   }
 
@@ -139,6 +145,7 @@ export class PollListener {
   }
 
   stop() {
+    this.running = false
     if (this.timer) {
       clearTimeout(this.timer)
       this.timer = null

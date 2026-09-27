@@ -114,6 +114,9 @@
       "node_modules/**/*.node"
     ],
     "compression": "normal",
+    "releaseInfo": {
+      "releaseNotes": "更新内容请在 GitHub Releases 页面查看；安装版会在软件内提示新版本并显示更新说明。"
+    },
     "publish": [
       {
         "provider": "github",

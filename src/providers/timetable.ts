@@ -52,8 +52,6 @@ export const WEEKDAYS = [1, 2, 3, 4, 5]
 export const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 /** 整体扫描时段窗（用户指定）：7:30–12:30 与 14:00–21:00 */
-export const SCAN_WINDOW = { startMin: 7 * 60 + 30, endMin: 21 * 60 }
-
 /**
  * 课表数据：{ "1": [courseId|null × 8], ... }，键为星期（1~5）。
  * 值里存 courseId 字符串，未填为 null。
