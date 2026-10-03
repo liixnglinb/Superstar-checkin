@@ -8,6 +8,8 @@
  * - 动效：克制的 hover 过渡与按压反馈
  */
 
+import { VOYRA_UI_CSS, VOYRA_UI_JS } from './voyra-ui'
+
 export interface ConsoleStatus {
   version?: string
   mode?: string
@@ -153,7 +155,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
           <div class="acct-name">${esc(a.name || a.username)}</div>
           <div class="acct-sub">${esc(a.schoolname || '')} · ${esc(a.username)}</div>
         </div>
-        <span class="pill pill-ok">已登录</span>
+        <span class="pill">账号已配置</span>
       </div>`).join('')
     : `<div class="empty"><p>未配置账号</p><p class="empty-sub">首次使用请在"设置"页填写你的学习通账号（支持多用户各自登录）</p><a class="btn btn-ghost" href="#settings" style="margin-top:12px">去配置账号</a></div>`
 
@@ -162,7 +164,10 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
         const watching = !disabledSet.has(String(c.courseId)) && (watchSet.size === 0 || watchSet.has(String(c.courseId)))
         // 课程扫描健康：连续轮询失败 ≥3 次时提示"扫描异常"（多为瞬时网络/网关抖动，重试后自动恢复）
         const fails = (status.courseHealth || {})[String(c.courseId)] || 0
-        const statePill = !watching
+        const monitoringReady = accounts.length > 0 && status.cookieValid !== false && status.listening !== false
+        const statePill = watching && !monitoringReady
+          ? '<span class="pill pill-off">' + (accounts.length === 0 ? '未配置账号' : status.cookieValid === false ? '登录需核验' : '已暂停监听') + '</span>'
+          : !watching
           ? '<span class="pill pill-off">已停用</span>'
           : fails >= 3
             ? '<span class="pill pill-warn" title="近期轮询多次失败，多为瞬时网络或网关限流，已自动重试；持续异常可点击「重新拉取课程列表」">扫描异常</span>'
@@ -1029,6 +1034,7 @@ tr:hover td{background:var(--n-25)}
   .content{padding-left:14px;padding-right:14px}
 }
 
+${VOYRA_UI_CSS}
 </style>
 </head>
 <body>
@@ -1067,7 +1073,7 @@ tr:hover td{background:var(--n-25)}
       </div>
       <div class="status-strip" id="statusStrip">
         <span class="chip" id="chipMode">${esc(modeText(mode))}</span>
-        <span class="chip ${status.cookieValid === false ? 'chip-err' : 'chip-ok'}" id="chipCookie">${status.cookieValid === false ? 'Cookie 失效' : 'Cookie 有效'}</span>
+        <span class="chip ${accounts.length === 0 ? '' : status.cookieValid === true ? 'chip-ok' : 'chip-warn'}" id="chipCookie">${accounts.length === 0 ? '未配置账号' : status.cookieValid === true ? 'Cookie 有效' : status.cookieValid === false ? '登录已过期' : '登录状态待确认'}</span>
         <span class="chip ${status.imConnected ? 'chip-ok' : 'chip-warn'}" id="chipIm">${status.imConnected ? 'IM 已连接' : 'IM 不可用'}</span>
         <span class="chip ${status.dingtalkStreamConnected ? 'chip-ok' : (status.dingtalkStreamEnabled ? 'chip-warn' : '')}" id="chipDing">${
           status.dingtalkStreamConnected
@@ -1080,11 +1086,17 @@ tr:hover td{background:var(--n-25)}
         <span class="chip chip-update" id="chipUpdate" style="display:none" role="button" tabindex="0" title="有新版本可用，点击查看">有新版本</span>
       </div>
       <div class="top-actions">
-        <button class="btn btn-primary" id="btnQrModal">${ICONS.qr}<span>二维码签到</span></button>
+        <button type="button" class="btn btn-primary" id="btnQrModal" aria-label="打开二维码上传与签到">${ICONS.qr}<span>二维码签到</span></button>
       </div>
     </header>
 
     <main class="content">
+      <section class="service-notice" id="serviceNotice" hidden aria-label="运行状态">
+        <div><strong id="serviceNoticeTitle"></strong><p id="serviceNoticeText"></p></div>
+        <button type="button" class="btn btn-ghost" id="serviceRetry">重新连接</button>
+        <a class="btn btn-ghost" id="serviceSettings" href="#settings" hidden>查看账号设置</a>
+        <span class="sr-only" id="serviceAnnouncement" role="status" aria-live="polite"></span>
+      </section>
       <!-- 总览 -->
       <section class="view active" data-view="overview">
         <div class="stat-grid">${statCards}</div>
@@ -1504,7 +1516,7 @@ tr:hover td{background:var(--n-25)}
   function show(v){
     if(views.indexOf(v)<0)v='overview'
     document.querySelectorAll('.view').forEach(function(el){el.classList.toggle('active',el.dataset.view===v)})
-    document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===v)})
+    document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===v);el.setAttribute('aria-current',el.dataset.view===v?'page':'false')})
     document.getElementById('pageTitle').textContent=titles[v]
     var subEl=document.getElementById('pageSub');if(subEl)subEl.textContent=subs[v]||''
     if(v==='logs')loadLogs();if(v==='schedule')loadSchedule()
@@ -1776,13 +1788,16 @@ tr:hover td{background:var(--n-25)}
     document.getElementById('stat-records').textContent=s.recordCount||0
     document.getElementById('stat-ok').textContent=s.successCount||0
     document.getElementById('stat-fail').textContent=s.failCount||0
+    lastServiceStatus=s
+    serviceConnection(true)
     document.getElementById('historyCount').textContent='共 '+(s.recordCount||0)+' 条'
     // 顶部状态条 + 侧栏运行指示：每次轮询刷新，异常状态一眼可见
     var chipCookie=document.getElementById('chipCookie')
     if(chipCookie){
-      var cookieOk=s.cookieValid!==false
-      chipCookie.textContent=cookieOk?'Cookie 有效':'Cookie 失效'
-      chipCookie.className='chip '+(cookieOk?'chip-ok':'chip-err')
+      var hasAccounts=(s.accounts||[]).length>0
+      var cookieOk=s.cookieValid===true
+      chipCookie.textContent=!hasAccounts?'未配置账号':cookieOk?'Cookie 有效':s.cookieValid===false?'登录已过期':'登录状态待确认'
+      chipCookie.className='chip '+(!hasAccounts?'':cookieOk?'chip-ok':s.cookieValid===false?'chip-err':'chip-warn')
     }
     var chipIm=document.getElementById('chipIm')
     if(chipIm){
@@ -1807,7 +1822,15 @@ tr:hover td{background:var(--n-25)}
     var footDot=document.getElementById('footDot')
     if(footDot)footDot.className='dot'+((s.cookieValid===false)?' off':'')
     var footState=document.getElementById('footState')
-    if(footState)footState.textContent=(s.cookieValid===false)?'登录异常':'运行中'
+    if(footState)footState.textContent=!(s.accounts||[]).length?'未配置账号':s.cookieValid===false?'登录异常':s.listening===false?'已暂停监听':'运行中'
+    var listenControl=document.getElementById('listenToggleBtn')
+    if(listenControl&&listenControl.dataset.busy!=='true'){
+      listenControl.dataset.listening=String(s.listening!==false)
+      listenControl.setAttribute('aria-pressed',String(s.listening!==false))
+      listenControl.textContent=s.listening===false?'▶ 开启监听':'⏸ 停止监听'
+      var listeningMessage=document.getElementById('listenState')
+      if(listeningMessage&&s.listening===false)listeningMessage.textContent='已暂停监听；手动上传二维码仍可用。'
+    }
     var footAccounts=document.getElementById('footAccounts')
     if(footAccounts)footAccounts.textContent=((s.accounts||[]).length||0)+' 个账号'
     var rows=(s.recent||[]).map(function(r){
@@ -1825,7 +1848,7 @@ tr:hover td{background:var(--n-25)}
       ab.innerHTML=accs.length
         ? accs.map(function(a){
             var nm=a.name||a.username||'?'
-            return '<div class="acct-row"><span class="acct-avatar">'+esc(nm.slice(0,1))+'</span><div class="acct-info"><div class="acct-name">'+esc(nm)+'</div><div class="acct-sub">'+esc(a.schoolname||'')+' · '+esc(String(a.username))+'</div></div><span class="pill pill-ok">已登录</span></div>'
+            return '<div class="acct-row"><span class="acct-avatar">'+esc(nm.slice(0,1))+'</span><div class="acct-info"><div class="acct-name">'+esc(nm)+'</div><div class="acct-sub">'+esc(a.schoolname||'')+' · '+esc(String(a.username))+'</div></div><span class="pill">账号已配置</span></div>'
           }).join('')
         : '<div class="empty"><p>未配置账号</p><p class="empty-sub">首次使用请在"设置"页填写你的学习通账号</p><a class="btn btn-ghost" href="#settings" style="margin-top:12px">去配置账号</a></div>'
     }
@@ -1867,7 +1890,10 @@ tr:hover td{background:var(--n-25)}
               : '<span class="cell-sub">—</span>'
             // 与服务端同一套状态胶囊：轮询连续失败要显示「扫描异常」，否则每 5 秒重绘会把它抹掉
             var fails=health[cid]||0
-            var pill=!watching
+            var runtimeReady=(s.accounts||[]).length>0&&s.cookieValid!==false&&s.listening!==false
+            var pill=watching&&!runtimeReady
+              ? '<span class="pill pill-off">'+(!(s.accounts||[]).length?'未配置账号':s.cookieValid===false?'登录需核验':'已暂停监听')+'</span>'
+              : !watching
               ? '<span class="pill pill-off">已停用</span>'
               : (fails>=3
                 ? '<span class="pill pill-warn" title="近期轮询多次失败，多为瞬时网络或网关限流，已自动重试；持续异常可点击「重新拉取课程列表」">扫描异常</span>'
@@ -1925,7 +1951,30 @@ tr:hover td{background:var(--n-25)}
     options.headers=Object.assign({},options.headers||{},{Authorization:'Bearer '+API_TOKEN})
     return fetch(url,options)
   }
-  function poll(){apiFetch('/api/status').then(function(r){return r.json()}).then(render).catch(function(){})}
+  var lastServiceStatus=null,pollInFlight=null,serviceOnline=true
+  function serviceConnection(online,message){
+    serviceOnline=online
+    var box=document.getElementById('serviceNotice'),title='',detail=''
+    var accounts=lastServiceStatus&&lastServiceStatus.accounts||[]
+    if(!online){title='无法连接本地服务';detail='当前展示上次读取的状态，不能确认监听仍在运行。请检查服务后重新连接。'+(message||'')}
+    else if(lastServiceStatus&&!accounts.length){title='尚未配置学习通账号';detail='先在设置中配置你有权使用的账号，再开启课程监听。'}
+    else if(lastServiceStatus&&lastServiceStatus.cookieValid===false){title='登录状态已过期';detail='课程和记录已保留；请在设置中重新登录，必要时在官方 App 完成人工验证。'}
+    box.hidden=!title;box.dataset.kind=online?'account':'offline'
+    document.getElementById('serviceNoticeTitle').textContent=title
+    document.getElementById('serviceNoticeText').textContent=detail
+    document.getElementById('serviceRetry').hidden=online
+    document.getElementById('serviceSettings').hidden=!online
+    var announce=document.getElementById('serviceAnnouncement');if(announce.textContent!==title)announce.textContent=title
+    var canListen=accounts.length>0&&lastServiceStatus.cookieValid!==false
+    ;['listenToggleBtn','scanNowBtn'].forEach(function(id){var b=document.getElementById(id);if(!b)return;var canStop=id==='listenToggleBtn'&&lastServiceStatus&&lastServiceStatus.listening!==false;b.disabled=!online||b.dataset.busy==='true'||(!canListen&&!canStop)})
+    if(!online){var foot=document.getElementById('footState');if(foot)foot.textContent='服务连接中断'}
+  }
+  function poll(){
+    if(pollInFlight)return pollInFlight
+    pollInFlight=apiFetch('/api/status').then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(render).catch(function(e){serviceConnection(false,String(e.message))}).finally(function(){pollInFlight=null})
+    return pollInFlight
+  }
+  document.getElementById('serviceRetry').addEventListener('click',function(){poll()})
   if(location.hash&&views.indexOf(location.hash.slice(1))>=0)show(location.hash.slice(1))
   window.addEventListener('hashchange',function(){var v=location.hash.slice(1);if(views.indexOf(v)>=0)show(v)})
   // 二维码图片拖拽签到：任意签到码拖入窗口即解析并签到（二维码更新后拖新码即可）
@@ -2075,21 +2124,22 @@ tr:hover td{background:var(--n-25)}
   if(scanNowBtn)scanNowBtn.addEventListener('click',function(){
     var st=document.getElementById('listenState')
     scanNowBtn.disabled=true
+    scanNowBtn.dataset.busy='true';scanNowBtn.setAttribute('aria-busy','true')
     var old=scanNowBtn.textContent
     scanNowBtn.textContent='⚡ 扫描中…'
     if(st)st.textContent='正在逐门课程查询签到活动，请稍候…'
     apiFetch('/api/scan-now',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
       .then(function(r){return r.json()})
       .then(function(d){
-        scanNowBtn.disabled=false;scanNowBtn.textContent=old
+        scanNowBtn.dataset.busy='false';scanNowBtn.setAttribute('aria-busy','false');scanNowBtn.disabled=!serviceOnline;scanNowBtn.textContent=old
         if(st){
           st.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'扫描完成')
           st.style.color=d.ok?'#178A5B':'#B42318'
         }
-        if(d.ok&&d.found>0)setTimeout(function(){location.reload()},2500)
+        if(d.ok&&d.found>0)poll()
       })
       .catch(function(){
-        scanNowBtn.disabled=false;scanNowBtn.textContent=old
+        scanNowBtn.dataset.busy='false';scanNowBtn.setAttribute('aria-busy','false');scanNowBtn.disabled=!serviceOnline;scanNowBtn.textContent=old
         if(st){st.textContent='❌ 扫描失败，请重试';st.style.color='#B42318'}
       })
   })
@@ -2097,19 +2147,25 @@ tr:hover td{background:var(--n-25)}
   // ===== 监听总开关（原 IM 通道的替代：随时能停，随时能开） =====
   var listenToggleBtn=document.getElementById('listenToggleBtn')
   if(listenToggleBtn)listenToggleBtn.addEventListener('click',function(){
-    var turningOff=listenToggleBtn.textContent.indexOf('停止')>=0
+    var turningOff=listenToggleBtn.dataset.listening==='true'||listenToggleBtn.textContent.indexOf('停止')>=0
     var st=document.getElementById('listenState')
     listenToggleBtn.disabled=true
+    listenToggleBtn.dataset.busy='true';listenToggleBtn.setAttribute('aria-busy','true')
+    var previousListenLabel=listenToggleBtn.textContent
+    listenToggleBtn.textContent=turningOff?'正在停止监听…':'正在开启监听…'
     apiFetch('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:!turningOff})})
       .then(function(r){return r.json()})
       .then(function(d){
-        listenToggleBtn.disabled=false
-        if(!d.ok){if(st)st.textContent='❌ '+(d.message||'操作失败');return}
+        listenToggleBtn.dataset.busy='false';listenToggleBtn.setAttribute('aria-busy','false');listenToggleBtn.disabled=!serviceOnline
+        if(!d.ok){listenToggleBtn.textContent=previousListenLabel;if(st)st.textContent='未能改变监听状态：'+(d.message||'请重试');return}
+        listenToggleBtn.dataset.listening=String(d.listening);listenToggleBtn.setAttribute('aria-pressed',String(d.listening))
+        if(lastServiceStatus)lastServiceStatus.listening=d.listening
         listenToggleBtn.textContent=d.listening?'⏸ 停止监听':'▶ 开启监听'
         listenToggleBtn.className='btn '+(d.listening?'btn-ghost':'btn-primary')
         if(st)st.textContent=d.listening?('正在监听 '+d.listeningCount+' 门课程'):'已停止监听（不会发送任何轮询请求，二维码上传仍可用）'
+        serviceConnection(serviceOnline)
       })
-      .catch(function(){listenToggleBtn.disabled=false;if(st)st.textContent='❌ 操作失败，请重试'})
+      .catch(function(){listenToggleBtn.dataset.busy='false';listenToggleBtn.setAttribute('aria-busy','false');listenToggleBtn.disabled=!serviceOnline;listenToggleBtn.textContent=previousListenLabel;if(st)st.textContent='无法确认监听状态，原显示已保留；请重新连接服务。';poll()})
   })
 
   // ===== 全部恢复监听 =====
@@ -3015,7 +3071,8 @@ function loadLogs(){
     })
   }
   poll()
-  setInterval(poll,5000)
+  setInterval(function(){if(!document.hidden)poll()},5000)
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)poll()})
 })();
 </script>
 <script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
@@ -3027,6 +3084,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+<script nonce="${esc(scriptNonce)}">${VOYRA_UI_JS}</script>
 </body>
 </html>`
 }
