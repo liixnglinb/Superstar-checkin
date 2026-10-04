@@ -5,7 +5,7 @@
 >
 > 当前状态概要：
 > - 仓库：`https://github.com/liixnglinb/Superstar-checkin`
-> - 本地路径：`C:\Users\李星历\Desktop\学习通自动签到`
+> - 本地路径：`..\学习通自动签到`
 > - 版本：**v3.7.0**
 > - 协议：GPL-3.0
 > - 形态：Electron 44 桌面壳 + 内嵌 Node 服务（本地端口 3456，由 `web.port` 配置、`web.host` 控制监听地址）
