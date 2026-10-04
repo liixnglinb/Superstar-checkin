@@ -20,6 +20,26 @@
  *   · 二维码签到弹窗 / 手机上传页（dingtalk-server）
  *
  * Design Tokens 全部来自 voyra-ui.ts（本软件唯一 UI 数值来源）。
+ *
+ * ─────────────────────────────────────────────────────────────
+ * 与外部设计规范的**有意偏离**（按 Voyra 说明 §0.9 第 4 条登记，共 6 处）
+ * 偏离原因同时登记在 README「界面设计系统」与 Voyra 说明 §5.2，三处保持一致。
+ *   1. 规范示例用内联 `onclick=` → 改为 `addEventListener` + `data-*` 事件委托。
+ *      原因：本软件 CSP 是 `script-src 'nonce-…'`，内联处理器会被**静默拦死**。
+ *   2. 规范模块 9 示例用 `FormData` 上传 → 改为原始字节 `body: file`。
+ *      原因：`/upload/image` 按**图片魔数**校验原始字节、不解析 multipart；照抄会 100% 失败。
+ *   3. 规范用 `fill="var(--status-ok-dot)"` 呈现属性 → 改为内联 `style="fill:var(...)"`。
+ *      原因：SVG 呈现属性对 `var()` 支持不稳。
+ *   4. 规范的 `id="topStatusStrip"` → 保留现有 `id="statusStrip"`。
+ *      原因：`scripts/validate-ui.js` 依赖旧 id 做门禁断言。
+ *   5. 规范的 `data-day` → 保留现有 `data-dow`；`preserveAspectRatio="none"` → 改等比缩放。
+ *      原因：与既有实现一致 / 避免图表文字被拉伸。
+ *   6. 规范要求课程页区分「已结课停用」→ **未实现**。
+ *      原因：`/api/status` 不提供 `isRetired`（仅 `/api/schedule` 有）；需服务端补字段后才生效，属未完成项。
+ *
+ * 语义色无障碍（Voyra 说明 §0.9 第 3 条）：低对比的 `--status-*-dot`
+ * 只用于圆点 / 描边 / 进度条 / SVG 填充，不承载文字；文字一律用 `--status-*-ink`。
+ * ─────────────────────────────────────────────────────────────
  */
 
 import { VOYRA_UI_CSS, VOYRA_UI_JS } from './voyra-ui'

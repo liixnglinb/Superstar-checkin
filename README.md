@@ -211,6 +211,18 @@ npx electron-builder --win nsis --x64
 **主题系统**：支持浅色 / 深色 / 跟随系统三态（`html[data-theme]` 切换，偏好写入 `localStorage`），所有组件颜色均取自 token，不写死单组件内联色。
 **无障碍**：键盘焦点可见（`:focus-visible` 品牌聚焦环）、弹窗焦点闭环 + `Esc` 关闭、`prefers-reduced-motion` 全面降级。
 **零依赖自绘**：图表与进度环全部使用轻量内联 SVG 计算，不引入任何外部图表库，SSR 模板字符串架构不变。
+**语义色无障碍**：低对比度的 `--status-*-dot`（`#10B981` 约 2.3:1、`#F59E0B` 约 2.0:1，低于 WCAG AA 4.5:1）只用于色块 / 描边 / 圆点 / 图标 / SVG 填充，**不承载小字**；文字着色一律用深色高对比的 `--status-*-ink`。
+
+**与外部设计规范的有意偏离（6 处，按 Voyra 说明 §0.9 第 4 条登记）**：
+
+| # | 规范写法 | 本项目做法 | 原因 |
+|---|---|---|---|
+| 1 | 内联 `onclick=` | `addEventListener` + `data-*` 事件委托 | CSP 为 `script-src 'nonce-…'`，内联处理器会被静默拦死 |
+| 2 | `FormData` 上传 | 原始字节 `body: file` | 服务端按图片魔数校验原始字节，不解析 multipart |
+| 3 | `fill="var(…)"` 呈现属性 | 内联 `style="fill:var(…)"` | SVG 呈现属性对 `var()` 支持不稳 |
+| 4 | `id="topStatusStrip"` | 保留 `id="statusStrip"` | `scripts/validate-ui.js` 依赖旧 id 做门禁断言 |
+| 5 | `data-day` / `preserveAspectRatio="none"` | `data-dow` / 等比缩放 | 与既有实现一致；避免图表文字被拉伸 |
+| 6 | 课程页区分「已结课停用」 | **未实现** | `/api/status` 不提供 `isRetired`（仅 `/api/schedule` 有），需服务端补字段 |
 
 ## 🖥️ 界面介绍
 

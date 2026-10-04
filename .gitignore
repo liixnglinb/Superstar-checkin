@@ -333,3 +333,6 @@ config-tt.yaml
 data-tt/
 config-dis.yaml
 data-dis/
+
+# AI 工具状态目录（.workbuddy 与 .workbuddy-ai 两个变体都覆盖，2026-10-04）
+.workbuddy*/

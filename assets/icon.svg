@@ -10,27 +10,30 @@
       <stop offset=".40" stop-color="#fff" stop-opacity=".03"/>
       <stop offset="1" stop-color="#6B2A00" stop-opacity=".12"/>
     </linearGradient>
-    <radialGradient id="disc" cx=".38" cy=".30" r=".88">
+    <radialGradient id="disc" cx=".38" cy=".28" r=".92">
       <stop offset="0" stop-color="#fff"/>
-      <stop offset=".70" stop-color="#FFFCF8"/>
-      <stop offset="1" stop-color="#FFE7CE"/>
+      <stop offset=".66" stop-color="#FFFCF9"/>
+      <stop offset="1" stop-color="#FFE3C6"/>
     </radialGradient>
     <linearGradient id="check" x1="0" y1="0" x2=".9" y2="1">
       <stop offset="0" stop-color="#F79C5D"/>
-      <stop offset="1" stop-color="#DD661F"/>
+      <stop offset="1" stop-color="#D9601A"/>
     </linearGradient>
     <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#6B2A00" flood-opacity=".22"/>
+      <feDropShadow dx="0" dy="9" stdDeviation="13" flood-color="#6B2A00" flood-opacity=".24"/>
     </filter>
   </defs>
   <rect width="512" height="512" rx="118" fill="url(#field)"/>
   <rect width="512" height="512" rx="118" fill="url(#sheen)"/>
   <rect x="19" y="19" width="474" height="474" rx="101" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="4"/>
-  <g transform="rotate(-104 256 256)">
-    <circle cx="256" cy="256" r="152" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="11" stroke-linecap="round" stroke-dasharray="168 787"/>
+  <!-- 定时扫描弧：从 12 点起顺时针 78°，末端一颗圆点（大尺寸才有的细节） -->
+  <g transform="rotate(-90 256 256)">
+    <circle cx="256" cy="256" r="151" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="10" stroke-linecap="round" stroke-dasharray="206 741"/>
   </g>
+  <circle cx="299" cy="133" r="8" fill="#fff" fill-opacity=".62"/>
   <g filter="url(#lift)">
-    <circle cx="256" cy="256" r="126" fill="url(#disc)"/>
+    <circle cx="256" cy="256" r="128" fill="url(#disc)"/>
   </g>
-  <path d="M193 255l47 48 82-98" fill="none" stroke="url(#check)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 132a124 124 0 0 1 124 124" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="6" stroke-linecap="round"/>
+  <path d="M190 256l50 51 86-102" fill="none" stroke="url(#check)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
