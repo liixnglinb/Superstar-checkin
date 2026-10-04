@@ -193,7 +193,8 @@ function openWindow() {
     icon: ICON,
     // 无边框自绘标题栏：去掉系统深色标题栏（大黑边），标题栏与内置 UI 融为一体
     frame: false,
-    backgroundColor: '#FAF9F7',
+    // 与设计令牌 --bg-canvas（暖白）一致，避免加载瞬间露出白底闪一下
+    backgroundColor: '#F8F7F4',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

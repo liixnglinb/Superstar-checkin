@@ -1457,95 +1457,154 @@ export class DingTalkServer {
 
   /**
    * 手机端上传页面（二维码签到专用，自动携带 token）
+   *
+   * 设计（模块 9）：与桌面控制台复用同一套 Design Tokens（暖白画布 + 超星暖橙）；
+   *   · 不加 capture 属性 —— 二维码常常是群里分享的截图 / 相册原图，强制开摄像头会让人传不了；
+   *   · 选中即上传（一步完成），状态直接回显成功或具体失败原因，不做「正在处理」静默遮蔽。
    */
   private getUploadPage(_type: 'qr' = 'qr', scriptNonce = ''): string {
     const token = this.token || ''
-    const title = '学习通签到 - 二维码上传'
-    const tip = '拍一张教室里的签到二维码，点击上传（软件会自动识别并完成签到）'
-    const placeholder = '📷 点击拍照或选择图片'
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>超星签到码快捷上传</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei UI",sans-serif;background:radial-gradient(circle at 84% -6%,rgba(242,123,52,.12),transparent 24rem),#f6f5f1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#191712}
-.card{background:rgba(255,255,255,.9);border:1px solid #e7e4de;border-radius:20px;padding:30px;width:100%;max-width:410px;box-shadow:0 18px 44px rgba(28,25,21,.09);backdrop-filter:blur(18px)}
-h1{font-size:20px;text-align:center;margin-bottom:8px;color:#1d1a16;letter-spacing:-.02em}
-p{font-size:14px;color:#635b52;text-align:center;margin-bottom:24px;line-height:1.55}
-.upload-area{border:2px dashed #FCBB8B;border-radius:14px;padding:42px 20px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s,transform .18s;background:#FFF8F2}
-.upload-area:hover,.upload-area.drag{border-color:#F27B34;background:#FFEEDD;transform:scale(1.01)}
-.upload-area img{max-width:100%;max-height:200px;border-radius:10px;margin-top:12px}
-.btn{display:block;width:100%;padding:14px;background:linear-gradient(180deg,#F98A44,#E56920);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;margin-top:20px;box-shadow:0 1px 2px rgba(150,66,14,.2),0 8px 20px rgba(229,105,32,.22);transition:filter .18s,transform .12s}
-.btn:hover:not(:disabled){filter:brightness(.97)}
-.btn:active{transform:scale(.99)}
-.btn:disabled{background:#d9d5cd;color:#8d857c;cursor:not-allowed;box-shadow:none}
-.status{text-align:center;margin-top:16px;font-size:14px;padding:10px;border-radius:10px;font-weight:600}
-.status.ok{background:#e5f4ec;color:#16855a}
-.status.err{background:#fcecec;color:#d24343}
-.status.loading{background:#fff0e4;color:#b95a18}
-input[type=file]{display:none}
+:root {
+  --bg-canvas: #F8F7F4;
+  --bg-surface: #FFFFFF;
+  --bg-surface-sub: #F2EFE9;
+  --ink-primary: #1C1917;
+  --ink-secondary: #57534E;
+  --ink-tertiary: #A8A29E;
+  --brand-50: #FFF7ED;
+  --brand-500: #F78A46;
+  --brand-600: #EF7429;
+  --brand-700: #C25E1A;
+  --line-dim: #E7E5E0;
+  --status-ok-bg: #EDFDF5;
+  --status-ok-ink: #065F46;
+  --status-ok-line: #A7F3D0;
+  --status-err-bg: #FEF2F2;
+  --status-err-ink: #991B1B;
+  --status-err-line: #FECACA;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  background: var(--bg-canvas);
+  color: var(--ink-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+.upload-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--line-dim);
+  border-radius: 16px;
+  padding: 24px 20px;
+  box-shadow: 0 4px 12px rgba(28,25,23,0.05);
+  text-align: center;
+}
+.app-icon { width: 44px; height: 44px; margin: 0 auto 12px; display: block; }
+h1 { font-size: 18px; margin: 0 0 6px; letter-spacing: -0.01em; }
+p.sub { font-size: 13px; color: var(--ink-secondary); margin: 0 0 20px; line-height: 1.6; }
+.file-btn {
+  display: block;
+  width: 100%;
+  height: 48px;
+  line-height: 48px;
+  background: var(--brand-600);
+  color: #FFF;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(239,116,41,0.30);
+  transition: filter .15s ease, transform .12s ease;
+}
+.file-btn:active { transform: scale(.98); filter: brightness(.97); }
+.file-btn.disabled { opacity: .6; pointer-events: none; }
+#fileInput { display: none; }
+.hint { font-size: 12px; color: var(--ink-tertiary); margin-top: 12px; line-height: 1.6; }
+.result-box {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  display: none;
+  word-break: break-all;
+  text-align: left;
+}
+.result-box.ok { background: var(--status-ok-bg); color: var(--status-ok-ink); border: 1px solid var(--status-ok-line); }
+.result-box.err { background: var(--status-err-bg); color: var(--status-err-ink); border: 1px solid var(--status-err-line); }
+.result-box.loading { background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-500); }
+.preview { max-width: 100%; max-height: 200px; border-radius: 10px; margin-top: 14px; display: none; }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>${title}</h1>
-  <p>${tip}</p>
-  <div class="upload-area" id="dropZone">
-    <div id="placeholder">${placeholder}</div>
-    <img id="preview" style="display:none">
+  <div class="upload-card">
+    <svg class="app-icon" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+      <rect width="512" height="512" rx="104" fill="#EF7429"/>
+      <path d="M148 264l74 78 142-168" stroke="#FFFFFF" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>提交二维码签到</h1>
+    <p class="sub">从相册选择群内同学分享的签到二维码截图，选中后自动识别并完成签到</p>
+    <label class="file-btn" id="pickBtn" for="fileInput">从手机相册选取</label>
+    <input type="file" id="fileInput" accept="image/*">
+    <img id="preview" class="preview" alt="预览">
+    <div id="resultBox" class="result-box"></div>
+    <div class="hint">支持 PNG / JPG / BMP · 本地纯 JS 解码，无需联网</div>
   </div>
-  <!-- 不加 capture：二维码常常是截图/相册里的图，强制开摄像头会让人传不了 -->
-  <input type="file" id="fileInput" accept="image/*">
-  <button class="btn" id="submitBtn" disabled>上传并签到</button>
-  <div id="status"></div>
-</div>
-<script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
-const UPLOAD_TOKEN = ${JSON.stringify(token)}
-const UPLOAD_TYPE = 'qr'
-const fileInput=document.getElementById('fileInput')
-const preview=document.getElementById('preview')
-const placeholder=document.getElementById('placeholder')
-const submitBtn=document.getElementById('submitBtn')
-const dropZone=document.getElementById('dropZone')
-const status=document.getElementById('status')
-let selectedFile=null
 
-dropZone.addEventListener('click',()=>fileInput.click())
-submitBtn.addEventListener('click',upload)
+  <script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
+    var UPLOAD_TOKEN = ${JSON.stringify(token)}
+    var UPLOAD_TYPE = 'qr'
+    var fileInput = document.getElementById('fileInput')
+    var pickBtn = document.getElementById('pickBtn')
+    var preview = document.getElementById('preview')
+    var resultBox = document.getElementById('resultBox')
 
-fileInput.addEventListener('change',e=>{
-  const file=e.target.files[0]
-  if(!file)return
-  selectedFile=file
-  const reader=new FileReader()
-  reader.onload=ev=>{preview.src=ev.target.result;preview.style.display='block';placeholder.style.display='none'}
-  reader.readAsDataURL(file)
-  submitBtn.disabled=false
-  status.textContent=''
-})
+    function setResult(kind, text) {
+      resultBox.style.display = 'block'
+      resultBox.className = 'result-box ' + kind
+      resultBox.textContent = text
+    }
 
-dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag')})
-dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag'))
-dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag');const file=e.dataTransfer.files[0];if(file){const dt=new DataTransfer();dt.items.add(file);fileInput.files=dt.files;fileInput.dispatchEvent(new Event('change'))}})
+    fileInput.addEventListener('change', function () {
+      var file = fileInput.files && fileInput.files[0]
+      if (!file) return
+      if (file.type.indexOf('image/') !== 0) { setResult('err', '❌ 请选择图片文件'); return }
 
-async function upload(){
-  if(!selectedFile)return
-  submitBtn.disabled=true
-  status.className='status loading'
-  status.textContent='正在上传识别中...'
-  try{
-    const qs = UPLOAD_TOKEN ? ('?token=' + encodeURIComponent(UPLOAD_TOKEN)) : ''
-    const resp=await fetch('/upload/image?type=' + encodeURIComponent(UPLOAD_TYPE) + qs,{method:'POST',body:selectedFile,headers:{'Content-Type':selectedFile.type}})
-    const data=await resp.json()
-    if(data.success){status.className='status ok';status.textContent='✅ '+data.message}
-    else{status.className='status err';status.textContent='❌ '+(data.error||'未知错误')}
-  }catch(e){status.className='status err';status.textContent='❌ 网络错误: '+e.message}
-  submitBtn.disabled=false
-}
-</script>
+      if (window.URL && window.URL.createObjectURL) {
+        preview.src = window.URL.createObjectURL(file)
+        preview.style.display = 'block'
+      }
+      pickBtn.classList.add('disabled')
+      setResult('loading', '正在上传并识别解码…')
+
+      var qs = UPLOAD_TOKEN ? ('?token=' + encodeURIComponent(UPLOAD_TOKEN)) : ''
+      // 直接以原始字节上传（服务端按图片魔数校验），不使用 multipart 表单
+      fetch('/upload/image' + qs, { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } })
+        .then(function (r) { return r.json() })
+        .then(function (data) {
+          pickBtn.classList.remove('disabled')
+          if (data.success) { setResult('ok', '✅ ' + (data.message || '签到成功！')) }
+          else { setResult('err', '❌ ' + (data.error || data.message || '未能在图中检测到有效签到码，请传原图')) }
+        })
+        .catch(function (err) {
+          pickBtn.classList.remove('disabled')
+          setResult('err', '❌ 网络请求异常：' + err.message)
+        })
+    })
+  </script>
 </body>
 </html>`
   }
