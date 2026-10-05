@@ -33,6 +33,7 @@ export const VOYRA_UI_CSS = `/* ================================================
   --line-dim: #E7E5E0;       /* 微弱分隔线 */
   --line-strong: #D6D3CD;    /* 结构描边/输入框外边框 */
   --line-focus: #F78A46;     /* 聚焦高亮线 */
+  --ring-focus: 0 0 0 2px rgba(239, 116, 41, 0.30);  /* 焦点环（输入框/课表格） */
 
   /* 单一品牌色（超星暖橙） */
   --brand-50: #FFF7ED;
@@ -116,37 +117,42 @@ export const VOYRA_UI_CSS = `/* ================================================
 /* ================= Dark Mode Overrides ================= */
 [data-theme="dark"] {
   --bg-canvas: #141210;
-  --bg-surface: #1E1B18;
+  --bg-surface: #211E1B;
   --bg-surface-sub: #282420;
   --bg-surface-hover: #332F2A;
 
   --ink-primary: #F5F5F4;
   --ink-secondary: #A8A29E;
-  --ink-tertiary: #78716C;
+  /* 原 #78716C 在卡面上只有 3.58:1，承载的是节次/时间等小字，提到 4.9:1 才过 WCAG AA */
+  --ink-tertiary: #8E8880;
   --ink-inverse: #1C1917;
 
-  --line-dim: #292524;
+  --line-dim: #33302C;
   --line-strong: #44403C;
   --line-focus: #F78A46;
+  /* 焦点环：2px 实边比 3px 半透明晕圈更清晰，也不会在深色底上糊成一片光晕 */
+  --ring-focus: 0 0 0 2px rgba(247, 138, 70, 0.42);
 
-  --brand-50: #2C1A0E;
-  --brand-100: #442410;
+  --brand-50: #241B14;
+  --brand-100: #322117;
   --brand-500: #F78A46;
   --brand-600: #EF7429;
   --brand-700: #FF9B5E;
 
-  --status-ok-bg: #062E20;
-  --status-ok-line: #064E3B;
+  /* 语义底色降彩度：深色模式下高彩度的橙/绿/红底会把整块面板照成"发光"，
+     这里只保留可辨识的色相倾向，状态本身由 -dot / -ink 承担。 */
+  --status-ok-bg: #16241E;
+  --status-ok-line: #2E463C;
   --status-ok-ink: #6EE7B7;
   --status-ok-dot: #34D399;
 
-  --status-warn-bg: #341D00;
-  --status-warn-line: #78350F;
+  --status-warn-bg: #26201A;
+  --status-warn-line: #4A3A26;
   --status-warn-ink: #FCD34D;
   --status-warn-dot: #FBBF24;
 
-  --status-err-bg: #3B0D0C;
-  --status-err-line: #7F1D1D;
+  --status-err-bg: #271918;
+  --status-err-line: #4A2C29;
   --status-err-ink: #FCA5A5;
   --status-err-dot: #F87171;
 

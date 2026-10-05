@@ -452,10 +452,9 @@ button{font-family:inherit}
 .status-chip.err .chip-dot{background:var(--status-err-dot)}
 .status-chip.subtle{color:var(--ink-tertiary)}
 .status-chip.pulse-orange{background:var(--brand-100);border-color:var(--brand-500);color:var(--brand-700);cursor:pointer}
-.status-chip.pulse-orange .chip-dot{background:var(--brand-600);animation:pulseDot 1.6s var(--ease-out) infinite}
+.status-chip.pulse-orange .chip-dot{background:var(--brand-600)}
 .status-chip.chip-update{background:var(--brand-100);border-color:var(--brand-500);color:var(--brand-700);cursor:pointer}
 .status-chip.chip-update:hover{background:var(--brand-50)}
-@keyframes pulseDot{0%,100%{transform:scale(.85);opacity:.7}50%{transform:scale(1.25);opacity:1}}
 
 /* ===== 侧栏（模块 1） ===== */
 .app-body{display:flex;flex:1;overflow:hidden;min-height:0}
@@ -470,10 +469,10 @@ button{font-family:inherit}
 .sidebar-heartbeat{background:var(--bg-surface-sub);border:1px solid var(--line-dim);border-radius:var(--r-md);padding:var(--sp-3)}
 .hb-status-row{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)}
 .hb-indicator{width:7px;height:7px;border-radius:50%;background:var(--status-idle-dot);flex-shrink:0}
-.hb-indicator.is-running{background:var(--status-ok-dot);box-shadow:0 0 0 2px var(--status-ok-line);animation:hbPulse 2.4s var(--ease-out) infinite}
+/* 运行中的指示点与 is-warn 一样用静态 2px 环：原先的 hbPulse 无限呼吸环在深色底上就是块光晕，去掉 */
+.hb-indicator.is-running{background:var(--status-ok-dot);box-shadow:0 0 0 2px var(--status-ok-line)}
 .hb-indicator.is-warn{background:var(--status-warn-dot);box-shadow:0 0 0 2px var(--status-warn-line)}
 .hb-indicator.is-idle{background:var(--status-idle-dot)}
-@keyframes hbPulse{0%,100%{box-shadow:0 0 0 2px var(--status-ok-line)}50%{box-shadow:0 0 0 4px var(--status-ok-line)}}
 .hb-state-text{font-size:var(--text-xs);font-weight:600;color:var(--ink-primary)}
 .hb-meta-row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;font-size:var(--text-2xs);color:var(--ink-tertiary);font-family:var(--font-mono)}
 .hb-meta-item{display:inline-flex;align-items:center;gap:3px}
@@ -490,7 +489,7 @@ button{font-family:inherit}
 @keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 
 /* ===== 服务通告（模块 10） ===== */
-.service-notice{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-5);border:1px solid var(--status-warn-line);border-radius:var(--r-lg);background:var(--status-warn-bg);box-shadow:var(--shadow-sm)}
+.service-notice{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-5);border:1px solid var(--status-warn-line);border-radius:var(--r-lg);background:var(--status-warn-bg)}
 .service-notice[hidden]{display:none}
 .service-notice>div{flex:1;min-width:0}
 .service-notice strong{font-size:var(--text-base);color:var(--ink-primary)}
@@ -520,7 +519,7 @@ button{font-family:inherit}
 
 /* ===== 表单 ===== */
 .field-input{height:36px;padding:0 var(--sp-3);border:1px solid var(--line-strong);border-radius:var(--r-sm);font-size:var(--text-sm);font-family:inherit;color:var(--ink-primary);background:var(--bg-surface);outline:none;transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);min-width:0}
-.field-input:focus{border-color:var(--brand-500);box-shadow:0 0 0 3px rgba(247,138,70,.18)}
+.field-input:focus{border-color:var(--brand-500);box-shadow:var(--ring-focus)}
 .field-input::placeholder{color:var(--ink-tertiary)}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--sp-4) var(--sp-5)}
 .form-item{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -650,7 +649,7 @@ button{font-family:inherit}
 .tt-slot span{color:var(--ink-tertiary);font-size:var(--text-2xs)}
 .tt-half td{background:var(--bg-surface-sub);font-size:var(--text-2xs);color:var(--ink-tertiary);font-weight:600;text-align:center;padding:5px;border-radius:var(--r-xs)}
 .tt-cell{width:100%;box-sizing:border-box;font-family:var(--font-sans);font-size:var(--text-xs);height:34px;padding:0 6px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--bg-surface);color:var(--ink-primary);cursor:pointer;transition:border-color var(--dur-fast),background var(--dur-fast)}
-.tt-cell:focus{outline:none;box-shadow:0 0 0 3px rgba(247,138,70,.18);border-color:var(--brand-500)}
+.tt-cell:focus{outline:none;box-shadow:var(--ring-focus);border-color:var(--brand-500)}
 .tt-cell.tt-filled{border-color:var(--brand-500);background:var(--brand-50);color:var(--ink-primary)}
 .tt-cell.tt-empty{border-color:var(--status-err-line);background:var(--status-err-bg);color:var(--status-err-ink)}
 .tt-cell.tt-suggested{border-color:var(--status-warn-dot);background:var(--status-warn-bg);box-shadow:0 0 0 2px var(--status-warn-line)}
