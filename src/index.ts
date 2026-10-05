@@ -786,8 +786,12 @@ async function main() {
   if (config.listener.mode === 'poll' || config.listener.mode === 'hybrid') {
     if (courses.length === 0) {
       logger.error('课程列表为空，轮询监听器将以空列表启动（无法发现任何签到），请检查登录/Cookie 是否正常')
-      await notifier.notify('⚠️ 轮询监听异常', '课程列表为空，轮询无法发现签到活动，请检查登录状态')
-        .catch(() => {})
+      // 只有「已配账号却拉不到课程」这种真会漏签的情况才弹桌面通知；
+      // 首次运行没配账号时软件内已有填写引导，不要开机就甩系统小窗。
+      if (config.accounts.length > 0) {
+        await notifier.notify('⚠️ 轮询监听异常', '课程列表为空，轮询无法发现签到活动，请检查登录状态')
+          .catch(() => {})
+      }
     }
     for (const meta of configuredMetas.filter(item => item.cookie)) {
       const pl = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
@@ -806,7 +810,10 @@ async function main() {
     pollListener = pollListeners[0] || null
     if (pollListeners.length === 0) {
       logger.error('没有可用账号启动轮询监听，请检查登录状态')
-      await notifier.notify('⚠️ 轮询监听异常', '没有可用账号启动轮询监听，请检查登录状态').catch(() => {})
+      // 同上：没配账号属首次运行状态，不弹系统小窗；配了账号却起不来监听器才提醒
+      if (config.accounts.length > 0) {
+        await notifier.notify('⚠️ 轮询监听异常', '没有可用账号启动轮询监听，请检查登录状态').catch(() => {})
+      }
     }
   }
 

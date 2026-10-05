@@ -150,6 +150,30 @@ let tray = null
 let quitting = false
 let serviceReady = false
 
+/** 更新状态：主进程是唯一真源，界面只管渲染（避免关掉面板就丢「已下载好」这种状态）
+ *  必须在模块作用域：openWindow() 要在窗口加载完成后同步一次状态，
+ *  原先声明在 app.whenReady() 回调里，openWindow 引用不到 → did-finish-load 直接 ReferenceError 退出。 */
+const updateState = {
+  phase: 'idle',   // idle | checking | available | downloading | ready | installing | error | uptodate
+  current: app.getVersion(),
+  latest: '',
+  notes: '',
+  source: '',
+  pct: 0, transferred: 0, total: 0, speedBps: 0,
+  message: '',
+  checkedAt: 0,
+  lastResult: null, // { ok, from, to, now, at }：上次「更新并重启」的结果，重启后回填
+}
+let rankedSources = []
+let updateSender = null
+const silentLogger = { info() {}, warn() {}, error() {}, debug() {} }
+
+function pushUpdateState() {
+  const wc = updateSender
+  if (!wc || wc.isDestroyed()) return
+  try { wc.send('update-state', { ...updateState, ranked: rankedSources.map((r) => r.label) }) } catch (_) {}
+}
+
 // 服务就绪探测：等业务模块初始化完成（课程/账号数据可用）再打开窗口，保证首屏完整
 function waitForService(retries) {
   const http = require('http')
@@ -335,31 +359,9 @@ app.whenReady().then(() => {
     return stateFilePath
   }
 
-  /** 更新状态：主进程是唯一真源，界面只管渲染（避免关掉面板就丢「已下载好」这种状态） */
-  const updateState = {
-    phase: 'idle',   // idle | checking | available | downloading | ready | installing | error | uptodate
-    current: app.getVersion(),
-    latest: '',
-    notes: '',
-    source: '',
-    pct: 0, transferred: 0, total: 0, speedBps: 0,
-    message: '',
-    checkedAt: 0,
-    lastResult: null, // { ok, from, to, now, at }：上次「更新并重启」的结果，重启后回填
-  }
-  let rankedSources = []
-  let updateSender = null
-  const silentLogger = { info() {}, warn() {}, error() {}, debug() {} }
-
   autoUpdater.autoDownload = false          // 下载时机由本进程控制（要先按实测速度挑源）
   autoUpdater.autoInstallOnAppQuit = true   // 已下载未安装时，退出软件兜底安装
   autoUpdater.logger = silentLogger
-
-  function pushUpdateState() {
-    const wc = updateSender
-    if (!wc || wc.isDestroyed()) return
-    try { wc.send('update-state', { ...updateState, ranked: rankedSources.map((r) => r.label) }) } catch (_) {}
-  }
 
   /** 语义化版本比较：a 是否比 b 新 */
   function isNewerVersion(a, b) {
