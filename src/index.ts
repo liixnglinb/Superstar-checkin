@@ -2,8 +2,10 @@ import { logger } from './utils/logger'
 import { loadConfig } from './providers/config'
 import { initStorage } from './providers/storage'
 import { AccountManager } from './providers/account-manager'
-import { ImListener } from './listeners/im-listener'
-import { DingTalkStreamListener } from './listeners/dingtalk-listener'
+// IM/钉钉监听器只在对应模式下才用到（jsdom+Easemob 模块加载实测 ~390ms），
+// 轮询模式的启动不为它们买单：类型走 type-only import，实现按需动态加载
+import type { ImListener } from './listeners/im-listener'
+import type { DingTalkStreamListener } from './listeners/dingtalk-listener'
 import { PollListener } from './listeners/poll-listener'
 import { CheckinHandler } from './handlers/checkin-handler'
 import { NotificationManager } from './notifiers'
@@ -736,7 +738,8 @@ async function main() {
   const cancelledAids = new Set<string>()
   let imListener: ImListener | null = null
   if (config.listener.mode === 'im' || config.listener.mode === 'hybrid') {
-    imListener = new ImListener()
+    const { ImListener: ImListenerImpl } = await import('./listeners/im-listener')
+    imListener = new ImListenerImpl()
     imListener.onStatusChange = (connected) => {
       watchdog.imConnected = connected
       if (connected) watchdog.lastActivityAt = Date.now()
@@ -894,7 +897,8 @@ async function main() {
   let dingtalkStream: DingTalkStreamListener | null = null
   const dtCfg = config.dingtalk
   if (dtCfg?.stream?.enabled && dtCfg.appKey && dtCfg.appSecret) {
-    dingtalkStream = new DingTalkStreamListener({
+    const { DingTalkStreamListener: DingTalkStreamListenerImpl } = await import('./listeners/dingtalk-listener')
+    dingtalkStream = new DingTalkStreamListenerImpl({
       clientId: dtCfg.appKey,
       clientSecret: dtCfg.appSecret,
       debug: !!dtCfg.stream.debug,

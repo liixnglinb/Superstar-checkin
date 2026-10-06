@@ -611,9 +611,22 @@ export class DingTalkServer {
             res.end(JSON.stringify({ ok: true, file: file || '', lines: [], message: '暂无日志文件' }))
             return
           }
-          const lines = fs.readFileSync(file, 'utf-8').split(/\r?\n/).filter(Boolean)
+          // 只读文件尾部：日志轮转上限 10MB，整读再切等于每次刷新搬 10MB IO；
+          // 512KB 尾部远超 want 上限 1000 行。start>0 时丢掉首行（可能截断半个 UTF-8 字符）
+          const TAIL_BYTES = 512 * 1024
+          const stat = fs.statSync(file)
+          const start = Math.max(0, stat.size - TAIL_BYTES)
+          const buf = Buffer.alloc(stat.size - start)
+          const fd = fs.openSync(file, 'r')
+          try {
+            fs.readSync(fd, buf, 0, buf.length, start)
+          } finally {
+            fs.closeSync(fd)
+          }
+          let lines = buf.toString('utf-8').split(/\r?\n/).filter(Boolean)
+          if (start > 0 && lines.length > 1) lines = lines.slice(1)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, file, lines: lines.slice(-want) }))
+          res.end(JSON.stringify({ ok: true, file, truncated: start > 0, lines: lines.slice(-want) }))
         } catch (e: any) {
           logger.error(`读取日志失败: ${e.message}`)
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
