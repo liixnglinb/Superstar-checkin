@@ -2251,7 +2251,14 @@ ${VOYRA_UI_CSS}
     }).catch(function(){msg.textContent='❌ 发送失败';msg.style.color='var(--status-err-ink)'})
   })
   var alBtn=$('setAutoLaunch')
-  if(alBtn&&window.appCtl){
+  if(alBtn&&!window.appCtl){
+    // 浏览器/PWA 形态没有开机自启能力：明确禁用并说明原因，不能留一个静默失效的开关
+    alBtn.disabled=true
+    alBtn.setAttribute('aria-disabled','true')
+    alBtn.title='仅桌面安装版可设置开机自启'
+    var alHelp=alBtn.parentElement?alBtn.parentElement.querySelector('.form-help'):null
+    if(alHelp)alHelp.textContent='当前为浏览器/PWA 形态，无此能力；安装桌面版后可设置'
+  }else if(alBtn&&window.appCtl){
     window.appCtl.getAutoLaunch().then(function(v){alBtn.classList.toggle('on',!!v);alBtn.setAttribute('aria-checked',String(!!v))}).catch(function(){})
     alBtn.addEventListener('click',function(){
       var next=!alBtn.classList.contains('on')

@@ -403,8 +403,16 @@ async function main() {
       return { ok: true, listening, listeningCount: watchedCoursesNow().length }
     },
     toggleCourse: (courseId: string, on: boolean) => {
-      if (on) disabledCourses.delete(String(courseId))
-      else disabledCourses.add(String(courseId))
+      const id = String(courseId || '').trim()
+      /**
+       * 必须先确认课程存在：否则任意 ID 都会被记进 disabledCourses 并回 ok:true，
+       * 界面显示"已开启该课程监听"而实际什么都没发生（实测 courseId=999999 即复现）。
+       */
+      if (!id || !courses.some(c => String(c.courseId) === id)) {
+        return { ok: false, listening, listeningCount: watchedCoursesNow().length, message: '未找到该课程，请刷新课程列表后重试' }
+      }
+      if (on) disabledCourses.delete(id)
+      else disabledCourses.add(id)
       return { ok: true, listening, listeningCount: watchedCoursesNow().length }
     },
     resetCourses: () => {

@@ -64,7 +64,7 @@ export interface DingTalkServerOptions {
    */
   setListening?: (on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
   /** 切换单门课程的监听开关，返回切换后的状态 */
-  toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
+  toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number; message?: string }
   /** 恢复所有课程的监听（清除手动关闭） */
   resetCourses?: () => { ok: boolean; listeningCount: number }
   /**
@@ -119,7 +119,7 @@ export class DingTalkServer {
   private sendTestNotify?: () => Promise<void>
   private refreshCourses?: () => Promise<{ ok: boolean; count: number; message: string }>
   private setListening?: (on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
-  private toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
+  private toggleCourse?: (courseId: string, on: boolean) => { ok: boolean; listening: boolean; listeningCount: number; message?: string }
   private resetCourses?: () => { ok: boolean; listeningCount: number }
   private applyWatchCourses?: (ids: string[]) => { ok: boolean; listeningCount: number }
   private getTimetablePayload?: () => any
@@ -1108,13 +1108,21 @@ export class DingTalkServer {
       if (req.method === 'POST' && routePath === '/api/courses/toggle') {
         try {
           const body = JSON.parse(await this.readBody(req))
-          if (!this.toggleCourse) throw new Error('课程开关未接入')
           const courseId = String(body.courseId || '').trim()
-          if (!courseId) throw new Error('缺少 courseId')
+          // 参数缺失属客户端错误：返回 400，不要混进 500（500 应只表示服务端自身失败）
+          if (!courseId) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: false, message: '缺少 courseId' }))
+            return
+          }
+          if (!this.toggleCourse) throw new Error('课程开关未接入')
           const r = this.toggleCourse(courseId, !!body.on)
-          logger.info(`课程 ${courseId} 监听已${body.on ? '开启' : '关闭'}`)
+          // 失败时保留 toggleCourse 给出的原因，不要用成功文案覆盖掉
+          const message = r.ok ? (body.on ? '已开启该课程监听' : '已关闭该课程监听') : (r.message || '操作失败')
+          if (r.ok) logger.info(`课程 ${courseId} 监听已${body.on ? '开启' : '关闭'}`)
+          else logger.warn(`课程开关被拒绝（courseId=${courseId}）：${message}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ...r, message: body.on ? '已开启该课程监听' : '已关闭该课程监听' }))
+          res.end(JSON.stringify({ ...r, message }))
         } catch (e: any) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
