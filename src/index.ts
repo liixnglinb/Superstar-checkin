@@ -12,8 +12,6 @@ import { getCourseList, getCourseActivities, shouldPollActivity, type CourseInfo
 import { initLocationStore } from './utils/location'
 import {
   initWindowStore,
-  recordSigninTime,
-  getWindow,
   getWindowSummary,
   getObservations,
 } from './providers/signin-window'
@@ -49,7 +47,6 @@ import { DEFAULTS } from './constants'
 import YAML from 'yaml'
 import axios from 'axios'
 import { encryptPassword, isEncrypted } from './utils/crypto'
-import * as storage from './providers/storage'
 
 import * as readline from 'readline'
 import * as fs from 'fs'
@@ -369,7 +366,6 @@ async function main() {
           pl.start(meta.cookie, courses, shouldListenCourse)
           pollListeners.push(pl)
         }
-        pollListener = pollListeners[0] || null
       }
       logger.success(`课程列表已刷新: ${fresh.length} 门（已结课 ${retiredFresh.length} 门不再监听），在监听 ${watchedCoursesNow().length} 门`)
       return { ok: true, count: courses.length, message: `已刷新：可监听 ${courses.length} 门（已排除已结课 ${retiredFresh.length} 门），当前在监听 ${watchedCoursesNow().length} 门` }    } catch (e: any) {
@@ -690,7 +686,6 @@ async function main() {
       }
 
       // 签到前确认：先弹通知倒计时，用户可取消，超时自动签
-      let confirmed = true
       if (config.checkin.confirmBefore?.enabled) {
         const waitSec = Math.max(3, config.checkin.confirmBefore.waitSeconds || 10)
         const cancelUrl = getMobileBaseUrl(config) + '/api/confirm/cancel?aid=' + encodeURIComponent(aid) +
@@ -787,8 +782,7 @@ async function main() {
     }
   }
 
-  // 轮询监听器（模块级可变：支持「重新拉取课程列表」时重建）
-  // 课程扫描健康状态：courseId -> 连续失败次数（成功清零），供 UI 状态列显示"扫描异常"
+    // 课程扫描健康状态：courseId -> 连续失败次数（成功清零），供 UI 状态列显示"扫描异常"
   const courseHealth = new Map<string, number>()
   function attachHealth(pl: PollListener) {
     pl.onHealth((courseId, ok) => {
@@ -797,7 +791,6 @@ async function main() {
     })
   }
 
-  let pollListener: PollListener | null = null
   const pollListeners: PollListener[] = []
   if (config.listener.mode === 'poll' || config.listener.mode === 'hybrid') {
     if (courses.length === 0) {
@@ -823,7 +816,6 @@ async function main() {
         logger.error(`轮询监听器启动失败（不影响上传页）: ${e.message}`)
       }
     }
-    pollListener = pollListeners[0] || null
     if (pollListeners.length === 0) {
       logger.error('没有可用账号启动轮询监听，请检查登录状态')
       // 同上：没配账号属首次运行状态，不弹系统小窗；配了账号却起不来监听器才提醒

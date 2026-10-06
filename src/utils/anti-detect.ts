@@ -1,5 +1,4 @@
 import { DEFAULTS } from '../constants'
-import { logger } from './logger'
 
 /**
  * 随机延迟（秒 → 毫秒）

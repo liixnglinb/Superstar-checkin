@@ -13,13 +13,11 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 class Logger {
   private level: LogLevel = 'info'
-  private logFile?: string
   private stream?: fs.WriteStream
 
   configure(level: LogLevel, logFile?: string) {
     this.level = level
     if (logFile) {
-      this.logFile = logFile
       fs.mkdirSync(path.dirname(logFile), { recursive: true })
       try {
         if (fs.existsSync(logFile) && fs.statSync(logFile).size > 10 * 1024 * 1024) {

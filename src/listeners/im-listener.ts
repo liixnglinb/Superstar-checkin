@@ -48,7 +48,6 @@ export class ImListener {
   private uid = 0
   private handler: MessageHandler | null = null
   private connected = false
-  private lastConnectedAt = 0
   private reconnectTimer: NodeJS.Timeout | null = null
   private refreshTimer: NodeJS.Timeout | null = null
   private reconnectAttempt = 0
@@ -118,7 +117,6 @@ export class ImListener {
     W.WebIM.conn.listen({
       onOpened: () => {
         this.connected = true
-        this.lastConnectedAt = Date.now()
         this.reconnectAttempt = 0
         this.reconnectFailCount = 0
         logger.success('IM 协议连接成功')

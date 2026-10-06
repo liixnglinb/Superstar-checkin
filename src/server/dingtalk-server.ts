@@ -41,6 +41,18 @@ function maskProxyUrl(p: string): string {
   }
 }
 
+/** config.yaml 的唯一路径来源（进程内不变，CONFIG_FILE 启动时注入） */
+const CONFIG_FILE_PATH = process.env.CONFIG_FILE || 'config.yaml'
+
+/**
+ * 读 config.yaml 为对象：此前 12 处路由各自 `fs.existsSync ? YAML.parse || {} : {}`，
+ * 行为漂移风险集中到这里——文件不存在/空文件/解析为 null 一律得到空对象。
+ */
+function readConfigDoc(): Record<string, any> {
+  if (!fs.existsSync(CONFIG_FILE_PATH)) return {}
+  return YAML.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf-8')) || {}
+}
+
 export interface DingTalkServerOptions {
   /** 企业内部应用的 AppKey（用于获取 access_token 与图片下载） */
   appKey?: string
@@ -365,10 +377,7 @@ export class DingTalkServer {
           const username = requiredText(body.username, '账号', 64)
           // 密码不 trim 首尾空格（可能是真实密码的一部分），只去控制字符并限长
           const password = requiredText(body.password, '密码', 128, { trim: false })
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile)
-            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
-            : {}
+          const existing = readConfigDoc()
           const accounts = Array.isArray(existing.accounts) ? existing.accounts : []
           const idx = accounts.findIndex((a: any) => String(a.username) === username)
           // 密码加密存储（DPAPI，绑定当前 Windows 用户；加密失败降级明文并告警）
@@ -381,8 +390,8 @@ export class DingTalkServer {
             accounts.push({ username, password: encPwd })
           }
           existing.accounts = accounts
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
-          logger.info(`账号已${action}到 ${cfgFile}（用户名: ${username}），当前共 ${accounts.length} 个账号，${RESTART_HINT}`)
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
+          logger.info(`账号已${action}到 ${CONFIG_FILE_PATH}（用户名: ${username}），当前共 ${accounts.length} 个账号，${RESTART_HINT}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: `账号已${action}（当前 ${accounts.length} 个），${RESTART_HINT}` }))
         } catch (e: any) {
@@ -396,10 +405,7 @@ export class DingTalkServer {
         try {
           const body = await this.parseJsonBody(req)
           const username = requiredText(body.username, '账号', 64)
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile)
-            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
-            : {}
+          const existing = readConfigDoc()
           const before = Array.isArray(existing.accounts) ? existing.accounts.length : 0
           existing.accounts = (Array.isArray(existing.accounts) ? existing.accounts : [])
             .filter((a: any) => String(a.username) !== username)
@@ -408,7 +414,7 @@ export class DingTalkServer {
             res.end(JSON.stringify({ ok: false, message: '未找到该账号' }))
             return
           }
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
           logger.info(`账号已删除: ${username}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '账号已删除，' + RESTART_HINT }))
@@ -423,10 +429,7 @@ export class DingTalkServer {
         try {
           const body = await this.parseJsonBody(req)
           const username = requiredText(body.username, '账号', 64)
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile)
-            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
-            : {}
+          const existing = readConfigDoc()
           const accounts = Array.isArray(existing.accounts) ? existing.accounts : []
           const idx = accounts.findIndex((a: any) => String(a.username) === username)
           if (idx < 0) {
@@ -437,7 +440,7 @@ export class DingTalkServer {
           const [acc] = accounts.splice(idx, 1)
           accounts.unshift(acc)
           existing.accounts = accounts
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
           logger.info(`主账号已切换为: ${username}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: `已将 ${username} 设为主账号，${RESTART_HINT}` }))
@@ -451,10 +454,7 @@ export class DingTalkServer {
       if (req.method === 'POST' && routePath === '/api/settings') {
         try {
           const body = await this.parseJsonBody(req)
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile)
-            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
-            : {}
+          const existing = readConfigDoc()
           // 界面上每个字段都填了值就必须被采纳或明确报错；旧写法是「越界静默丢弃 + 回 ok:true」，
           // 实测 pollInterval 填 0/-1/abc 都提示保存成功，实际存的还是旧值。
           const pollSec = intInRange(body.pollInterval, '轮询间隔（秒）', 10, 600)
@@ -550,7 +550,7 @@ export class DingTalkServer {
               waitSeconds: wait !== null ? wait : ((existing.checkin.confirmBefore || {}).waitSeconds ?? 10),
             }
           }
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
           logger.info('运行设置已保存，' + RESTART_HINT)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '设置已保存，' + RESTART_HINT }))
@@ -619,15 +619,14 @@ export class DingTalkServer {
       // 配置导出
       if (req.method === 'GET' && routePath === '/api/config/export') {
         try {
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const raw = YAML.parse(fs.readFileSync(cfgFile, 'utf-8'))
+          const raw = readConfigDoc()
           const safe = JSON.parse(JSON.stringify(raw))
           const SENSITIVE_KEYS = new Set([
             'password', 'cookie', 'token', 'secret', 'secretId', 'secretKey',
             'appSecret', 'webhook', 'key', 'smtpPass', 'smtpPassword', 'accessKey',
             'botToken', 'sendKey', 'amapKey', 'baiduKey',
           ])
-          const scrub = (value: any) => {
+          const scrub = (value: any): any => {
             if (Array.isArray(value)) return value.map(scrub)
             if (value && typeof value === 'object') {
               for (const [key, child] of Object.entries(value)) {
@@ -649,10 +648,10 @@ export class DingTalkServer {
 
       // 配置导入
       if (req.method === 'POST' && routePath === '/api/config/import') {
-        const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
+        const CONFIG_FILE_PATH = process.env.CONFIG_FILE || 'config.yaml'
         try {
           const imported = await this.parseJsonBody(req)
-          const existing = YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
+          const existing = YAML.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf-8')) || {}
           // 只接受已知的顶层配置键：导入文件可能来自别人，盲合并等于把任意内容写进 config.yaml
           const ALLOWED = new Set([
             'proxy', 'accounts', 'listener', 'checkin', 'geo', 'notify', 'ocr', 'dingtalk',
@@ -673,7 +672,7 @@ export class DingTalkServer {
           if (existing.web?.token) merged.web = { ...merged.web, token: existing.web.token }
           if (existing.notify?.channels) merged.notify = { ...merged.notify, channels: existing.notify.channels }
           if (existing.ocr) merged.ocr = existing.ocr
-          writeFileAtomic(cfgFile, YAML.stringify(merged))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(merged))
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({
             ok: true,
@@ -734,8 +733,7 @@ export class DingTalkServer {
       // 课程备注：获取
       if (req.method === 'GET' && routePath === '/api/course-notes') {
         try {
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+          const existing = readConfigDoc()
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, notes: existing.courseNotes || {} }))
         } catch (e: any) {
@@ -762,13 +760,12 @@ export class DingTalkServer {
             // 键与值都取清理后的结果：旧写法把外部传入的任意键名直接写进 config.yaml
             if (note) cleaned[cid] = note
           }
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+          const existing = readConfigDoc()
           existing.courseNotes = { ...(existing.courseNotes || {}), ...cleaned }
           for (const k of Object.keys(existing.courseNotes)) {
             if (!existing.courseNotes[k] || String(existing.courseNotes[k]).trim() === '') delete existing.courseNotes[k]
           }
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '备注已保存' }))
         } catch (e: any) {
@@ -863,8 +860,7 @@ export class DingTalkServer {
 
       // 代理配置：读取当前值
       if (req.method === 'GET' && routePath === '/api/proxy') {
-        const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-        const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+        const existing = readConfigDoc()
         const pv = String(existing.proxy || '')
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({ ok: true, proxy: pv, enabled: !!pv }))
@@ -877,10 +873,9 @@ export class DingTalkServer {
           const body = await this.parseJsonBody(req)
           // 旧写法接受任意字符串，实测 `file:///etc/passwd` 会被写进配置并交给网络层
           const pv = proxyUrl(body.proxy)
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+          const existing = readConfigDoc()
           existing.proxy = pv
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
           setProxy(pv)
           logger.info('代理配置已保存并立即生效: ' + (pv ? maskProxyUrl(pv) : '(直连)'))
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -996,10 +991,7 @@ export class DingTalkServer {
       if (req.method === 'POST' && routePath === '/api/dingtalk/stream') {
         try {
           const body = await this.parseJsonBody(req)
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile)
-            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
-            : {}
+          const existing = readConfigDoc()
           const appKey = textField(body.appKey ?? existing.dingtalk?.appKey, '钉钉 AppKey', 64).trim()
           const appSecret = textField(body.appSecret ?? existing.dingtalk?.appSecret, '钉钉 AppSecret', 128).trim()
           const enabled = body.enabled !== undefined ? boolFlag(body.enabled, '钉钉图片通道开关') : !!existing.dingtalk?.stream?.enabled
@@ -1010,7 +1002,7 @@ export class DingTalkServer {
             appSecret,
             stream: { ...(existing.dingtalk?.stream || {}), enabled },
           }
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
 
           const missing: string[] = []
           if (!appKey) missing.push('AppKey')
@@ -1039,8 +1031,7 @@ export class DingTalkServer {
       // 钉钉图片通道设置：读取（appKey 回显、appSecret 只报是否存在）
       if (req.method === 'GET' && routePath === '/api/dingtalk/settings') {
         try {
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const cfg = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+          const cfg = readConfigDoc()
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({
             ok: true,
@@ -1068,12 +1059,9 @@ export class DingTalkServer {
             .map((c: any) => textField(c, '课程名称', 200))
             .filter(Boolean)
           // 仍写回配置，保证重启后保持同样的监听范围
-          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-          const existing = fs.existsSync(cfgFile)
-            ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
-            : {}
+          const existing = readConfigDoc()
           existing.watchCourses = watchCourses
-          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          writeFileAtomic(CONFIG_FILE_PATH, YAML.stringify(existing))
 
           let listeningCount: number | undefined
           if (this.applyWatchCourses) {

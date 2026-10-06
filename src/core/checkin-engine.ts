@@ -2,9 +2,9 @@
 import { CookieJar } from 'tough-cookie'
 import { wrapper } from 'axios-cookiejar-support'
 import { MOBILE_AGENT, API, DEFAULTS } from '../constants'
-import type { AccountMetaData, CheckinInfo, CheckinResult, CheckinType } from '../types'
+import type { AccountMetaData, CheckinInfo, CheckinType } from '../types'
 import { logger } from '../utils/logger'
-import { randomDelay, addGpsDrift, getRandomMobileUA } from '../utils/anti-detect'
+import { addGpsDrift, getRandomMobileUA } from '../utils/anti-detect'
 import { geocodeAddress } from '../utils/geocode'
 import { getLearnedLocation, saveLearnedLocation } from '../utils/location'
 import { getProxyConfig } from '../providers/runtime-config'
@@ -14,15 +14,6 @@ import { getProxyConfig } from '../providers/runtime-config'
  *
  * 完整签到流程：preSign → analysis → stuSignajax
  */
-
-/** 安全解析：对象原样返回，字符串尝试 JSON，其余返回 null */
-function parseJsonSafe(data: any): any {
-  if (data && typeof data === 'object') return data
-  if (typeof data === 'string') {
-    try { return JSON.parse(data) } catch { return null }
-  }
-  return null
-}
 
 export class CheckinEngine {
   /** 是否启用 UA 轮换（由 CheckinHandler 根据配置设置） */

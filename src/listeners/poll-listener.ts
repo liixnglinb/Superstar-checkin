@@ -1,8 +1,6 @@
 import { logger } from '../utils/logger'
 import { getCourseActivities, shouldPollActivity, type ActivityItem, type CourseInfo } from '../core/course'
 import { recordSigninTime } from '../providers/signin-window'
-import { CheckinEngine } from '../core/checkin-engine'
-import type { AccountMetaData } from '../types'
 import { isProcessed, trimProcessed } from '../providers/sign-state'
 
 type ActivityHandler = (activeId: string, courseId: number, classId: number, courseName: string) => void
