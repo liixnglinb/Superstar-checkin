@@ -82,6 +82,10 @@ jobs:
       - name: 编译 TypeScript
         run: npm run build
 
+      - name: 测试（node:test 全量）
+        # 测试不过就不打包：坏版本不该被装进用户机器
+        run: npm test
+
       - name: 打包 NSIS 安装程序
         # --publish never：electron-builder 检测到 CI 环境会自动触发隐式发布，
         # 因无 GH_TOKEN 而失败（实测 v26）。发布统一交给下方 action-gh-release 步骤。
