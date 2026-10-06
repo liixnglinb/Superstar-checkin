@@ -104,9 +104,25 @@ export function loadConfig(filePath?: string): AppConfig {
       }
     }
   }
+
+  // 钉钉 AppSecret 与账号密码同等待遇：盘上 DPAPI 加密，内存明文
+  const ding: any = config.dingtalk
+  if (ding && typeof ding.appSecret === 'string' && ding.appSecret) {
+    if (isEncrypted(ding.appSecret)) {
+      const plain = decryptPassword(ding.appSecret)
+      if (plain) {
+        ding.appSecret = plain
+      } else {
+        logger.error('钉钉 AppSecret 解密失败，图片通道将无法连接，请在设置页重新保存')
+      }
+    } else if (encryptPassword(ding.appSecret)) {
+      needRewrite = true
+    }
+  }
+
   if (needRewrite) {
     try {
-      // 基于文件原始内容写回，仅把明文密码替换为加密串，不落内存明文
+      // 基于文件原始内容写回，仅把明文密码/AppSecret 替换为加密串，不落内存明文
       const rawAccounts = Array.isArray(raw.accounts) ? raw.accounts : []
       for (const ra of rawAccounts) {
         if (ra && ra.password && !isEncrypted(ra.password)) {
@@ -114,10 +130,15 @@ export function loadConfig(filePath?: string): AppConfig {
           if (enc) ra.password = enc
         }
       }
+      const rawDing: any = raw.dingtalk
+      if (rawDing && typeof rawDing.appSecret === 'string' && rawDing.appSecret && !isEncrypted(rawDing.appSecret)) {
+        const enc = encryptPassword(rawDing.appSecret)
+        if (enc) rawDing.appSecret = enc
+      }
       writeFileAtomic(file, YAML.stringify(raw))
-      logger.info('config.yaml 已更新（密码加密存储）')
+      logger.info('config.yaml 已更新（敏感字段加密存储）')
     } catch (e: any) {
-      logger.warn(`密码加密写回失败: ${e.message}`)
+      logger.warn(`敏感字段加密写回失败: ${e.message}`)
     }
   }
 

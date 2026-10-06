@@ -5,7 +5,7 @@ import YAML from 'yaml'
 import axios from 'axios'
 import { logger } from '../utils/logger'
 import { getProxyConfig, getProxy, setProxy } from '../providers/runtime-config'
-import { encryptPassword } from '../utils/crypto'
+import { encryptPassword, isEncrypted } from '../utils/crypto'
 import { getConsolePage, ConsoleStatus } from './console-ui'
 import { writeFileAtomic } from '../utils/fs'
 import { BadRequestError, boolFlag, intInRange, proxyUrl, requiredText, textField, timeOfDay } from '../utils/validate'
@@ -253,6 +253,12 @@ export class DingTalkServer {
 
       res.setHeader('X-Content-Type-Options', 'nosniff')
       res.setHeader('Referrer-Policy', 'no-referrer')
+      // 页面/接口全部同源自用：CSP 主要防 XSS 后外联或加载远程脚本（页面只有内联脚本与样式，
+      // 因此 script/style 允许 unsafe-inline；渲染进程本身有 sandbox+contextIsolation 兜底）
+      res.setHeader('X-Frame-Options', 'DENY')
+      res.setHeader('Content-Security-Policy',
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
 
       // CORS 预检请求：浏览器在跨域 POST 前会先发 OPTIONS，必须直接返回
       if (req.method === 'OPTIONS') {
@@ -993,7 +999,17 @@ export class DingTalkServer {
           const body = await this.parseJsonBody(req)
           const existing = readConfigDoc()
           const appKey = textField(body.appKey ?? existing.dingtalk?.appKey, '钉钉 AppKey', 64).trim()
-          const appSecret = textField(body.appSecret ?? existing.dingtalk?.appSecret, '钉钉 AppSecret', 128).trim()
+          // 密钥字段：留空 = 保持已存值（UI 承诺「留空则不修改」；旧实现的 `??` 会把
+          // 空字符串当新值，保存时把已配好的 AppSecret 抹掉）
+          const inputSecret = textField(body.appSecret ?? '', '钉钉 AppSecret', 128).trim()
+          const prevSecret = typeof existing.dingtalk?.appSecret === 'string' ? existing.dingtalk.appSecret : ''
+          let appSecret = inputSecret || prevSecret
+          // 落盘前 DPAPI 加密（绑定当前 Windows 用户）；载入时在 config 层统一解密回内存
+          if (appSecret && !isEncrypted(appSecret)) {
+            const enc = encryptPassword(appSecret)
+            if (enc) appSecret = enc
+            else logger.warn('AppSecret DPAPI 加密不可用，将明文写入 config.yaml')
+          }
           const enabled = body.enabled !== undefined ? boolFlag(body.enabled, '钉钉图片通道开关') : !!existing.dingtalk?.stream?.enabled
 
           existing.dingtalk = {
