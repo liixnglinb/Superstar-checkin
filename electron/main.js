@@ -13,6 +13,38 @@ if (!app.requestSingleInstanceLock()) {
 
 const ICON = path.join(__dirname, '..', 'assets', 'app-icon.ico')
 
+/**
+ * 崩溃留痕与可见反馈。
+ * 服务层 src/index.ts 里已有 uncaughtException → process.exit(1)，
+ * 用户看到的效果是"双击图标后软件无声消失"（v3.9.x 闪退就是这么表现的）。
+ * 这里先于它注册：把原因写进 userData/crash.log 并弹窗告知，再让原逻辑退出。
+ * 配置与签到记录都是落盘存储，重开软件即回到原状态。
+ */
+function logCrash(kind, detail) {
+  try {
+    const fs = require('fs')
+    const file = path.join(app.getPath('userData'), 'crash.log')
+    fs.appendFileSync(file, `[${new Date().toISOString()}] ${kind}: ${detail}\n`)
+    return file
+  } catch (_) {
+    return '(无法写崩溃日志)'
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  const file = logCrash('uncaughtException', (err && err.stack) || String(err))
+  try {
+    require('electron').dialog.showErrorBox(
+      '学习通自动签到 出现异常',
+      `${(err && err.message) || err}\n\n详细日志：${file}\n软件即将退出。重新打开即可继续使用，配置与签到记录都已保存在本地。`
+    )
+  } catch (_) { /* 弹窗失败不影响日志 */ }
+})
+
+process.on('unhandledRejection', (reason) => {
+  logCrash('unhandledRejection', String((reason && reason.stack) || reason))
+})
+
 function consoleUrl() {
   const service = serviceConfig()
   const base = `http://${service.host}:${service.port}/`
@@ -252,6 +284,25 @@ function openWindow() {
     }
   })
   mainWindow.on('closed', () => { mainWindow = null })
+
+  /**
+   * 渲染进程崩了/本机页面加载失败时自动重载，避免只剩托盘图标、界面永久白屏。
+   * 上限 3 次：服务真挂了的时候不能变成无限重载刷日志。
+   */
+  let recovered = 0
+  const recoverWindow = (why) => {
+    logCrash('window-recover', why)
+    if (recovered >= 3 || !mainWindow || mainWindow.isDestroyed()) return
+    recovered++
+    setTimeout(() => {
+      try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload() } catch (_) { }
+    }, 600)
+  }
+  mainWindow.webContents.on('render-process-gone', (_e, d) => recoverWindow('render-process-gone ' + JSON.stringify(d)))
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    if (code === -3) return // -3 = ABORTED，多为主动跳转，不是故障
+    recoverWindow('did-fail-load ' + code + ' ' + desc)
+  })
 }
 
 function createTray() {

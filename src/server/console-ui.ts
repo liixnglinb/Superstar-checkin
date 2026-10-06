@@ -1372,10 +1372,41 @@ ${VOYRA_UI_CSS}
   function fmtTime(ts){if(!ts)return '—';var d=new Date(ts),n=new Date();var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');if(d.toDateString()===n.toDateString())return '今天 '+hm;var y=new Date(n.getTime()-86400000);if(d.toDateString()===y.toDateString())return '昨天 '+hm;return (d.getMonth()+1)+'月'+d.getDate()+'日 '+hm}
   function typeText(t){var m={normal:'普通',qr:'二维码',location:'位置'};return m[t]||t}
   function isOk(r){return /成功|✅|已签到/.test(String(r==null?'':r))}
+  /**
+   * 统一请求出口：超时 + 取消 + 有限重试。
+   * · 没有超时的 fetch 在后端挂起时会永远 pending，按钮停在 busy 态只能刷新页面救回来；
+   * · 只有幂等的 GET 才自动重试一次（退避 400ms），POST 有副作用（发通知/写配置）绝不重发；
+   * · options.timeout 可按调用点放宽（扫描/诊断/代理测速要等外网）。
+   */
+  var API_TIMEOUT_DEFAULT = 20000
   function apiFetch(url, options){
     options=options||{}
-    options.headers=Object.assign({},options.headers||{},{Authorization:'Bearer '+API_TOKEN})
-    return fetch(url,options)
+    var timeout=(options.timeout===0)?0:(options.timeout||API_TIMEOUT_DEFAULT)
+    var method=String(options.method||'GET').toUpperCase()
+    var tries=(method==='GET')?2:1
+    var opt=Object.assign({},options)
+    delete opt.timeout
+    opt.headers=Object.assign({},opt.headers||{},{Authorization:'Bearer '+API_TOKEN})
+    function once(){
+      return new Promise(function(resolve,reject){
+        var ctl=(typeof AbortController!=='undefined')?new AbortController():null
+        if(ctl)opt.signal=ctl.signal
+        var timer=timeout?setTimeout(function(){
+          if(ctl){try{ctl.abort(new DOMException('timeout','TimeoutError'))}catch(_){ctl.abort()}}
+          else reject(new Error('请求超时'))
+        },timeout):null
+        fetch(url,opt).then(function(r){if(timer)clearTimeout(timer);resolve(r)},function(e){if(timer)clearTimeout(timer);reject(e)})
+      })
+    }
+    function attempt(n){
+      return once().catch(function(e){
+        var timed=e&&(e.name==='AbortError'||e.name==='TimeoutError')
+        if(n<tries)return new Promise(function(r){setTimeout(r,400*n)}).then(function(){return attempt(n+1)})
+        if(timed)throw new Error('服务未在 '+Math.round(timeout/1000)+' 秒内响应，请重试或检查软件是否还在运行')
+        throw new Error((e&&e.message)||'网络请求失败')
+      })
+    }
+    return attempt(1)
   }
 
   /* ===== 视图切换 ===== */
@@ -1857,7 +1888,7 @@ ${VOYRA_UI_CSS}
       msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
       saveBtn.disabled=false;saveBtn.textContent='添加账号'
       if(d.ok)setTimeout(function(){location.reload()},1500)
-    }).catch(function(){msg.textContent='❌ 保存失败，请重试';msg.style.color='var(--status-err-ink)';saveBtn.disabled=false;saveBtn.textContent='添加账号'})
+    }).catch(function(e){msg.textContent='❌ 保存失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)';saveBtn.disabled=false;saveBtn.textContent='添加账号'})
   })
 
   /* ===== 自绘标题栏窗口控制 ===== */
@@ -1915,7 +1946,7 @@ ${VOYRA_UI_CSS}
       msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
       watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存并立即生效'
       if(d.ok){watchLocal={};var st=$('listenState');if(st&&d.listeningCount!==undefined)st.textContent='正在监听 '+d.listeningCount+' 门课程';setTimeout(function(){location.reload()},1200)}
-    }).catch(function(){msg.textContent='❌ 保存失败，请重试';msg.style.color='var(--status-err-ink)';watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存并立即生效'})
+    }).catch(function(e){msg.textContent='❌ 保存失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)';watchSaveBtn.disabled=false;watchSaveBtn.textContent='保存并立即生效'})
   })
 
   /* ===== 立即扫描一次 ===== */
@@ -1926,7 +1957,7 @@ ${VOYRA_UI_CSS}
     var old=scanNowBtn.textContent
     scanNowBtn.textContent='⚡ 扫描中…'
     if(st)st.textContent='正在逐门课程查询签到活动，请稍候…'
-    apiFetch('/api/scan-now',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/scan-now',{method:'POST',timeout:60000,headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(d){
       scanNowBtn.dataset.busy='false';scanNowBtn.setAttribute('aria-busy','false');scanNowBtn.disabled=!serviceOnline;scanNowBtn.textContent=old
       if(st){st.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'扫描完成');st.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'}
       if(d.ok&&d.found>0)poll()
@@ -1961,7 +1992,7 @@ ${VOYRA_UI_CSS}
       coursesResetBtn.disabled=false
       if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'}
       if(d.ok)setTimeout(function(){location.reload()},1200)
-    }).catch(function(){coursesResetBtn.disabled=false;if(msg)msg.textContent='❌ 操作失败，请重试'})
+    }).catch(function(e){coursesResetBtn.disabled=false;if(msg)msg.textContent='❌ 操作失败：' + ((e&&e.message)||'未知错误')})
   })
 
   /* ===== 账号管理（设为主账号 / 删除） ===== */
@@ -1974,7 +2005,7 @@ ${VOYRA_UI_CSS}
       apiFetch('/api/accounts/primary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un})}).then(function(r){return r.json()}).then(function(d){
         msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
         if(d.ok)setTimeout(function(){location.reload()},1200)
-      }).catch(function(){msg.textContent='❌ 操作失败';msg.style.color='var(--status-err-ink)';pBtn.disabled=false})
+      }).catch(function(e){msg.textContent='❌ 操作失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)';pBtn.disabled=false})
       return
     }
     if(dBtn){
@@ -1985,7 +2016,7 @@ ${VOYRA_UI_CSS}
         apiFetch('/api/accounts/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un2})}).then(function(r){return r.json()}).then(function(d){
           msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
           if(d.ok)setTimeout(function(){location.reload()},1200)
-        }).catch(function(){msg.textContent='❌ 操作失败';msg.style.color='var(--status-err-ink)';dBtn.disabled=false})
+        }).catch(function(e){msg.textContent='❌ 操作失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)';dBtn.disabled=false})
       })
     }
   })
@@ -1999,7 +2030,7 @@ ${VOYRA_UI_CSS}
         if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'操作失败');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'}
         if(d.ok)setTimeout(function(){location.reload()},800)
         else if(btn)btn.disabled=false
-      }).catch(function(){if(msg){msg.textContent='❌ 清空失败';msg.style.color='var(--status-err-ink)'}if(btn)btn.disabled=false})
+      }).catch(function(e){if(msg){msg.textContent='❌ 清空失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)'}if(btn)btn.disabled=false})
     })
   }
   var clearHistoryBtn=$('clearHistoryBtn')
@@ -2015,7 +2046,7 @@ ${VOYRA_UI_CSS}
         dangerResetCoursesBtn.disabled=false
         if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'}
         if(d.ok)setTimeout(function(){location.reload()},1200)
-      }).catch(function(){dangerResetCoursesBtn.disabled=false;if(msg){msg.textContent='❌ 操作失败，请重试';msg.style.color='var(--status-err-ink)'}})
+      }).catch(function(e){dangerResetCoursesBtn.disabled=false;if(msg){msg.textContent='❌ 操作失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)'}})
     })
   })
 
@@ -2042,7 +2073,7 @@ ${VOYRA_UI_CSS}
       dingSaveBtn.disabled=false;dingSaveBtn.textContent='保存钉钉设置'
       if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'}
       if(d.ok){var sx=$('dingSecretInput');if(sx)sx.value='';dingLoad()}
-    }).catch(function(){dingSaveBtn.disabled=false;dingSaveBtn.textContent='保存钉钉设置';if(msg){msg.textContent='❌ 保存失败，请重试';msg.style.color='var(--status-err-ink)'}})
+    }).catch(function(e){dingSaveBtn.disabled=false;dingSaveBtn.textContent='保存钉钉设置';if(msg){msg.textContent='❌ 保存失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)'}})
   })
 
   /* ===== 运行设置保存 ===== */
@@ -2062,7 +2093,7 @@ ${VOYRA_UI_CSS}
       msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'保存失败');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
       settingsSaveBtn.disabled=false;settingsSaveBtn.textContent='保存设置'
       if(d.ok)setTimeout(function(){location.reload()},1200)
-    }).catch(function(){msg.textContent='❌ 保存失败';msg.style.color='var(--status-err-ink)';settingsSaveBtn.disabled=false;settingsSaveBtn.textContent='保存设置'})
+    }).catch(function(e){msg.textContent='❌ 保存失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)';settingsSaveBtn.disabled=false;settingsSaveBtn.textContent='保存设置'})
   })
   function bindSwitch(id){var el=$(id);if(el)el.addEventListener('click',function(){var on=!el.classList.contains('on');el.classList.toggle('on',on);el.setAttribute('aria-checked',String(on))})}
   ;['setDesktop','setQuiet','setReport','setVerify','setWeeklyReport','setPreCheck','setSmartPoll','setHumanDelay','setConfirmBefore'].forEach(bindSwitch)
@@ -2221,7 +2252,7 @@ ${VOYRA_UI_CSS}
   var proxyTestBtn=$('proxyTestBtn')
   if(proxyTestBtn)proxyTestBtn.addEventListener('click',function(){
     proxyTestBtn.disabled=true;proxyMsg.textContent='测试中…';proxyMsg.style.color='var(--ink-tertiary)'
-    apiFetch('/api/proxy/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy:proxyInput.value.trim()})}).then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/proxy/test',{method:'POST',timeout:30000,headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy:proxyInput.value.trim()})}).then(function(r){return r.json()}).then(function(d){
       proxyMsg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'测试失败');proxyMsg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)';proxyTestBtn.disabled=false
     }).catch(function(){proxyMsg.textContent='❌ 测试失败';proxyMsg.style.color='var(--status-err-ink)';proxyTestBtn.disabled=false})
   })
@@ -2230,7 +2261,7 @@ ${VOYRA_UI_CSS}
     diagBtn.disabled=true;diagBtn.textContent='诊断中…'
     diagResult.hidden=false
     diagResult.innerHTML='<div class="cell-empty" style="padding:20px 0">正在逐项检测，约需 5~15 秒…</div>'
-    apiFetch('/api/diag').then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/diag',{timeout:60000}).then(function(r){return r.json()}).then(function(d){
       var head=''
       if(d.cookie===false)head='<div class="diag-item"><span class="diag-name">提示</span><span class="diag-detail">未配置账号或 Cookie 为空，课程 / 签到接口检测结果仅供参考</span></div>'
       if(d.proxy)head+='<div class="diag-item"><span class="diag-name">当前代理</span><span class="diag-detail cell-mono">'+esc(d.proxy)+'</span></div>'
@@ -2245,10 +2276,14 @@ ${VOYRA_UI_CSS}
   /* ===== 测试通知 / 开机自启 ===== */
   var notifyTestBtn=$('notifyTestBtn')
   if(notifyTestBtn)notifyTestBtn.addEventListener('click',function(){
+    // 不禁用就会连点重复发信（实测连点 3 次发出 3 次 POST，钉钉/PushPlus/邮件都会收到多条）
+    if(notifyTestBtn.disabled)return
     var msg=$('settingsMsg');msg.textContent='正在发送…';msg.style.color='var(--ink-tertiary)'
-    apiFetch('/api/notify/test',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    notifyTestBtn.disabled=true;notifyTestBtn.setAttribute('aria-busy','true')
+    apiFetch('/api/notify/test',{method:'POST',timeout:60000}).then(function(r){return r.json()}).then(function(d){
       msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'发送失败');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
-    }).catch(function(){msg.textContent='❌ 发送失败';msg.style.color='var(--status-err-ink)'})
+    }).catch(function(e){msg.textContent='❌ 发送失败：'+((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)'})
+    .finally(function(){notifyTestBtn.disabled=false;notifyTestBtn.removeAttribute('aria-busy')})
   })
   var alBtn=$('setAutoLaunch')
   if(alBtn&&!window.appCtl){
@@ -2276,7 +2311,7 @@ ${VOYRA_UI_CSS}
     refreshCoursesBtn.disabled=true
     var lbl=refreshCoursesBtn.innerHTML
     refreshCoursesBtn.textContent='正在拉取…'
-    apiFetch('/api/courses/refresh',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/courses/refresh',{method:'POST',timeout:60000}).then(function(r){return r.json()}).then(function(d){
       msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'刷新失败');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'
       refreshCoursesBtn.disabled=false;refreshCoursesBtn.innerHTML=lbl
       if(d.ok)setTimeout(function(){location.reload()},1500)
@@ -2394,7 +2429,7 @@ ${VOYRA_UI_CSS}
         ttSaveBtn.disabled=false;ttSaveBtn.textContent='保存课表'
         if(msg){msg.textContent=(d.ok?'✅ ':'❌ ')+(d.message||'');msg.style.color=d.ok?'var(--status-ok-ink)':'var(--status-err-ink)'}
         if(d.ok){ttState.table=table;ttState.suggested={};ttLoad()}
-      }).catch(function(){ttSaveBtn.disabled=false;ttSaveBtn.textContent='保存课表';if(msg){msg.textContent='❌ 保存失败，请重试';msg.style.color='var(--status-err-ink)'}})
+      }).catch(function(e){ttSaveBtn.disabled=false;ttSaveBtn.textContent='保存课表';if(msg){msg.textContent='❌ 保存失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)'}})
     }
     if(filled<all){
       askConfirm({title:'课表尚未填满',text:'当前仍有 '+(all-filled)+' 个时段未选择课程。保存未填满的课表将导致轮询无法按节次精确锁定，只能走全天兜底轮询。是否仍要提交？',okText:'仍要保存',danger:true}).then(function(yes){if(yes)doSave()})
