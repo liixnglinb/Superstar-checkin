@@ -8,6 +8,7 @@ import { getProxyConfig, getProxy, setProxy } from '../providers/runtime-config'
 import { encryptPassword } from '../utils/crypto'
 import { getConsolePage, ConsoleStatus } from './console-ui'
 import { writeFileAtomic } from '../utils/fs'
+import { BadRequestError, boolFlag, intInRange, proxyUrl, requiredText, textField, timeOfDay } from '../utils/validate'
 
 export interface DingTalkMessage {
   msgtype: string
@@ -52,7 +53,7 @@ export interface DingTalkServerOptions {
   /** 全量签到历史（导出 CSV 用） */
   historyProvider?: () => any[]
   /** 清空签到历史 */
-  clearHistory?: () => void
+  clearHistory?: () => string
   /** 发送测试通知 */
   sendTestNotify?: () => Promise<void>
   /** 重新拉取课程列表并重建轮询监听 */
@@ -122,7 +123,7 @@ export class DingTalkServer {
   private allowedOrigin?: string
   private statusProvider?: StatusProvider
   private historyProvider?: () => any[]
-  private clearHistory?: () => void
+  private clearHistory?: () => string
   private sendTestNotify?: () => Promise<void>
   private refreshCourses?: () => Promise<{ ok: boolean; count: number; message: string }>
   private setListening?: (on: boolean) => { ok: boolean; listening: boolean; listeningCount: number }
@@ -358,14 +359,12 @@ export class DingTalkServer {
       // 账号保存/添加（首次运行引导；已存在同账号则更新密码，否则追加 → 支持多账号）
       if (req.method === 'POST' && routePath === '/api/config') {
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const username = String(body.username || '').trim()
-          const password = String(body.password || '')
-          if (!username || !password) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, message: '账号和密码不能为空' }))
-            return
-          }
+          const body = await this.parseJsonBody(req)
+          // 长度上限：超长的「账号/密码」会原样写进 config.yaml（实测 5000 字符可写入，
+          // 配置文件膨胀到 8KB 且后续每次读写都带着它），控制字符/换行会破坏 YAML 结构。
+          const username = requiredText(body.username, '账号', 64)
+          // 密码不 trim 首尾空格（可能是真实密码的一部分），只去控制字符并限长
+          const password = requiredText(body.password, '密码', 128, { trim: false })
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
@@ -387,9 +386,7 @@ export class DingTalkServer {
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: `账号已${action}（当前 ${accounts.length} 个），${RESTART_HINT}` }))
         } catch (e: any) {
-          logger.error(`保存账号失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `保存失败: ${e.message}` }))
+          this.fail(res, e, '保存账号失败: ')
         }
         return
       }
@@ -397,13 +394,8 @@ export class DingTalkServer {
       // 删除账号
       if (req.method === 'POST' && routePath === '/api/accounts/remove') {
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const username = String(body.username || '').trim()
-          if (!username) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, message: '缺少账号' }))
-            return
-          }
+          const body = await this.parseJsonBody(req)
+          const username = requiredText(body.username, '账号', 64)
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
@@ -421,9 +413,7 @@ export class DingTalkServer {
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '账号已删除，' + RESTART_HINT }))
         } catch (e: any) {
-          logger.error(`删除账号失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `删除失败: ${e.message}` }))
+          this.fail(res, e, '删除账号失败: ')
         }
         return
       }
@@ -431,8 +421,8 @@ export class DingTalkServer {
       // 设为主账号（移到数组首位 = 课程轮询监听使用该账号）
       if (req.method === 'POST' && routePath === '/api/accounts/primary') {
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const username = String(body.username || '').trim()
+          const body = await this.parseJsonBody(req)
+          const username = requiredText(body.username, '账号', 64)
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
@@ -452,9 +442,7 @@ export class DingTalkServer {
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: `已将 ${username} 设为主账号，${RESTART_HINT}` }))
         } catch (e: any) {
-          logger.error(`切换主账号失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `切换失败: ${e.message}` }))
+          this.fail(res, e, '切换主账号失败: ')
         }
         return
       }
@@ -462,108 +450,104 @@ export class DingTalkServer {
       // 运行设置（轮询间隔 / 桌面通知 / 免打扰时段 → 写 config.yaml → 重启生效）
       if (req.method === 'POST' && routePath === '/api/settings') {
         try {
-          const body = JSON.parse(await this.readBody(req))
+          const body = await this.parseJsonBody(req)
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
             : {}
-          if (body.pollInterval !== undefined && body.pollInterval !== null && body.pollInterval !== '') {
-            const sec = Number(body.pollInterval)
-            if (sec >= 10 && sec <= 600) {
-              existing.listener = { ...(existing.listener || {}), pollInterval: Math.round(sec * 1000) }
-            }
+          // 界面上每个字段都填了值就必须被采纳或明确报错；旧写法是「越界静默丢弃 + 回 ok:true」，
+          // 实测 pollInterval 填 0/-1/abc 都提示保存成功，实际存的还是旧值。
+          const pollSec = intInRange(body.pollInterval, '轮询间隔（秒）', 10, 600)
+          if (pollSec !== null) {
+            existing.listener = { ...(existing.listener || {}), pollInterval: pollSec * 1000 }
           }
           if (body.desktop !== undefined) {
-            existing.notify = { ...(existing.notify || {}), desktop: !!body.desktop }
+            existing.notify = { ...(existing.notify || {}), desktop: boolFlag(body.desktop, "桌面通知") }
           }
           if (body.quietEnabled !== undefined || body.quietStart !== undefined || body.quietEnd !== undefined) {
             existing.notify = {
               ...(existing.notify || {}),
               quiet: {
-                enabled: !!body.quietEnabled,
-                start: String(body.quietStart || '23:00'),
-                end: String(body.quietEnd || '07:00'),
+                enabled: boolFlag(body.quietEnabled, "免打扰开关"),
+                start: timeOfDay(body.quietStart, '免打扰开始时间') || '23:00',
+                end: timeOfDay(body.quietEnd, '免打扰结束时间') || '07:00',
               },
             }
           }
           // 轮询随机抖动（秒，0=关闭）
-          if (body.pollJitter !== undefined && body.pollJitter !== null && body.pollJitter !== '') {
-            const j = Number(body.pollJitter)
-            if (j >= 0 && j <= 120) {
-              existing.listener = { ...(existing.listener || {}), pollJitter: Math.round(j) }
-            }
+          const jitter = intInRange(body.pollJitter, '轮询随机抖动（秒）', 0, 120)
+          if (jitter !== null) {
+            existing.listener = { ...(existing.listener || {}), pollJitter: jitter }
           }
           // 签到重试（同一次签到内的请求重试次数与间隔）
-          if (body.retryMaxAttempts !== undefined && body.retryMaxAttempts !== null && body.retryMaxAttempts !== '') {
-            const n = Number(body.retryMaxAttempts)
-            if (n >= 1 && n <= 10) {
-              existing.checkin = { ...(existing.checkin || {}), retry: { ...((existing.checkin || {}).retry || {}), maxAttempts: Math.round(n) } }
-            }
+          const retryAttempts = intInRange(body.retryMaxAttempts, '签到重试次数', 1, 10)
+          if (retryAttempts !== null) {
+            existing.checkin = { ...(existing.checkin || {}), retry: { ...((existing.checkin || {}).retry || {}), maxAttempts: retryAttempts } }
           }
-          if (body.retryDelayMs !== undefined && body.retryDelayMs !== null && body.retryDelayMs !== '') {
-            const d = Number(body.retryDelayMs)
-            if (d >= 1000 && d <= 120000) {
-              existing.checkin = { ...(existing.checkin || {}), retry: { ...((existing.checkin || {}).retry || {}), delayMs: Math.round(d) } }
-            }
+          const retryDelay = intInRange(body.retryDelayMs, '签到重试间隔（毫秒）', 1000, 120000)
+          if (retryDelay !== null) {
+            existing.checkin = { ...(existing.checkin || {}), retry: { ...((existing.checkin || {}).retry || {}), delayMs: retryDelay } }
           }
           // 位置签到半径（米）
-          if (body.locationRadius !== undefined && body.locationRadius !== null && body.locationRadius !== '') {
-            const r = Number(body.locationRadius)
-            if (r >= 1 && r <= 500) {
-              existing.geo = { ...(existing.geo || {}), locationRadius: Math.round(r) }
-            }
+          const radius = intInRange(body.locationRadius, '位置签到半径（米）', 1, 500)
+          if (radius !== null) {
+            existing.geo = { ...(existing.geo || {}), locationRadius: radius }
           }
           // 签到后二次核对（提交成功后查询平台确认已签到）
           if (body.verifyEnabled !== undefined) {
-            existing.checkin = { ...(existing.checkin || {}), verify: { enabled: !!body.verifyEnabled } }
+            existing.checkin = { ...(existing.checkin || {}), verify: { enabled: boolFlag(body.verifyEnabled, "签到后二次核对") } }
           }
-          // 每日签到日报
+          // 每日签到日报（注意 hour 允许 0 = 零点，旧写法 `Number(x) || 22` 会把 0 变成 22）
           if (body.reportEnabled !== undefined || body.reportHour !== undefined) {
+            const reportHour = intInRange(body.reportHour, '日报推送小时', 0, 23)
             existing.report = {
-              enabled: body.reportEnabled !== undefined ? !!body.reportEnabled : !!((existing.report || {}).enabled),
-              hour: body.reportHour !== undefined && body.reportHour !== null && body.reportHour !== ''
-                ? Math.max(0, Math.min(23, Number(body.reportHour) || 22))
-                : ((existing.report || {}).hour || 22),
+              enabled: body.reportEnabled !== undefined ? boolFlag(body.reportEnabled, "每日日报开关") : !!((existing.report || {}).enabled),
+              hour: reportHour !== null ? reportHour : (((existing.report || {}).hour ?? 22)),
             }
           }
           // 每周签到周报（每周日推送本周统计）
           if (body.weeklyReport !== undefined) {
             existing.report = {
               ...(existing.report || {}),
-              weekly: !!body.weeklyReport,
+              weekly: boolFlag(body.weeklyReport, "每周周报开关"),
             }
           }
           // 每日课前预检查
           if (body.preCheckEnabled !== undefined || body.preCheckHour !== undefined) {
+            const preCheckHour = intInRange(body.preCheckHour, '课前预检查小时', 0, 23)
             existing.preCheck = {
-              enabled: body.preCheckEnabled !== undefined ? !!body.preCheckEnabled : !!((existing.preCheck || {}).enabled),
-              hour: body.preCheckHour !== undefined && body.preCheckHour !== null && body.preCheckHour !== ''
-                ? Math.max(0, Math.min(23, Number(body.preCheckHour) || 7))
-                : ((existing.preCheck || {}).hour || 7),
+              enabled: body.preCheckEnabled !== undefined ? boolFlag(body.preCheckEnabled, "课前预检查开关") : !!((existing.preCheck || {}).enabled),
+              hour: preCheckHour !== null ? preCheckHour : (((existing.preCheck || {}).hour ?? 7)),
             }
           }
           // 智能轮询
           if (body.smartPollEnabled !== undefined) {
             existing.smartPoll = {
               ...(existing.smartPoll || { dayStart: 8, dayEnd: 22, nightMultiplier: 3 }),
-              enabled: !!body.smartPollEnabled,
+              enabled: boolFlag(body.smartPollEnabled, "智能轮询开关"),
             }
           }
           // 模拟人类延迟
           if (body.humanDelayEnabled !== undefined || body.humanDelayMin !== undefined || body.humanDelayMax !== undefined) {
             existing.checkin = existing.checkin || {}
+            const hdMin = intInRange(body.humanDelayMin, '人类模拟延迟下限（秒）', 5, 600)
+            const hdMax = intInRange(body.humanDelayMax, '人类模拟延迟上限（秒）', 10, 900)
+            const minSeconds = hdMin !== null ? hdMin : ((existing.checkin.humanDelay || {}).minSeconds ?? 30)
+            const maxSeconds = hdMax !== null ? hdMax : ((existing.checkin.humanDelay || {}).maxSeconds ?? 300)
+            if (minSeconds > maxSeconds) throw new BadRequestError('人类模拟延迟的下限不能大于上限')
             existing.checkin.humanDelay = {
-              enabled: body.humanDelayEnabled !== undefined ? !!body.humanDelayEnabled : !!((existing.checkin.humanDelay || {}).enabled),
-              minSeconds: body.humanDelayMin !== undefined && body.humanDelayMin !== null && body.humanDelayMin !== '' ? Math.max(5, Number(body.humanDelayMin) || 30) : ((existing.checkin.humanDelay || {}).minSeconds || 30),
-              maxSeconds: body.humanDelayMax !== undefined && body.humanDelayMax !== null && body.humanDelayMax !== '' ? Math.max(10, Number(body.humanDelayMax) || 300) : ((existing.checkin.humanDelay || {}).maxSeconds || 300),
+              enabled: body.humanDelayEnabled !== undefined ? boolFlag(body.humanDelayEnabled, "人类模拟延迟开关") : !!((existing.checkin.humanDelay || {}).enabled),
+              minSeconds,
+              maxSeconds,
             }
           }
           // 签到前确认
           if (body.confirmBeforeEnabled !== undefined || body.confirmBeforeWait !== undefined) {
             existing.checkin = existing.checkin || {}
+            const wait = intInRange(body.confirmBeforeWait, '签到前确认等待（秒）', 3, 120)
             existing.checkin.confirmBefore = {
-              enabled: body.confirmBeforeEnabled !== undefined ? !!body.confirmBeforeEnabled : !!((existing.checkin.confirmBefore || {}).enabled),
-              waitSeconds: body.confirmBeforeWait !== undefined && body.confirmBeforeWait !== null && body.confirmBeforeWait !== '' ? Math.max(3, Number(body.confirmBeforeWait) || 10) : ((existing.checkin.confirmBefore || {}).waitSeconds || 10),
+              enabled: body.confirmBeforeEnabled !== undefined ? boolFlag(body.confirmBeforeEnabled, "签到前确认开关") : !!((existing.checkin.confirmBefore || {}).enabled),
+              waitSeconds: wait !== null ? wait : ((existing.checkin.confirmBefore || {}).waitSeconds ?? 10),
             }
           }
           writeFileAtomic(cfgFile, YAML.stringify(existing))
@@ -571,9 +555,7 @@ export class DingTalkServer {
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: '设置已保存，' + RESTART_HINT }))
         } catch (e: any) {
-          logger.error(`保存设置失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `保存失败: ${e.message}` }))
+          this.fail(res, e, '保存设置失败: ')
         }
         return
       }
@@ -594,17 +576,20 @@ export class DingTalkServer {
         return
       }
 
-      // 历史记录：清空
+      // 历史记录：清空（清空前自动备份到 data/history-backups，保留最近 5 份）
       if (req.method === 'POST' && routePath === '/api/history/clear') {
         try {
-          if (this.clearHistory) this.clearHistory()
-          logger.info('签到历史已清空')
+          const backup = this.clearHistory ? this.clearHistory() : ''
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: '签到历史已清空' }))
+          res.end(JSON.stringify({
+            ok: true,
+            backup,
+            message: backup
+              ? `签到历史已清空，原记录备份为 ${backup.split(/[\\/]/).pop()}`
+              : '签到历史已清空',
+          }))
         } catch (e: any) {
-          logger.error(`清空历史失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `清空失败: ${e.message}` }))
+          this.fail(res, e, '清空历史失败: ')
         }
         return
       }
@@ -666,8 +651,8 @@ export class DingTalkServer {
       if (req.method === 'POST' && routePath === '/api/config/import') {
         const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
         try {
-          const imported = JSON.parse(await this.readBody(req))
-          const existing = YAML.parse(fs.readFileSync(cfgFile, 'utf-8'))
+          const imported = await this.parseJsonBody(req)
+          const existing = YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
           // 只接受已知的顶层配置键：导入文件可能来自别人，盲合并等于把任意内容写进 config.yaml
           const ALLOWED = new Set([
             'proxy', 'accounts', 'listener', 'checkin', 'geo', 'notify', 'ocr', 'dingtalk',
@@ -676,10 +661,12 @@ export class DingTalkServer {
           ])
           const picked: any = {}
           const skipped: string[] = []
-          for (const k of Object.keys(imported || {})) {
+          for (const k of Object.keys(imported)) {
             if (ALLOWED.has(k)) picked[k] = imported[k]
             else skipped.push(k)
           }
+          // 导入的代理地址同样要过校验，否则 file:// 之类的值会绕过设置页的白名单直接进入网络层
+          if (typeof picked.proxy === 'string' && picked.proxy) picked.proxy = proxyUrl(picked.proxy, '导入配置里的代理地址')
           const merged = { ...existing, ...picked }
           if (existing.accounts) merged.accounts = existing.accounts
           if (existing.dingtalk?.appSecret) merged.dingtalk = { ...merged.dingtalk, appSecret: existing.dingtalk.appSecret }
@@ -760,25 +747,33 @@ export class DingTalkServer {
 
       // 课程备注：保存
       if (req.method === 'POST' && routePath === '/api/course-notes') {
-        let bodyStr = ''
-        req.on('data', (c) => { bodyStr += c })
-        req.on('end', () => {
-          try {
-            const body = JSON.parse(bodyStr)
-            const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
-            const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
-            existing.courseNotes = { ...(existing.courseNotes || {}), ...body }
-            for (const k of Object.keys(existing.courseNotes)) {
-              if (!existing.courseNotes[k] || String(existing.courseNotes[k]).trim() === '') delete existing.courseNotes[k]
+        try {
+          const body = await this.parseJsonBody(req)
+          const entries = Object.entries(body)
+          if (entries.length > 100) throw new BadRequestError(`一次最多保存 100 条课程备注（当前 ${entries.length} 条）`)
+          const cleaned: Record<string, string> = {}
+          for (const [courseId, value] of entries) {
+            if (typeof value !== 'string' && typeof value !== 'number') {
+              throw new BadRequestError('课程备注内容格式不正确（应为文本）')
             }
-            writeFileAtomic(cfgFile, YAML.stringify(existing))
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: true, message: '备注已保存' }))
-          } catch (e: any) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, message: e.message }))
+            const cid = textField(courseId, '课程标识', 64)
+            if (!cid) throw new BadRequestError('课程标识不能为空')
+            const note = textField(value, '课程备注', 200, { multiline: true })
+            // 键与值都取清理后的结果：旧写法把外部传入的任意键名直接写进 config.yaml
+            if (note) cleaned[cid] = note
           }
-        })
+          const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
+          const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
+          existing.courseNotes = { ...(existing.courseNotes || {}), ...cleaned }
+          for (const k of Object.keys(existing.courseNotes)) {
+            if (!existing.courseNotes[k] || String(existing.courseNotes[k]).trim() === '') delete existing.courseNotes[k]
+          }
+          writeFileAtomic(cfgFile, YAML.stringify(existing))
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ ok: true, message: '备注已保存' }))
+        } catch (e: any) {
+          this.fail(res, e, '保存备注失败: ')
+        }
         return
       }
 
@@ -879,32 +874,38 @@ export class DingTalkServer {
       // 代理配置：保存（写 config.yaml + 运行时立即生效，无需重启）
       if (req.method === 'POST' && routePath === '/api/proxy') {
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const pv = String(body.proxy || '').trim()
+          const body = await this.parseJsonBody(req)
+          // 旧写法接受任意字符串，实测 `file:///etc/passwd` 会被写进配置并交给网络层
+          const pv = proxyUrl(body.proxy)
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile) ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {} : {}
           existing.proxy = pv
           writeFileAtomic(cfgFile, YAML.stringify(existing))
           setProxy(pv)
-          logger.info('代理配置已保存并立即生效: ' + (pv || '(直连)'))
+          logger.info('代理配置已保存并立即生效: ' + (pv ? maskProxyUrl(pv) : '(直连)'))
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, message: pv ? '代理已保存并立即生效' : '已切换为直连（不使用代理）' }))
         } catch (e: any) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: '保存失败: ' + e.message }))
+          this.fail(res, e, '保存代理配置失败: ')
         }
         return
       }
 
       // 代理配置：测试连通性（不改变当前代理设置）
       if (req.method === 'POST' && routePath === '/api/proxy/test') {
+        let pv = ''
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const raw = String(body.proxy || '').trim()
+          pv = proxyUrl((await this.parseJsonBody(req)).proxy)
+        } catch (e: any) {
+          this.fail(res, e)
+          return
+        }
+        try {
           let proxyCfg: any = false
-          if (raw) {
-            const u = new URL(raw.includes('://') ? raw : 'http://' + raw)
-            proxyCfg = { protocol: u.protocol.replace(':', ''), host: u.hostname, port: u.port ? Number(u.port) : 80 }
+          if (pv) {
+            const u = new URL(pv.includes('://') ? pv : 'http://' + pv)
+            // https 代理省略端口时按 443，旧写法一律当 80 会把正常代理误判为连不上
+            proxyCfg = { protocol: u.protocol.replace(':', ''), host: u.hostname, port: u.port ? Number(u.port) : (u.protocol === 'https:' ? 443 : 80) }
           }
           const start = Date.now()
           const r = await axios.get('https://passport2-api.chaoxing.com/v11/loginregister', {
@@ -994,14 +995,14 @@ export class DingTalkServer {
       // 钉钉图片通道设置（写 config.yaml；Stream 长连接需重启后建立）
       if (req.method === 'POST' && routePath === '/api/dingtalk/stream') {
         try {
-          const body = JSON.parse(await this.readBody(req))
+          const body = await this.parseJsonBody(req)
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
             ? YAML.parse(fs.readFileSync(cfgFile, 'utf-8')) || {}
             : {}
-          const appKey = String(body.appKey ?? existing.dingtalk?.appKey ?? '').trim()
-          const appSecret = String(body.appSecret ?? existing.dingtalk?.appSecret ?? '').trim()
-          const enabled = body.enabled !== undefined ? !!body.enabled : !!existing.dingtalk?.stream?.enabled
+          const appKey = textField(body.appKey ?? existing.dingtalk?.appKey, '钉钉 AppKey', 64).trim()
+          const appSecret = textField(body.appSecret ?? existing.dingtalk?.appSecret, '钉钉 AppSecret', 128).trim()
+          const enabled = body.enabled !== undefined ? boolFlag(body.enabled, '钉钉图片通道开关') : !!existing.dingtalk?.stream?.enabled
 
           existing.dingtalk = {
             ...(existing.dingtalk || {}),
@@ -1030,9 +1031,7 @@ export class DingTalkServer {
             hasSecret: !!appSecret,
           }))
         } catch (e: any) {
-          logger.error(`保存钉钉设置失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `保存失败: ${e.message}` }))
+          this.fail(res, e, '保存钉钉设置失败: ')
         }
         return
       }
@@ -1059,10 +1058,15 @@ export class DingTalkServer {
       // 监听课程设置（保存 → 立即生效；此前是「写配置 + 提示重启」，实际点了没反应）
       if (req.method === 'POST' && routePath === '/api/watch') {
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const watchCourses: string[] = Array.isArray(body.watchCourses)
-            ? body.watchCourses.map((c: any) => String(c)).filter(Boolean)
-            : []
+          const body = await this.parseJsonBody(req)
+          if (body.watchCourses !== undefined && body.watchCourses !== null && !Array.isArray(body.watchCourses)) {
+            throw new BadRequestError('监听课程应为列表')
+          }
+          const rawWatch = Array.isArray(body.watchCourses) ? body.watchCourses : []
+          if (rawWatch.length > 200) throw new BadRequestError(`一次最多监听 200 门课程（当前 ${rawWatch.length} 门）`)
+          const watchCourses: string[] = rawWatch
+            .map((c: any) => textField(c, '课程名称', 200))
+            .filter(Boolean)
           // 仍写回配置，保证重启后保持同样的监听范围
           const cfgFile = process.env.CONFIG_FILE || 'config.yaml'
           const existing = fs.existsSync(cfgFile)
@@ -1088,9 +1092,7 @@ export class DingTalkServer {
               : `已生效：监听全部课程${listeningCount !== undefined ? `（${listeningCount} 门）` : ''}（无需重启）`,
           }))
         } catch (e: any) {
-          logger.error(`保存监听课程失败: ${e.message}`)
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `保存失败: ${e.message}` }))
+          this.fail(res, e, '保存监听课程失败: ')
         }
         return
       }
@@ -1098,15 +1100,15 @@ export class DingTalkServer {
       // 监听总开关：开启/停止轮询监听（运行时立即生效，无需重启）
       if (req.method === 'POST' && routePath === '/api/listen') {
         try {
-          const body = JSON.parse(await this.readBody(req))
+          const body = await this.parseJsonBody(req)
           if (!this.setListening) throw new Error('监听开关未接入')
-          const r = this.setListening(!!body.on)
-          logger.info(`监听已${body.on ? '开启' : '停止'}（在监听 ${r.listeningCount} 门课程）`)
+          const on = boolFlag(body.on, '监听开关')
+          const r = this.setListening(on)
+          logger.info(`监听已${on ? '开启' : '停止'}（在监听 ${r.listeningCount} 门课程）`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ...r, message: body.on ? `已开启监听（${r.listeningCount} 门课程）` : '已停止监听（不再轮询，二维码上传仍可用）' }))
+          res.end(JSON.stringify({ ...r, message: on ? `已开启监听（${r.listeningCount} 门课程）` : '已停止监听（不再轮询，二维码上传仍可用）' }))
         } catch (e: any) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
+          this.fail(res, e, '监听开关操作失败: ')
         }
         return
       }
@@ -1114,25 +1116,20 @@ export class DingTalkServer {
       // 单门课程监听开关（运行时立即生效）
       if (req.method === 'POST' && routePath === '/api/courses/toggle') {
         try {
-          const body = JSON.parse(await this.readBody(req))
-          const courseId = String(body.courseId || '').trim()
-          // 参数缺失属客户端错误：返回 400，不要混进 500（500 应只表示服务端自身失败）
-          if (!courseId) {
-            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, message: '缺少 courseId' }))
-            return
-          }
+          const body = await this.parseJsonBody(req)
+          // 参数缺失属客户端错误：BadRequestError → 400（500 应只表示服务端自身失败）
+          const courseId = requiredText(body.courseId, '课程标识', 64)
           if (!this.toggleCourse) throw new Error('课程开关未接入')
-          const r = this.toggleCourse(courseId, !!body.on)
+          const on = boolFlag(body.on, '课程监听开关')
+          const r = this.toggleCourse(courseId, on)
           // 失败时保留 toggleCourse 给出的原因，不要用成功文案覆盖掉
-          const message = r.ok ? (body.on ? '已开启该课程监听' : '已关闭该课程监听') : (r.message || '操作失败')
-          if (r.ok) logger.info(`课程 ${courseId} 监听已${body.on ? '开启' : '关闭'}`)
+          const message = r.ok ? (on ? '已开启该课程监听' : '已关闭该课程监听') : (r.message || '操作失败')
+          if (r.ok) logger.info(`课程 ${courseId} 监听已${on ? '开启' : '关闭'}`)
           else logger.warn(`课程开关被拒绝（courseId=${courseId}）：${message}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ...r, message }))
         } catch (e: any) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `操作失败: ${e.message}` }))
+          this.fail(res, e, '课程开关操作失败: ')
         }
         return
       }
@@ -1183,15 +1180,14 @@ export class DingTalkServer {
       // 课表：保存（必须填满，否则拒绝并提示）
       if (req.method === 'POST' && routePath === '/api/timetable/save') {
         try {
-          const body = JSON.parse(await this.readBody(req) || '{}')
+          const body = await this.parseJsonBody(req, { allowEmpty: true })
           if (!this.saveTimetable) throw new Error('课表未接入')
           const r = this.saveTimetable(body.table || body)
           if (!r.ok) logger.warn(`课表未保存：${r.message}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify(r))
         } catch (e: any) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `保存课表失败: ${e.message}` }))
+          this.fail(res, e, '保存课表失败: ')
         }
         return
       }
@@ -1452,7 +1448,7 @@ export class DingTalkServer {
         size += Buffer.byteLength(chunk)
         if (size > 1024 * 1024) {
           req.destroy()
-          reject(new Error('请求体超过 1MB 限制'))
+          reject(new BadRequestError('请求体超过 1MB 限制'))
           return
         }
         chunks.push(chunk)
@@ -1460,6 +1456,43 @@ export class DingTalkServer {
       req.on('end', () => resolve(chunks.join('')))
       req.on('error', reject)
     })
+  }
+
+  /**
+   * 解析 JSON 请求体。
+   * 旧写法在每个路由里裸调 `JSON.parse(await this.readBody(req))`，客户端送来坏 JSON 时
+   * 被外层 catch 当成服务端故障回了 500（实测 `/api/settings` 空 body/坏 JSON → HTTP 500）。
+   * 这里统一成 400 + 可读原因；同时要求顶层是对象，避免 `[1,2]` 之类让 `body.xxx` 全 undefined
+   * 却仍报「保存成功」。
+   */
+  private async parseJsonBody(req: http.IncomingMessage, opts: { allowEmpty?: boolean } = {}): Promise<Record<string, any>> {
+    const raw = await this.readBody(req)
+    if (!raw.trim()) {
+      if (opts.allowEmpty) return {}
+      throw new BadRequestError('请求体为空，未提交任何内容')
+    }
+    let parsed: any
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new BadRequestError('请求体不是合法的 JSON')
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new BadRequestError('请求体应为 JSON 对象')
+    }
+    return parsed
+  }
+
+  /** 统一的失败响应：入参问题 400 且不写错误日志，服务端故障 500 并记日志 */
+  private fail(res: http.ServerResponse, e: any, prefix = ''): void {
+    if (e instanceof BadRequestError) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: false, message: e.message }))
+      return
+    }
+    logger.error(`${prefix}${e && e.message ? e.message : e}`)
+    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ ok: false, message: `${prefix}${(e && e.message) || '未知错误'}` }))
   }
 
   private isSupportedImage(buffer: Buffer): boolean {

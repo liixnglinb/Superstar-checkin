@@ -1,4 +1,6 @@
 import { CheckinEngine } from '../core/checkin-engine'
+import * as fs from 'fs'
+import * as path from 'path'
 import { logger } from '../utils/logger'
 import { randomDelay } from '../utils/anti-detect'
 import { retry } from '../utils/retry'
@@ -25,7 +27,28 @@ export class CheckinHandler {
   constructor(config: AppConfig, accountManager: AccountManager) {
     this.config = config
     this.accountManager = accountManager
-    this.history = storage.get<CheckinResult[]>('checkinHistory') || []
+    const raw: any = storage.get('checkinHistory')
+    // 实测：superstar-data.json 里 checkinHistory 被改成字符串后，
+    // `this.history.push(...)` 会抛 TypeError（字符串没有 push），签到流程中途炸。
+    // 修复前先把原件另存一份，再把修复结果排队落盘，避免每次启动重复告警。
+    if (Array.isArray(raw)) {
+      const valid = raw.filter((r: any) => !!r && typeof r === 'object' && !Array.isArray(r))
+      if (valid.length !== raw.length) {
+        logger.warn(`签到历史里有 ${raw.length - valid.length} 条记录格式异常，已忽略（原件已备份）`)
+        storage.preserveCorruptFile('checkinHistory 内含格式异常记录')
+        this.history = valid as CheckinResult[]
+        storage.set('checkinHistory', this.history)
+      } else {
+        this.history = raw as CheckinResult[]
+      }
+    } else if (raw !== null && raw !== undefined) {
+      logger.warn('签到历史数据格式异常（不是列表），已从空记录开始（原件已备份）')
+      storage.preserveCorruptFile('checkinHistory 不是列表')
+      this.history = []
+      storage.set('checkinHistory', this.history)
+    } else {
+      this.history = []
+    }
     this.verifyEnabled = config.checkin.verify?.enabled !== false
     // 根据配置启用 UA 轮换（防检测增强）
     CheckinEngine.useragentRotation = config.checkin.antiDetect.enabled && config.checkin.antiDetect.useragentRotation
@@ -215,10 +238,32 @@ export class CheckinHandler {
     return [...this.history].reverse()
   }
 
-  /** 清空签到历史（软件内「清空记录」用） */
-  clearHistory(): void {
+  /** 清空签到历史（软件内「清空记录」用）；清空前先备份，误点不至于把记录永久丢掉 */
+  clearHistory(): string {
+    const backup = this.backupHistory()
     this.history = []
     storage.set('checkinHistory', this.history)
-    logger.info('签到历史已清空')
+    logger.info(backup ? `签到历史已清空，备份在 ${backup}` : '签到历史已清空（原本没有记录）')
+    return backup
+  }
+
+  /**
+   * 备份当前历史到 dataDir/history-backups/，只保留最近 5 份。
+   * 备份写不下去就直接失败：清空是不可逆操作，不能「备份没成功但记录没了」。
+   */
+  private backupHistory(): string {
+    if (!this.history.length) return ''
+    const dir = path.join(this.config.storage.dataDir, 'history-backups')
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const file = path.join(dir, `checkin-history-${stamp}.json`)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(this.history, null, 2), 'utf-8')
+    try {
+      const all = fs.readdirSync(dir).filter((f) => f.startsWith('checkin-history-') && f.endsWith('.json')).sort()
+      for (const f of all.slice(0, Math.max(0, all.length - 5))) fs.rmSync(path.join(dir, f), { force: true })
+    } catch (e: any) {
+      logger.warn(`清理旧的历史备份失败: ${e.message}`)
+    }
+    return file
   }
 }

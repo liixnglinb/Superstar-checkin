@@ -378,8 +378,8 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
       <div id="accountList">${accountManageRows}</div>
       <div class="card-body" style="border-top:1px solid var(--line-dim)">
         <div class="form-grid">
-          <div class="form-item"><label class="form-label" for="cfgUsername">学习通账号（手机号）</label><input class="field-input" id="cfgUsername" type="text" placeholder="学习通账号（手机号）" autocomplete="off"></div>
-          <div class="form-item"><label class="form-label" for="cfgPassword">密码</label><input class="field-input" id="cfgPassword" type="password" placeholder="密码"></div>
+          <div class="form-item"><label class="form-label" for="cfgUsername">学习通账号（手机号）</label><input class="field-input" id="cfgUsername" type="text" maxlength="64" placeholder="学习通账号（手机号）" autocomplete="off"></div>
+          <div class="form-item"><label class="form-label" for="cfgPassword">密码</label><input class="field-input" id="cfgPassword" type="password" maxlength="128" placeholder="密码"></div>
         </div>
         <div class="input-range-group" style="margin-top:var(--sp-3)">
           <button class="btn btn-primary" id="cfgSaveBtn">添加账号</button>
@@ -2083,7 +2083,8 @@ ${VOYRA_UI_CSS}
     var msg=$('settingsMsg')
     settingsSaveBtn.disabled=true;settingsSaveBtn.textContent='保存中…'
     apiFetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      pollInterval:$('setPoll').value,pollJitter:$('setJitter').value,retryMaxAttempts:$('setRetry').value,retryDelayMs:$('setRetryDelay').value*1000,
+      pollInterval:$('setPoll').value,pollJitter:$('setJitter').value,retryMaxAttempts:$('setRetry').value,
+      retryDelayMs:$('setRetryDelay').value===''?'':Math.round(Number($('setRetryDelay').value)*1000),
       locationRadius:$('setRadius').value,desktop:swOn('setDesktop'),quietEnabled:swOn('setQuiet'),quietStart:$('setQuietStart').value,quietEnd:$('setQuietEnd').value,
       reportEnabled:swOn('setReport'),reportHour:$('setReportHour').value,verifyEnabled:swOn('setVerify'),weeklyReport:swOn('setWeeklyReport'),
       preCheckEnabled:swOn('setPreCheck'),preCheckHour:$('setPreCheckHour').value,smartPollEnabled:swOn('setSmartPoll'),
@@ -2475,8 +2476,13 @@ ${VOYRA_UI_CSS}
           var card=el2.closest('.course-card'),cid=card.dataset.cid,cname=card.dataset.cname,cur=notes[cid]||''
           askDialog({title:cname+' 的备注',input:true,value:cur,placeholder:'例如：周三第 3 节，教学楼 B203',okText:'保存'}).then(function(val){
             if(val===null)return
-            var payload={};payload[cid]=String(val).trim()
-            apiFetch('/api/course-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(){loadSchedule()}).catch(function(){toast('❌ 备注保存失败','err')})
+            var text=String(val).trim()
+            if(text.length>200){toast('❌ 备注最长 200 字（当前 '+text.length+' 字）','err');return}
+            var payload={};payload[cid]=text
+            // 旧写法只看请求是否发出去，不看 d.ok：服务端拒绝时界面毫无提示
+            apiFetch('/api/course-notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json()}).then(function(d){
+              if(d.ok){loadSchedule()}else{toast('❌ '+(d.message||'备注保存失败'),'err')}
+            }).catch(function(){toast('❌ 备注保存失败','err')})
           })
         })
       })

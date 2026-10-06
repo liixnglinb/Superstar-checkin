@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { logger } from '../utils/logger'
+import { minutesOf } from '../utils/validate'
 import type { NotifyChannel } from '../types'
 
 export interface Notifier {
@@ -13,6 +14,7 @@ export class NotificationManager {
   private notifiers: Map<string, Notifier> = new Map()
   private desktopEnabled: boolean
   private quiet: { enabled: boolean; start: string; end: string }
+  private quietWarned = false
 
   constructor(channels: NotifyChannel[], opts: { desktop?: boolean; quiet?: { enabled: boolean; start: string; end: string } } = {}) {
     this.desktopEnabled = opts.desktop !== false
@@ -60,10 +62,17 @@ export class NotificationManager {
   inQuietHours(now = new Date()): boolean {
     if (!this.quiet.enabled) return false
     const cur = now.getHours() * 60 + now.getMinutes()
-    const [sh, sm] = (this.quiet.start || '23:00').split(':').map(Number)
-    const [eh, em] = (this.quiet.end || '07:00').split(':').map(Number)
-    const start = sh * 60 + (sm || 0)
-    const end = eh * 60 + (em || 0)
+    // 手改过的 config.yaml 里可能出现 abc / 99:99 / 25:00，这类值会静默把窗口算窄或移位，
+    // 表现为「说好的免打扰没生效」；这里显式判无效并按不免打扰处理。
+    const start = minutesOf(this.quiet.start || '23:00')
+    const end = minutesOf(this.quiet.end || '07:00')
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      if (!this.quietWarned) {
+        this.quietWarned = true
+        logger.warn(`免打扰时段配置无效（${this.quiet.start}~${this.quiet.end}），本次按不免打扰处理，请在设置页重新填写`)
+      }
+      return false
+    }
     if (start === end) return false
     return start < end ? (cur >= start && cur < end) : (cur >= start || cur < end)
   }

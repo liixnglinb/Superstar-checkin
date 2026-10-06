@@ -6,6 +6,7 @@ import type { AppConfig } from '../types'
 import { DEFAULTS } from '../constants'
 import { logger } from '../utils/logger'
 import { decryptPassword, encryptPassword, isEncrypted } from '../utils/crypto'
+import { asTimeString } from '../utils/validate'
 
 /**
  * 打包为独立 exe 时，由 build-sea.js 通过 esbuild define 注入当前 config.yaml 的 base64。
@@ -75,6 +76,7 @@ export function loadConfig(filePath?: string): AppConfig {
 
   // 深度合并
   const config = deepMerge(DEFAULT_CONFIG, raw) as AppConfig
+  normalizeQuiet(config)
 
   // 账号可为空：首次运行在软件内引导填写（支持多用户各自登录自己的账号）
   if (!config.accounts) config.accounts = []
@@ -126,6 +128,19 @@ export function loadConfig(filePath?: string): AppConfig {
  * 首次运行引导：无配置文件时生成一份。
  * 优先使用打包时内嵌的配置（含账号，开箱即用）；没有内嵌配置则用默认值生成空模板。
  */
+/** 免打扰时段容错：本软件写出的 `start: 23:00` 不带引号，YAML 1.1 工具（实测 PyYAML）会读成 1380 */
+function normalizeQuiet(config: AppConfig): void {
+  const q: any = (config.notify as any)?.quiet
+  if (!q) return
+  const start = asTimeString(q.start, '23:00')
+  const end = asTimeString(q.end, '07:00')
+  if (start !== q.start || end !== q.end) {
+    logger.warn(`免打扰时段不是标准 HH:MM（读到 ${q.start}~${q.end}），已按 ${start}~${end} 处理`)
+    q.start = start
+    q.end = end
+  }
+}
+
 function bootstrapConfig(filePath: string): AppConfig {
   let embedded: any = null
   if (typeof __EMBEDDED_CONFIG_B64__ !== 'undefined' && __EMBEDDED_CONFIG_B64__) {
