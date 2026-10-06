@@ -3,6 +3,7 @@
 process.env.NO_OPEN_BROWSER = '1' // 禁止服务层调用系统浏览器
 
 const path = require('path')
+const fs = require('fs')
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard } = require('electron')
 
 // 单实例：防止重复启动
@@ -652,9 +653,11 @@ app.whenReady().then(() => {
       updateState.phase = 'installing'
       pushUpdateState()
       quitting = true
-      // isSilent=false 走 NSIS 的 --updated 流程（无向导）；isForceRunAfter=true 装完自动重启
+      // isSilent=true 静默安装：oneClick:false 的安装包若 isSilent=false 会弹 NSIS 向导，
+      // 用户点完向导前进程已退出 = 看起来「点了更新没反应」（实测结论，勿改回 false）。
+      // isForceRunAfter=true 装完自动重启
       setImmediate(() => {
-        try { autoUpdater.quitAndInstall(false, true) } catch (_) {}
+        try { autoUpdater.quitAndInstall(true, true) } catch (_) {}
       })
       return { ok: true }
     } catch (e) {
@@ -664,6 +667,24 @@ app.whenReady().then(() => {
 
   // 启动签到服务（构建产物，与窗口同进程）
   try {
+    // 安装版的数据此前落在程序目录（cwd=安装目录）：config.yaml/data/ 与程序文件混在一起，
+    // 卸载时 NSIS 只删已知文件，运行期生成的用户数据就成了残留。
+    // 打包态把工作目录切到 userData（%APPDATA%\学习通自动签到），旧数据一次性搬过去；
+    // rename 失败（占用/跨卷）就留在原地继续用，绝不挡启动。
+    if (app.isPackaged) {
+      try {
+        const userData = app.getPath('userData')
+        fs.mkdirSync(userData, { recursive: true })
+        for (const name of ['config.yaml', 'data']) {
+          const src = path.join(process.cwd(), name)
+          const dst = path.join(userData, name)
+          if (fs.existsSync(src) && !fs.existsSync(dst)) fs.renameSync(src, dst)
+        }
+        process.chdir(userData)
+      } catch (e) {
+        console.error('用户数据目录迁移失败（沿用旧目录）:', e)
+      }
+    }
     require(path.join(__dirname, '..', 'build', 'index.js'))
   } catch (err) {
     console.error('签到服务启动失败:', err)
