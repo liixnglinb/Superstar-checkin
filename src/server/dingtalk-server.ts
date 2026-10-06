@@ -105,6 +105,13 @@ export interface DingTalkServerOptions {
  * - 为 /upload/image 增加了可选 token 鉴权，防止外人任意上传；
  * - 上传页面自动携带 token。
  */
+/**
+ * 需要完全退出软件才生效的提示。
+ * 界面上的 location.reload() 只刷新页面，不会重启内置的签到服务，
+ * 所以措辞必须把「刷新页面」和「退出重开」区分开，否则用户以为已经生效。
+ */
+const RESTART_HINT = '需完全退出软件后重新打开才生效（关闭窗口不会退出，请在系统托盘右键选择「退出」）'
+
 export class DingTalkServer {
   private server: http.Server | null = null
   private imageHandler: ImageHandler | null = null
@@ -376,9 +383,9 @@ export class DingTalkServer {
           }
           existing.accounts = accounts
           writeFileAtomic(cfgFile, YAML.stringify(existing))
-          logger.info(`账号已${action}到 ${cfgFile}（用户名: ${username}），当前共 ${accounts.length} 个账号，重启后生效`)
+          logger.info(`账号已${action}到 ${cfgFile}（用户名: ${username}），当前共 ${accounts.length} 个账号，${RESTART_HINT}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: `账号已${action}（当前 ${accounts.length} 个），重启后生效` }))
+          res.end(JSON.stringify({ ok: true, message: `账号已${action}（当前 ${accounts.length} 个），${RESTART_HINT}` }))
         } catch (e: any) {
           logger.error(`保存账号失败: ${e.message}`)
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -412,7 +419,7 @@ export class DingTalkServer {
           writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info(`账号已删除: ${username}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: '账号已删除，重启后生效' }))
+          res.end(JSON.stringify({ ok: true, message: '账号已删除，' + RESTART_HINT }))
         } catch (e: any) {
           logger.error(`删除账号失败: ${e.message}`)
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -443,7 +450,7 @@ export class DingTalkServer {
           writeFileAtomic(cfgFile, YAML.stringify(existing))
           logger.info(`主账号已切换为: ${username}`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: `已将 ${username} 设为主账号，重启后生效` }))
+          res.end(JSON.stringify({ ok: true, message: `已将 ${username} 设为主账号，${RESTART_HINT}` }))
         } catch (e: any) {
           logger.error(`切换主账号失败: ${e.message}`)
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -560,9 +567,9 @@ export class DingTalkServer {
             }
           }
           writeFileAtomic(cfgFile, YAML.stringify(existing))
-          logger.info('运行设置已保存，重启后生效')
+          logger.info('运行设置已保存，' + RESTART_HINT)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: true, message: '设置已保存，重启后生效' }))
+          res.end(JSON.stringify({ ok: true, message: '设置已保存，' + RESTART_HINT }))
         } catch (e: any) {
           logger.error(`保存设置失败: ${e.message}`)
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -683,7 +690,7 @@ export class DingTalkServer {
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({
             ok: true,
-            message: '配置已导入，重启后生效'
+            message: '配置已导入，' + RESTART_HINT
               + (skipped.length ? `（忽略了 ${skipped.length} 个无法识别的项：${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? ' 等' : ''}）` : ''),
           }))
         } catch (e: any) {
