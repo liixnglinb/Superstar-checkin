@@ -925,6 +925,18 @@ button{font-family:inherit}
   .tt-toolbar,.table-toolbar,.log-toolbar{flex-direction:column;align-items:stretch}
   .service-notice{flex-direction:column;align-items:stretch}
 }
+/* 触屏（coarse 指针，真机判定而非窄窗口）：筛选 pill/日志级别按钮/开关的命中区
+   实测只有 22–26px。pill 与日志按钮抬到 40px（与窄屏 .btn 的 min-height 同一档，
+   交互材质统一；容器 gap 只有 4px，不能用伪元素横向扩区，会互相吃命中范围）；
+   开关外观不变，用透明伪元素扩命中区 */
+@media (pointer: coarse){
+  .filter-pill{min-height:40px;display:inline-flex;align-items:center;padding:5px 14px}
+  .log-lvl-btn{min-height:40px;display:inline-flex;align-items:center;padding:4px 12px}
+  .switch::after,.switch-track::after{content:"";position:absolute;inset:-11px -6px}
+  /* 原生复选框默认 13px，触屏上看不清也点不准 */
+  .check-line{min-height:40px}
+  .check-line input[type="checkbox"]{width:20px;height:20px}
+}
 @media (max-width:400px){
   .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-2)}
   .stat-box-val{font-size:var(--text-lg)}
@@ -1410,15 +1422,34 @@ ${VOYRA_UI_CSS}
   }
 
   /* ===== 视图切换 ===== */
+  // 面板由 URL hash 恢复（reload 会带着 hash），但 .app-main 的滚动位置会丢——
+  // 保存设置等操作会整页刷新，按视图记住滚动位置，刷新后回到原处。
+  var appMain = document.querySelector('.app-main')
+  var activeView = (location.hash || '').slice(1)
+  if (VIEWS.indexOf(activeView) < 0) activeView = 'overview'
+  function saveScroll() {
+    try { if (appMain) sessionStorage.setItem('cx-scroll-' + activeView, String(appMain.scrollTop || 0)) } catch (e) { }
+  }
+  function restoreScroll(v) {
+    try { if (appMain) appMain.scrollTop = Number(sessionStorage.getItem('cx-scroll-' + v) || 0) } catch (e) { }
+  }
   function show(v){
     if(VIEWS.indexOf(v)<0)v='overview'
+    if(v!==activeView)saveScroll()
+    activeView=v
     document.querySelectorAll('.view').forEach(function(el){el.classList.toggle('active',el.dataset.view===v)})
     document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===v);el.setAttribute('aria-current',el.dataset.view===v?'page':'false')})
     var pt=$('pageTitle');if(pt)pt.textContent=TITLES[v]
     var ps=$('pageSub');if(ps)ps.textContent=SUBS[v]||''
     if(v==='logs')loadLogs()
     if(v==='schedule')loadSchedule()
+    restoreScroll(v)
+    // 历史/课表等面板数据是懒加载的，首次恢复时内容还没长高会被 clamp，
+    // 渲染完成后再校准一次
+    setTimeout(function(){if(activeView===v)restoreScroll(v)},350)
   }
+  window.addEventListener('beforeunload', saveScroll)
+  restoreScroll(activeView)
   var navEl=$('nav')
   if(navEl)navEl.addEventListener('click',function(e){
     var btn=e.target.closest('.nav-item');if(!btn)return
