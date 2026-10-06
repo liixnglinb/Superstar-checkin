@@ -336,3 +336,7 @@ data-dis/
 
 # AI 工具状态目录（.workbuddy 与 .workbuddy-ai 两个变体都覆盖，2026-10-04）
 .workbuddy*/
+
+# 本地安装的前端审美 skill（第三方内容，只用于开发时参考，不入库）
+/.qoder/
+/skills-lock.json

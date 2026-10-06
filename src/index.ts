@@ -117,13 +117,21 @@ function getMobileBaseUrl(config: AppConfig): string {
 
 function openBrowser(url: string) {
   const cp = require('child_process')
-  const cmd =
-    process.platform === 'win32'
-      ? `cmd /c start "" "${url}"`
-      : process.platform === 'darwin'
-        ? `open "${url}"`
-        : `xdg-open "${url}"`
-  cp.exec(cmd, (err: any) => { if (err) logger.warn(`自动打开浏览器失败: ${err.message}`) })
+  // 数组传参而不是拼 shell 字符串：url 里的 `"` 不会再逃逸进 cmd
+  const cmds: Record<string, [string, string[]]> = {
+    win32: ['cmd', ['/c', 'start', '', url]],
+    darwin: ['open', [url]],
+    linux: ['xdg-open', [url]],
+  }
+  const c = cmds[process.platform]
+  if (!c) return
+  try {
+    const child = cp.spawn(c[0], c[1], { detached: true, stdio: 'ignore' })
+    child.on('error', (err: Error) => logger.warn(`自动打开浏览器失败: ${err.message}`))
+    child.unref()
+  } catch (err: any) {
+    logger.warn(`自动打开浏览器失败: ${err?.message || err}`)
+  }
 }
 
 async function main() {

@@ -43,6 +43,8 @@ function apiUrl(pathname) {
 }
 
 let clipboardWatcher = null
+let trayStatsTimer = null
+let updateCheckTimer = null
 let lastClipboardImageHash = ''
 
 /** 统一的剪贴板发图入口：上传 + 把服务端返回的真实结果显示出来。
@@ -230,6 +232,14 @@ function openWindow() {
   // 更新状态推给界面：窗口一加载完就同步一次（检查可能发生在窗口打开之前）
   updateSender = mainWindow.webContents
   mainWindow.webContents.on('did-finish-load', () => pushUpdateState())
+  // 页内 window.open / target=_blank 一律拒绝：控制台只允许本机 URL，
+  // 外链交给系统默认浏览器，避免弹出无防护的 Electron 窗口加载远程内容
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    const local = consoleUrl().split('?')[0]
+    if (url.startsWith(local)) return { action: 'allow' }
+    try { require('electron').shell.openExternal(url) } catch { /* 忽略 */ }
+    return { action: 'deny' }
+  })
   // 安全防护：阻止页面导航离开本机控制台（含拖拽文件误触发的跳转）
   mainWindow.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith(consoleUrl().split('?')[0])) e.preventDefault()
@@ -250,8 +260,8 @@ function createTray() {
   tray.setToolTip('学习通自动签到 · 运行中')
   rebuildTrayMenu('今日已签 - · 失败 -')
   tray.on('double-click', () => openWindow())
-  // 每 30 秒刷新托盘今日统计
-  setInterval(refreshTrayStats, 30000)
+  // 每 30 秒刷新托盘今日统计（句柄存下来，退出时统一 clear）
+  trayStatsTimer = setInterval(refreshTrayStats, 30000)
   refreshTrayStats()
 }
 
@@ -614,7 +624,7 @@ app.whenReady().then(() => {
   // 更新：先看上次「更新并重启」成没成，再延迟自动检查（不抢启动时的资源），之后每 6 小时一次
   verifyPendingUpdate()
   setTimeout(() => { runUpdateCheck().catch(() => {}) }, 12000)
-  setInterval(() => { runUpdateCheck().catch(() => {}) }, CHECK_INTERVAL)
+  updateCheckTimer = setInterval(() => { runUpdateCheck().catch(() => {}) }, CHECK_INTERVAL)
   app.on('activate', () => openWindow())
 })
 
@@ -627,6 +637,11 @@ app.on('window-all-closed', (e) => {
 
 app.on('before-quit', () => {
   quitting = true
+  // 定时器不 clear 的话，退出路径上仍可能触发一次网络请求/托盘重建
+  for (const t of [clipboardWatcher, trayStatsTimer, updateCheckTimer]) {
+    if (t) clearInterval(t)
+  }
+  clipboardWatcher = trayStatsTimer = updateCheckTimer = null
   // 必须注销全局热键，否则退出后热键仍被占用（表现为"按键没反应且别的软件也抢不到"）
   try { require('electron').globalShortcut.unregisterAll() } catch { /* 忽略 */ }
 })

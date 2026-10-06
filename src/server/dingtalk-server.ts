@@ -1565,7 +1565,7 @@ p.sub { font-size: 13px; color: var(--ink-secondary); margin: 0 0 20px; line-hei
   </div>
 
   <script${scriptNonce ? ` nonce="${scriptNonce}"` : ''}>
-    var UPLOAD_TOKEN = ${JSON.stringify(token)}
+    var UPLOAD_TOKEN = ${JSON.stringify(token).replace(/<\//g, '<\\/')}
     var UPLOAD_TYPE = 'qr'
     var fileInput = document.getElementById('fileInput')
     var pickBtn = document.getElementById('pickBtn')
