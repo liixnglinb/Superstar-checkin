@@ -224,6 +224,18 @@ check('上传页仅支持二维码（无 photo 分支）', !upload.includes("'ph
   check('趋势图 SVG 标签自闭合配平', rects > 0 && selfClose >= rects, `rect=${rects} self=${selfClose}`)
   check('趋势图含刻度与日期文本', (svg.match(/<text/g) || []).length >= 2)
   check('趋势图使用语义色（成功/失败）', svg.includes('--status-ok-dot') && svg.includes('--status-err-dot'))
+  // 柱体没有可读文字，必须自带 <title> 数值提示 + 带摘要的 aria-label（读屏/悬停都拿得到数）
+  check('趋势图柱体带数值提示', (svg.match(/<g><title>[^<]*成功 \d+ · 失败 \d+/g) || []).length >= 1,
+    `${(svg.match(/<title>/g) || []).length} 个 title`)
+  check('趋势图 aria-label 带数据摘要', /aria-label="近 \d+ 天签到走势柱状图：成功 \d+ 次，失败 \d+ 次/.test(svg))
+}
+
+// 12b. 进度类组件必须有progressbar语义（更新下载进度、课表完整度）
+{
+  check('更新下载进度条有 progressbar 语义', /id="updateBarTrack"[^>]*role="progressbar"/.test(html)
+    && /aria-valuemin="0"[^>]*aria-valuemax="100"[^>]*aria-valuenow=/.test(html))
+  check('课表完整度进度条有 progressbar 语义', /id="ttProgressWrap"[^>]*role="progressbar"/.test(html))
+  check('下载进度文案对读屏播报', /id="updateBarText"[^>]*aria-live="polite"/.test(html))
 }
 
 // 13. Design Token 合规（模块 3：voyra-ui.ts 是本软件唯一 UI 数值来源）

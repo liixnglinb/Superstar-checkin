@@ -136,6 +136,11 @@ export function renderTrendSvg(trend: Array<{ date: string; success: number; fai
   const maxVal = Math.max(5, ...days.map(d => (d.success || 0) + (d.fail || 0)))
   const stepX = plotW / Math.max(1, days.length)
 
+  const sumSucc = days.reduce((a, d) => a + (d.success || 0), 0)
+  const sumFail = days.reduce((a, d) => a + (d.fail || 0), 0)
+  const maxDay = Math.max(...days.map(d => (d.success || 0) + (d.fail || 0)))
+  const aria = `近 ${days.length} 天签到走势柱状图：成功 ${sumSucc} 次，失败 ${sumFail} 次，单日最高 ${maxDay} 次`
+
   const gridY1 = padTop + plotH * 0.5
   const gridY0 = padTop + plotH
 
@@ -145,23 +150,27 @@ export function renderTrendSvg(trend: Array<{ date: string; success: number; fai
   days.forEach((d, i) => {
     const x = padLeft + i * stepX + (stepX * 0.15)
     const colW = Math.max(4, stepX * 0.7)
-    const total = (d.success || 0) + (d.fail || 0)
+    const succ = d.success || 0
+    const fail = d.fail || 0
+    const total = succ + fail
     const totalH = (total / maxVal) * plotH
-    const succH = total > 0 ? ((d.success || 0) / maxVal) * plotH : 0
+    const succH = total > 0 ? (succ / maxVal) * plotH : 0
     const failH = totalH - succH
 
     const yBase = gridY0
     const ySucc = yBase - succH
     const yFail = ySucc - failH
 
+    let group = ''
     if (succH > 0) {
-      barsHtml += `<rect x="${x.toFixed(1)}" y="${ySucc.toFixed(1)}" width="${colW.toFixed(1)}" height="${succH.toFixed(1)}" rx="1.5" style="fill:var(--status-ok-dot)"/>`
+      group += `<rect x="${x.toFixed(1)}" y="${ySucc.toFixed(1)}" width="${colW.toFixed(1)}" height="${succH.toFixed(1)}" rx="1.5" style="fill:var(--status-ok-dot)"/>`
     }
     if (failH > 0) {
-      barsHtml += `<rect x="${x.toFixed(1)}" y="${yFail.toFixed(1)}" width="${colW.toFixed(1)}" height="${failH.toFixed(1)}" rx="1.5" style="fill:var(--status-err-dot)"/>`
+      group += `<rect x="${x.toFixed(1)}" y="${yFail.toFixed(1)}" width="${colW.toFixed(1)}" height="${failH.toFixed(1)}" rx="1.5" style="fill:var(--status-err-dot)"/>`
     }
-
     const dateLabel = (d.date || '').slice(5) || String(i + 1)
+    // 柱体本身没有文字可读，悬停/读屏靠 <title> 报出当天数值
+    if (group) barsHtml += `<g><title>${esc(dateLabel)} · 成功 ${succ} · 失败 ${fail}</title>${group}</g>`
     if (i % 2 === 0 || i === days.length - 1) {
       labelsHtml += `<text x="${(x + colW / 2).toFixed(1)}" y="${height - 6}" font-size="10" style="fill:var(--ink-tertiary)" font-family="var(--font-mono)" text-anchor="middle">${esc(dateLabel)}</text>`
     }
@@ -171,7 +180,7 @@ export function renderTrendSvg(trend: Array<{ date: string; success: number; fai
     <div class="trend-card">
       ${head}
       <div class="svg-container">
-        <svg viewBox="0 0 ${width} ${height}" class="trend-svg" role="img" aria-label="近 14 天签到走势柱状图">
+        <svg viewBox="0 0 ${width} ${height}" class="trend-svg" role="img" aria-label="${esc(aria)}">
           <line x1="${padLeft}" y1="${gridY1}" x2="${width - padRight}" y2="${gridY1}" stroke="var(--line-dim)" stroke-dasharray="3 3"/>
           <line x1="${padLeft}" y1="${gridY0}" x2="${width - padRight}" y2="${gridY0}" stroke="var(--line-strong)"/>
           <text x="${padLeft - 6}" y="${gridY1 + 3}" font-size="9" font-family="var(--font-mono)" style="fill:var(--ink-tertiary)" text-anchor="end">${Math.round(maxVal / 2)}</text>

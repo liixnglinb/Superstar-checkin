@@ -1067,7 +1067,7 @@ ${VOYRA_UI_CSS}
           <div class="tt-toolbar">
             <div class="tt-status-info">
               <span class="tt-badge" id="ttCompleteBadge">正在读取课表…</span>
-              <div class="tt-progress" id="ttProgressWrap"><i id="ttProgressBar" style="width:0%"></i></div>
+              <div class="tt-progress" id="ttProgressWrap" role="progressbar" aria-label="课表填写完整度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="ttProgressBar" style="width:0%"></i></div>
             </div>
             <div class="tt-btn-group">
               <button class="btn btn-secondary" id="ttAutoBtn">${ICONS.spark}<span>智能推断填空</span></button>
@@ -1243,8 +1243,8 @@ ${VOYRA_UI_CSS}
     <div class="modal-body" style="min-height:110px">
       <div id="updateBody" style="font-size:var(--text-sm);color:var(--ink-primary);line-height:1.8"></div>
       <div id="updateBar" style="display:none;margin-top:14px">
-        <div style="height:8px;background:var(--line-dim);border-radius:4px;overflow:hidden"><div id="updateBarFill" style="height:100%;width:0%;background:var(--brand-600);transition:width .2s"></div></div>
-        <div id="updateBarText" style="font-size:var(--text-xs);color:var(--ink-tertiary);margin-top:6px">正在下载安装包…</div>
+        <div id="updateBarTrack" role="progressbar" aria-label="更新下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="height:8px;background:var(--line-dim);border-radius:4px;overflow:hidden"><div id="updateBarFill" style="height:100%;width:0%;background:var(--brand-600);transition:width .2s"></div></div>
+        <div id="updateBarText" aria-live="polite" style="font-size:var(--text-xs);color:var(--ink-tertiary);margin-top:6px">正在下载安装包…</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -1468,7 +1468,7 @@ ${VOYRA_UI_CSS}
   var updBox=$('updBox'),updRing=$('updRing'),updPct=$('updPct'),updTitle=$('updTitle'),updSub=$('updSub')
   var updHover=$('updHover'),updHoverTitle=$('updHoverTitle'),updHoverMeta=$('updHoverMeta'),updHoverBody=$('updHoverBody')
   var chipUpdate=$('chipUpdate'),updateModal=$('updateModal'),updateBody=$('updateBody'),updateGo=$('updateGo'),updateLater=$('updateLater')
-  var updateBar=$('updateBar'),updateBarFill=$('updateBarFill'),updateBarText=$('updateBarText')
+  var updateBar=$('updateBar'),updateBarFill=$('updateBarFill'),updateBarText=$('updateBarText'),updateBarTrack=$('updateBarTrack')
   var RING_LEN=113.1
   var upd={phase:'idle',current:'',latest:'',notes:'',source:'',pct:0,speedBps:0,transferred:0,total:0,message:'',lastResult:null}
   var updInstallIntent=false
@@ -1509,6 +1509,7 @@ ${VOYRA_UI_CSS}
       updateBar.style.display=busy?'':'none'
       if(busy){
         updateBarFill.style.width=(s.pct||0)+'%'
+        if(updateBarTrack)updateBarTrack.setAttribute('aria-valuenow',String(s.pct||0))
         var extra=[]
         if(s.transferred&&s.total)extra.push(fmtSize(s.transferred)+' / '+fmtSize(s.total))
         if(s.speedBps)extra.push((s.speedBps/1048576).toFixed(1)+'MB/s')
@@ -1687,10 +1688,6 @@ ${VOYRA_UI_CSS}
     var ok=s.successCount||0, fail=s.failCount||0, tot=ok+fail
     var rate=tot>0?((ok/tot*100).toFixed(1)+'%'):'—'
     var today=s.todayStats||{total:0,success:0,fail:0}
-    var sc=document.getElementById('stat-courses');if(sc)sc.textContent=cs.length
-    var sr=document.getElementById('stat-records');if(sr)sr.textContent=s.recordCount||0
-    var so=document.getElementById('stat-ok');if(so)so.textContent=ok
-    var sf=document.getElementById('stat-fail');if(sf)sf.textContent=fail
     // 状态芯片
     var chipCookie=$('chipCookie')
     if(chipCookie){
@@ -2325,6 +2322,7 @@ ${VOYRA_UI_CSS}
     var badge=$('ttCompleteBadge'),bar=$('ttProgressBar'),wrap=$('ttProgressWrap')
     var pct=all.length?Math.round(filled/all.length*100):0
     if(bar)bar.style.width=pct+'%'
+    if(wrap)wrap.setAttribute('aria-valuenow',String(pct))
     if(wrap)wrap.className='tt-progress '+(filled===all.length&&all.length?'is-ok':pct>0?'is-warn':'')
     if(badge)badge.textContent=all.length?(filled===all.length?(all.length+'/'+all.length+' 已填满 · 严格按节扫描'):('未填满（'+filled+'/'+all.length+'）· 当前走全天兜底轮询')):'正在读取课表…'
     var warn=$('ttWarn'),ok=$('ttOk')
