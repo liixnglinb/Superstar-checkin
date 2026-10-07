@@ -222,7 +222,7 @@ npx electron-builder --win nsis --x64
 | 3 | `fill="var(…)"` 呈现属性 | 内联 `style="fill:var(…)"` | SVG 呈现属性对 `var()` 支持不稳 |
 | 4 | `id="topStatusStrip"` | 保留 `id="statusStrip"` | `scripts/validate-ui.js` 依赖旧 id 做门禁断言 |
 | 5 | `data-day` / `preserveAspectRatio="none"` | `data-dow` / 等比缩放 | 与既有实现一致；避免图表文字被拉伸 |
-| 6 | 课程页区分「已结课停用」 | **未实现** | `/api/status` 不提供 `isRetired`（仅 `/api/schedule` 有），需服务端补字段 |
+| 6 | 课程页区分「已结课停用」 | 已实现（v3.11.0） | `/api/status` 已补 `isRetired`，课程卡带「已结课」徽标、状态胶囊区分「已结课停用」 |
 
 ## 🖥️ 界面介绍
 

@@ -34,8 +34,9 @@
  *      原因：`scripts/validate-ui.js` 依赖旧 id 做门禁断言。
  *   5. 规范的 `data-day` → 保留现有 `data-dow`；`preserveAspectRatio="none"` → 改等比缩放。
  *      原因：与既有实现一致 / 避免图表文字被拉伸。
- *   6. 规范要求课程页区分「已结课停用」→ **未实现**。
- *      原因：`/api/status` 不提供 `isRetired`（仅 `/api/schedule` 有）；需服务端补字段后才生效，属未完成项。
+ *   6. 规范要求课程页区分「已结课停用」→ 已落地（v3.11.0）。
+ *      原先 `/api/status` 不下发 `isRetired`（仅 `/api/schedule` 有），现已在状态接口补齐，
+ *      课程卡显示「已结课」徽标，状态胶囊区分「已结课停用」与「已手动暂停」。
  *
  * 语义色无障碍（Voyra 说明 §0.9 第 3 条）：低对比的 `--status-*-dot`
  * 只用于圆点 / 描边 / 进度条 / SVG 填充，不承载文字；文字一律用 `--status-*-ink`。
