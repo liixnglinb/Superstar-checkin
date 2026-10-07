@@ -180,7 +180,7 @@ GitHub 的 `git push` 若失败，见 6.6 的代理说明。
 | `npx electron .` | 桌面壳 | 必须先 `npm run build`；`electron/main.js` 是 `require('../build/index.js')` **同进程**跑服务，不是子进程 |
 | `npm run typecheck` | `tsc --noEmit` | 只查类型，不产出 |
 | `npm run validate:ui` | 校验控制台页 | 依赖 `../build/server/*`，**必须在 build 之后跑** |
-| `npm test` | 纯逻辑回归（`node --test tests/*.test.js`） | 27 条用例：`shouldPollActivity` 闸门、二维码正则、钉钉消息解析（三种形态）、课表与扫描时段判定；无需网络/账号，**改检测或课表逻辑后必跑** |
+| `npm test` | 回归测试（`node --test tests/*.test.js`） | **61 条用例**（v3.10.1 后从 27 扩）：`shouldPollActivity` 闸门、二维码正则、钉钉消息解析（三种形态）、课表与扫描时段判定、边界入参校验、存储损坏容错、历史字段容错、真起 HTTP 的 API 契约（400/401/安全头/密钥留空保持）；无需网络/账号，**改检测、课表、入参校验或 API 后必跑**；CI 已在打包前强制跑，测试不过不出安装包 |
 | `npm run security:check` | 提交前敏感信息检查（暂存区） | 已装为 `.git/hooks/pre-commit`，提交时自动跑；`security:check:all` 检查全仓库 |
 | `node tests/disclaimer-harness.js` | 免责声明流程验证 | 需先 `npm run build`；会启停服务 3 次验证"接受状态跨重启持久化"，用独立端口与数据目录 |
 
@@ -406,3 +406,65 @@ npm run build && npm run typecheck && npm run validate:ui
 - [ ] `git log --oneline -5` 与 `gh release list` 对得上；确认 `main` 与 `origin/main` 是否同步
 - [ ] 跑一次 `npx electron-builder --win --x64` 到独立输出目录，产物三件套齐全（exe / blockmap / latest.yml）
 - [ ] 通读 `docs/ARCHITECTURE.md` 的「核心 API 分析」一节 —— 学习通接口字段以它为准
+
+---
+
+## 8. v3.10.x 增量（2026-10 商业化收口，接手后必读）
+
+本文档正文写于 v3.7.0，以下是到 v3.10.1 之后这一轮改动里**会影响你日常操作**的部分。
+逐条变更见根目录 `CHANGELOG.md`。
+
+### 8.1 数据目录变了（最重要）
+
+安装版的 `config.yaml` 与 `data/` 不再位于程序目录，而在 `%APPDATA%\学习通自动签到\`；
+旧安装首次启动自动搬运（`electron/main.js` 打包态 `process.chdir`）。影响：
+
+- 排查用户问题时去 Roaming 目录取文件，别再翻安装目录。
+- 卸载不再残留运行数据，且重装后数据仍在（NSIS 不碰 Roaming）。
+- 手工压测「数据损坏」时，改的是 Roaming 下那份 `superstar-data.json`。
+
+### 8.2 新增的容错与备份产物
+
+| 产物 | 出现原因 |
+|---|---|
+| `data/superstar-data.json.corrupt-<时间>` | 数据文件顶层不是对象/JSON 解析失败/历史字段类型错乱，已备份后重置 |
+| `data/history-backups/checkin-history-<时间>.json` | 用户点「清空记录」前的自动备份，滚动 5 份 |
+| `crash.log`（userData 根） | 未捕获异常；异常弹窗里给出该路径 |
+| 日志文件 `.1` | 超过 10MB 轮转 |
+
+`superstar-data.json` 现在带 `__schema` 字段（当前 1）；未来改数据结构时在
+`src/providers/storage.ts` 顶部递增并写迁移分支。
+
+### 8.3 入参与安全的硬约束（改 API 时别绕过）
+
+- 所有写配置的路由必须走 `src/utils/validate.ts`（`textField` / `intInRange` / `timeOfDay` /
+  `boolFlag` / `proxyUrl`）；客户端输入错误抛 `BadRequestError` → 400，服务端故障才 500。
+  统一入口是 `DingTalkServer.parseJsonBody()` 与 `this.fail(res, e, 前缀)`。
+- 布尔开关禁止用 `!!value`：字符串 `"false"` 会被判真。用 `boolFlag`。
+- 新增敏感字段（密钥类）请照 `dingtalk.appSecret` 的做法：写侧 `encryptPassword`、
+  载入侧在 `src/providers/config.ts` 解密回内存、导出路由的 `SENSITIVE_KEYS` 加键名。
+- 全部响应带 CSP / X-Frame-Options / nosniff / Referrer-Policy（`dingtalk-server.ts` 顶部）。
+  页面新增外链资源要同步改 CSP，否则浏览器直接拦。
+
+### 8.4 启动与依赖
+
+- IM 监听器与钉钉 Stream 监听器改为按需 `await import()`：轮询模式不再加载 jsdom + 环信 SDK
+  （实测启动 758ms → 260ms）。新增监听器请沿用这个形状，别在 `index.ts` 顶层静态 import 重依赖。
+- `tsconfig` 已开 `strict` + `noImplicitAny`，并保证 `noUnusedLocals` 为零。
+- 镜像源（npmmirror）不支持 `npm audit` 端点，审计要临时加
+  `--registry=https://registry.npmjs.org`。
+- 本机 npm 的 allow-scripts 会拦 postinstall：**更新 electron 版本后必须手动补二进制**
+  （`node node_modules/electron/install.js`），否则 `node build/index.js` 冒烟照样通过而 Electron 起不来。
+
+### 8.5 界面验证手段（别只靠目测）
+
+- `npm run validate:ui` 是结构断言；行为要真跑：Playwright（Edge `channel`）驱动
+  `http://127.0.0.1:<port>/console?token=...`，按 1440 鼠标 / 768 窄窗 / 390 触屏三档，
+  触屏判据是 `(pointer: coarse)` 而非宽度。
+- 界面测试的常见假红来源：隐藏面板未展开、保存成功后的整页刷新打断执行上下文、
+  `el.value=` 绕过 `maxlength`、PyYAML 之类 YAML 1.1 工具把 `23:00` 读成 1380。
+
+### 8.6 发版状态（截至本文）
+
+线上最新发布仍是 **v3.10.1**；模块一~十一的提交都在 `main` 未发版。
+是否按模块补发版本由负责人决定，别自作主张打 tag。

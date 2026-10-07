@@ -241,7 +241,8 @@ npx electron-builder --win nsis --x64
 
 ## ⚙️ 配置文件（config.yaml）
 
-首次运行自动生成在软件安装目录。常用配置项：
+安装版位于 `%APPDATA%\学习通自动签到\config.yaml`（v3.10.1 之前装在程序目录，
+升级后首次启动会自动搬运过去）；从源码运行时位于项目根目录。首次运行自动生成。常用配置项：
 
 ```yaml
 # 账号配置（密码 DPAPI 加密存储）
@@ -318,6 +319,37 @@ dingtalk:
 
 ---
 
+## 🗂️ 数据与备份
+
+安装版全部运行数据都在 `%APPDATA%\学习通自动签到\` 下，卸载程序不会删除它们（重装数据还在）：
+
+| 文件 / 目录 | 作用 |
+|---|---|
+| `config.yaml` | 配置；账号密码与钉钉 AppSecret 为 DPAPI 加密串（绑定当前 Windows 用户，换机不可解密） |
+| `data/superstar-data.json` | 登录 Cookie、签到历史等键值 |
+| `data/superstar-data.json.corrupt-<时间>` | 数据文件损坏时自动保留的原件副本，出现即说明发生过一次容错重置 |
+| `data/history-backups/` | 每次「清空记录」前的历史备份，滚动保留最近 5 份 |
+| `data/sign-state.json` | 签到去重标记与失败计数（重启后不重复签到、不丢重试） |
+| `crash.log` | 未捕获异常记录；弹窗里会给出该文件路径 |
+| 日志文件 | 超过 10MB 自动轮转为同名 `.1` |
+
+## 🧑‍💻 开发与验证
+
+```bash
+npm run typecheck      # tsc --noEmit（已开启 strict + noImplicitAny）
+npm run build          # 编译到 build/ 并复制 SDK、生成内嵌配置
+npm test               # 61 条回归：纯逻辑 + 存储容错 + API 契约（真起 HTTP，无需网络/账号）
+npm run validate:ui    # 界面结构断言（无障碍语义、设计令牌、下载进度文案等）
+npm run security:check # 扫描暂存文件的敏感信息（同时由 pre-commit 钩子强制执行）
+```
+
+发布流程：改 `package.json` 版本 → 写 `docs/releases/vX.Y.Z.md` → 提交并打 tag 推送 →
+GitHub Actions 依次跑 build → **npm test（不过不打扰用户）** → electron-builder →
+发布 4 个资产（带版本号的 exe、固定名 exe、`.blockmap`、`latest.yml`）。
+自动更新只认 tag 与资产名，因此四者缺一即视为发布失败。
+
+---
+
 ## 🛠️ 技术栈
 
 - **前端**：原生 HTML/CSS/JavaScript（服务端渲染单模板，无框架依赖）
@@ -333,6 +365,10 @@ dingtalk:
 ---
 
 ## 📝 更新日志
+
+完整且持续更新的变更历史见 **[CHANGELOG.md](CHANGELOG.md)**（含 v3.8.0 ~ v3.10.1 与尚未发版的
+商业化收口改动：数据容错、入参校验、安全响应头、DPAPI 加密 AppSecret、启动提速 66%、
+61 条回归测试、安装版数据迁出程序目录）。以下为更早版本的用户向说明。
 
 ### v3.7.0
 
