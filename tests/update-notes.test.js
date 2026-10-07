@@ -58,6 +58,25 @@ test('斜体不吞掉列表符号', () => {
   assert.equal(updateNotesToPlainText('*单星号斜体*'), '单星号斜体')
 })
 
+// 下面两条是拿 v3.11.1 自己的发布正文测出来的：第一版实现把这两处做错了。
+test('行内代码里的字面装饰符要原样留着（正文就是在解释装饰符本身）', () => {
+  const src = '以前说明里会出现 `###`、`**` 这类记号，看着像乱码。'
+  const out = updateNotesToPlainText(src)
+  assert.ok(out.includes('###'), out)
+  assert.ok(out.includes('**'), out)
+  assert.ok(!out.includes('`'), '反引号本身要去掉：' + out)
+  assert.ok(out.includes('这类记号'), out)
+})
+
+test('两个小标题的 ** 不许跨行配对（否则结尾会剩一个孤立 **）', () => {
+  const src = '**标题一**\n\n中间提到 `**` 这个记号。\n\n**标题二**'
+  const out = updateNotesToPlainText(src)
+  assert.ok(out.startsWith('标题一'), out)
+  assert.ok(out.includes('标题二'), '标题二 前不该被当成加粗内容吞掉：' + out)
+  assert.ok(!out.includes('标题二**'), '结尾残留孤立 **：' + out)
+  assert.equal(out.split('\n').filter((l) => /\*\*$/.test(l)).length, 0, out)
+})
+
 // —— 下载链守卫：v3.8.0~v3.11.0 的实测故障就是少了这一步 ——
 test('main.js 里 downloadUpdate 之前必须先 checkForUpdates', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8')
