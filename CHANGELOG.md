@@ -3,6 +3,29 @@
 本文件是变更历史的唯一权威来源，按版本倒序。v3.7.0 及更早的用户向说明见 `README.md` 的「更新日志」一节。
 每条都对应仓库里可核对的提交；标注「实测」的条目有对应的验证过程。
 
+## v3.11.1（2026-10-07，修复软件内更新自 v3.8.0 起必然失败）
+
+发布说明见 `docs/releases/v3.11.1.md`。
+
+### 更新链（实测缺陷）
+
+- **软件内「更新并重启」自 v3.8.0 起 100% 失败**，界面显示「更新失败 / Please check update first」。
+  根因：`f2aeee7`（2026-09-27）把更新检查换成自研多源测速时删掉了 `autoUpdater.checkForUpdates()`，
+  而 electron-updater 的 `downloadUpdate()` 依赖该调用缓存的 `updateInfoAndProvider`
+  （`node_modules/electron-updater/out/AppUpdater.js` 里该字符串是这句话的唯一来源，
+  且只有「确实有新版」时才会赋值）。`git tag --contains f2aeee7` 实测命中 v3.8.0 ~ v3.11.0 共 8 个已发布 tag；
+  本机安装版 `resources/app.asar` 里 grep 到 `setFeedURL` + `await autoUpdater.downloadUpdate()` 而无 `checkForUpdates`，与线上代码一致。
+- 修复：`startUpdateDownload()` 每次 `setFeedURL()` 换源之后先 `await autoUpdater.checkForUpdates()`，
+  `isUpdateAvailable` 为假时降级到下一个下载源并给出人话提示（不能直接下载——`setFeedURL` 只换 provider，
+  不会清掉上一次缓存的更新信息，跳过 check 会拿旧源的地址下载）。
+- **更新说明面板不再吐 markdown**：新增 `electron/update-utils.cjs` 的 `updateNotesToPlainText()`，
+  去掉 `###` / `**` / 行内反引号 / 围栏 / 分割线 / 引用竖线，链接保留文字（文字与地址不同时把地址放括号里），
+  图片整段去掉。GitHub 上的 Release 正文照旧是 markdown（那边有渲染），只有软件内做降级。
+  用线上 v3.11.0 的真实正文实测：1008 → 960 字符，装饰符零残留。
+- 新增 `tests/update-notes.test.js` 6 条：纯文本化 5 条 + 一条静态守卫断言
+  `main.js` 里 `autoUpdater.checkForUpdates()` 必须出现在 `autoUpdater.downloadUpdate()` 之前
+  （对修复前的 `main.js` 该断言判红，实测 idx = -1）。测试总数 61 → 67。
+
 ## v3.11.0（2026-10-07，商业化收口 模块一 ~ 模块十一）
 
 发布说明见 `docs/releases/v3.11.0.md`。

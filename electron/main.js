@@ -4,6 +4,7 @@ process.env.NO_OPEN_BROWSER = '1' // 禁止服务层调用系统浏览器
 
 const path = require('path')
 const fs = require('fs')
+const { updateNotesToPlainText } = require('./update-utils.cjs')
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard } = require('electron')
 
 // 单实例：防止重复启动
@@ -525,10 +526,13 @@ app.whenReady().then(() => {
       if (r.ok && r.body) {
         const j = JSON.parse(r.body.toString('utf8'))
         const body = String((j && j.body) || '').trim()
-        if (body) return body
+        if (body) {
+          const plain = updateNotesToPlainText(body)
+          if (plain) return plain
+        }
       }
     } catch (_) {}
-    return fallback || ''
+    return updateNotesToPlainText(fallback || '')
   }
 
   /** 上次「更新并重启」到底成没成：装之前记下目标版本，启动后比对实际版本 */
@@ -604,6 +608,16 @@ app.whenReady().then(() => {
       updateState.message = i === 0 ? '' : `已切换到备用下载源：${c.label}`
       pushUpdateState()
       try {
+        // 换过 feed 后必须让库自己再查一次：downloadUpdate() 用的是 checkForUpdates() 缓存的
+        // updateInfoAndProvider（provider 按当次 feed 绑定），少了这一步它直接抛
+        // "Please check update first"。实测 v3.8.0~v3.11.0 这 8 个已发布版本的软件内更新
+        // 全部失败在这一句上（f2aeee7 把 checkForUpdates 删掉换来自研多源测速后就没补回来）。
+        const chk = await autoUpdater.checkForUpdates()
+        if (!chk || !chk.isUpdateAvailable) {
+          lastErr = `下载源「${c.label}」上暂时没有该更新包，请重试或到下载页手动下载`
+          if (i < rankedSources.length - 1) continue
+          break
+        }
         await autoUpdater.downloadUpdate()
         markPendingInstall()
         updateState.phase = 'ready'
