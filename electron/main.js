@@ -195,6 +195,9 @@ const updateState = {
   latest: '',
   notes: '',
   source: '',
+  // 下载完成后 electron-updater 返回的安装包绝对路径；拉起安装向导用。
+  // 空串表示没拿到路径，那时才退回静默安装。
+  installerPath: '',
   pct: 0, transferred: 0, total: 0, speedBps: 0,
   message: '',
   checkedAt: 0,
@@ -618,7 +621,14 @@ app.whenReady().then(() => {
           if (i < rankedSources.length - 1) continue
           break
         }
-        await autoUpdater.downloadUpdate()
+        // downloadUpdate() 返回下载好的文件绝对路径数组（NSIS 安装包）。
+        // 拿到它才能在「安装」这一步把安装向导交回给用户，而不是自己静默装完。
+        const files = await autoUpdater.downloadUpdate()
+        updateState.installerPath = ''
+        try {
+          const first = Array.isArray(files) && files.length ? String(files[0]) : ''
+          if (first && fs.existsSync(first)) updateState.installerPath = first
+        } catch (_) {}
         markPendingInstall()
         updateState.phase = 'ready'
         updateState.pct = 100
@@ -634,6 +644,34 @@ app.whenReady().then(() => {
     updateState.message = lastErr || '下载失败，请稍后重试'
     pushUpdateState()
     return false
+  }
+
+  /**
+   * 「安装」这一步：把安装向导交回给用户。
+   *
+   * 以前是 quitAndInstall(true, true) 静默装完自动重开 —— 用户全程看不到安装界面，
+   * 也不知道装到哪一步。现在改成 detach 拉起下载好的 NSIS 安装包（本软件
+   * nsis.oneClick=false，拉起来就是有「下一步」的向导），再退出本进程。
+   * 顺序必须「先拉起、后退」：反过来的话进程一退出，spawn 的安装器会被一起收掉；
+   * 退出前留 400ms 是让安装器先把窗口建起来，避开 NSIS 检测旧进程占用的那一下。
+   * 只有拿不到安装包路径时才退回静默安装，保证更新不会卡在最后一步。
+   */
+  function launchInstallerAndQuit() {
+    const file = updateState.installerPath
+    if (file && fs.existsSync(file)) {
+      try {
+        require('child_process').spawn(file, [], { detached: true, stdio: 'ignore' }).unref()
+        updateState.phase = 'installing'
+        pushUpdateState()
+        quitting = true
+        setTimeout(() => { try { app.quit() } catch (_) {} }, 400)
+        return
+      } catch (_) {}
+    }
+    quitting = true
+    setImmediate(() => {
+      try { autoUpdater.quitAndInstall(true, true) } catch (_) {}
+    })
   }
 
   autoUpdater.on('download-progress', (p) => {
@@ -662,21 +700,10 @@ app.whenReady().then(() => {
     return { ok, message: updateState.message, source: updateState.source }
   })
   ipcMain.handle('update-install', async () => {
-    try {
-      markPendingInstall()
-      updateState.phase = 'installing'
-      pushUpdateState()
-      quitting = true
-      // isSilent=true 静默安装：oneClick:false 的安装包若 isSilent=false 会弹 NSIS 向导，
-      // 用户点完向导前进程已退出 = 看起来「点了更新没反应」（实测结论，勿改回 false）。
-      // isForceRunAfter=true 装完自动重启
-      setImmediate(() => {
-        try { autoUpdater.quitAndInstall(true, true) } catch (_) {}
-      })
-      return { ok: true }
-    } catch (e) {
-      return { ok: false, message: String((e && e.message) || e) }
-    }
+    // 用户视角：下载完成后软件关掉、弹出安装向导，自己点「下一步」装完自动重开。
+    // 与 quitAndInstall 的差别就在这里 —— 后者全程无界面。
+    launchInstallerAndQuit()
+    return { ok: true }
   })
 
   // 启动签到服务（构建产物，与窗口同进程）

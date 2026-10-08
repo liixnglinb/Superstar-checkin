@@ -1558,12 +1558,13 @@ ${VOYRA_UI_CSS}
     var head=s.phase==='ready'?'<div style="font-size:var(--text-sm);font-weight:600;margin-bottom:8px">更新包已就绪</div>'
       :s.phase==='error'?'<div style="font-size:var(--text-sm);font-weight:600;margin-bottom:8px;color:var(--status-err-ink)">更新失败</div>'
       :'<div style="font-size:var(--text-sm);font-weight:600;margin-bottom:8px">发现新版本 <b>v'+esc(s.latest||'')+'</b>（当前 v'+esc(s.current||'')+'）</div>'
-    var hint=s.phase==='ready'?'<div style="color:var(--ink-tertiary);font-size:var(--text-xs);margin-bottom:8px">点击「重启并更新」，软件会自动完成安装并重新打开，无需重走安装向导。</div>'
+    var hint=s.phase==='ready'?'<div style="color:var(--ink-tertiary);font-size:var(--text-xs);margin-bottom:8px">点击「安装并重启」，软件会关闭并打开安装程序，按提示点「下一步」即可；装好会自动重新打开。</div>'
       :s.phase==='downloading'?'<div style="color:var(--ink-tertiary);font-size:var(--text-xs);margin-bottom:8px">正在后台下载（自动差分，只下载变化的块），可以关掉这个窗口，下载不会中断。</div>':''
     var msg=s.message?'<div style="color:'+(s.phase==='error'?'var(--status-err-ink)':'var(--ink-tertiary)')+';font-size:var(--text-xs);margin-bottom:8px">'+esc(s.message)+'</div>':''
     var notes='<div style="max-height:220px;overflow-y:auto;white-space:pre-wrap;background:var(--bg-surface-sub);border:1px solid var(--line-dim);border-radius:var(--r-sm);padding:10px 12px;font-size:var(--text-xs);color:var(--ink-secondary)">'+esc((s.notes||'').trim()||'暂无更新说明')+'</div>'
-    var srcLine=s.source?'<div style="font-size:var(--text-xs);color:var(--ink-tertiary);margin-top:8px">下载源：'+esc(s.source)+'</div>':''
-    return '<div style="padding:4px 0">'+head+msg+hint+notes+srcLine+'</div>'
+    /* 刻意不显示下载源：后台会实测直连与镜像谁快并自动选，但把「当前走的是哪个源」
+       写出来只会让用户以为需要自己判断，属于噪音。用户只看进度与结果。 */
+    return '<div style="padding:4px 0">'+head+msg+hint+notes+'</div>'
   }
   function renderUpdateModal(s){
     if(!updateModal||!updateModal.classList.contains('show'))return
@@ -1607,7 +1608,7 @@ ${VOYRA_UI_CSS}
     }
     if(updHoverBody){
       updHoverTitle.textContent='v'+(s.latest||'')+' 更新内容'
-      updHoverMeta.textContent=(s.current?'当前 v'+s.current:'')+(s.source?' · '+s.source:'')
+      updHoverMeta.textContent=(s.current?'当前 v'+s.current:'')
       updHoverBody.textContent=(s.notes||'').trim()||'本次更新没有附带说明。'
     }
     renderUpdateModal(s)
@@ -1626,7 +1627,7 @@ ${VOYRA_UI_CSS}
   function hideUpdHover(){if(updHover)updHover.classList.remove('show')}
   function doInstallNow(){
     if(!window.updateCtl)return
-    toast('正在重启并安装更新…','ok')
+    toast('正在打开安装程序…','ok')
     window.updateCtl.install().then(function(r){if(!r||!r.ok)toast('安装启动失败：'+((r&&r.message)||'未知错误'),'err')}).catch(function(){toast('安装启动失败，请稍后重试','err')})
   }
   function showUpdateConfirm(){
@@ -1634,8 +1635,8 @@ ${VOYRA_UI_CSS}
     if(!hasNewVersion(upd)&&upd.phase!=='error'){openUpdateModal();return}
     var size=upd.total?'（更新包约 '+fmtSize(upd.total)+'）':''
     var head=upd.phase==='ready'
-      ? '新版本 v'+(upd.latest||'')+' 已下载完成'+size+'。\\n\\n是否现在安装并重启？软件会自动完成安装并重新打开，无需重走安装向导。'
-      : '发现新版本 v'+(upd.latest||'')+'（当前 v'+(upd.current||'')+'）'+size+'。\\n\\n是否现在更新并重启？确认后软件会自动下载、安装并重新打开。'
+      ? '新版本 v'+(upd.latest||'')+' 已下载完成'+size+'。\\n\\n是否现在安装？软件会先关闭，然后打开安装程序——按提示点「下一步」即可，装完会自动重新打开。'
+      : '发现新版本 v'+(upd.latest||'')+'（当前 v'+(upd.current||'')+'）'+size+'。\\n\\n是否现在更新并重启？确认后先下载安装包，下载完会打开安装程序由你点「下一步」，装好自动重新打开。'
     var notes=(upd.notes||'').trim()
     if(notes)head+='\\n\\n更新内容：\\n'+notes.slice(0,600)+(notes.length>600?'…':'')
     if(upd.phase==='error'&&upd.message)head+='\\n\\n上次失败原因：'+upd.message
