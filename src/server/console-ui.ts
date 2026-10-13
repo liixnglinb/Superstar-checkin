@@ -257,6 +257,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
           <div class="input-range-group">${sw('setSmartPoll', s.smartPoll?.enabled !== false, '智能轮询')}<span class="form-help" style="margin:0">白天短间隔轮询，夜间 3 倍长间隔，减少无效请求</span></div>
         </div>
       </div>
+    </div>
     <!-- 区域 3：地理位置与网络 -->
     <div class="card settings-card">
       <div class="card-head">

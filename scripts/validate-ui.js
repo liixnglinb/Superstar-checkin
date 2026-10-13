@@ -6,7 +6,10 @@
  * 「页面能用但部分样式/交互悄悄失效」，不易察觉。此脚本直接构建页面并校验：
  *   1. <style> 块花括号是否配平（含 @media 嵌套）；
  *   2. 每个 <script> 块能否通过 Node 语法检查；
- *   3. 关键元素/钩子（FAB、状态条、导航项）是否存在于产物中。
+ *   3. 关键元素/钩子（FAB、状态条、导航项）是否存在于产物中；
+ *   4. 结构完整性：<div> 开闭配平、设置页五个 pane 互为兄弟、页签与 pane、
+ *      导航与视图面板一一对应（缺 </div> 导致嵌套时，切页签内容会整块消失，
+ *      而构建与单测都不报错——2026-10-13 v3.13.0 就是这么漏出去的）。
  *
  * 用法: node scripts/validate-ui.js [--html-only]
  * 退出码 0 = 全部通过，1 = 存在问题。
@@ -246,6 +249,34 @@ check('上传页仅支持二维码（无 photo 分支）', !upload.includes("'ph
   check('旧 --vr-* 令牌已清理（不再残留共享层）', !html.includes('--vr-canvas') && !html.includes('--vr-brand'))
   const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'server', 'voyra-ui.ts'), 'utf8')
   check('voyra-ui.ts 承载完整双模令牌', src.includes('--bg-canvas') && src.includes('[data-theme="dark"]') && src.includes('--shadow-modal'))
+}
+
+// 14. 结构完整性：div 配平 + 设置页五个 pane 必须互为兄弟
+// （2026-10-13 v3.13.0 事故：guard pane 第一张卡少一个 </div>，导致 notify/account
+//  /data 全部嵌套进 guard。切到这些页签时 guard 被隐藏，嵌套其中的 pane 一起消失，
+//   用户看到「账号管理等菜单完全不显示内容」。构建、单测、CSS/JS 语法检查全不报错。）
+{
+  const opens = (html.match(/<div\b/g) || []).length
+  const closes = (html.match(/<\/div>/g) || []).length
+  check('整页 <div> 开闭配平', opens === closes, `open=${opens} close=${closes}`)
+
+  const { JSDOM } = require('jsdom')
+  const doc = new JSDOM(html).window.document
+  const panels = Array.from(doc.querySelectorAll('#panel-settings > .settings-pane'))
+  const names = panels.map(p => p.getAttribute('data-pane'))
+  check('设置页五个 pane 均为直系子女（未互相嵌套）',
+    panels.length === 5 && ['guard', 'notify', 'account', 'data', 'about'].every(n => names.includes(n)),
+    `实际: ${names.join(',') || '无'}`)
+  const tabs = Array.from(doc.querySelectorAll('.settings-tab')).map(t => t.getAttribute('data-pane'))
+  check('页签与 pane 一一对应', tabs.length === 5 && tabs.every(t => names.includes(t)),
+    `页签: ${tabs.join(',')}`)
+  check('每个 pane 都渲染出内容', panels.every(p => (p.textContent || '').trim().length > 20))
+  // 同理：侧栏导航项与 .view 面板一一对应，且都是 .app-main 直系子女
+  const views = Array.from(doc.querySelectorAll('.app-main > .view')).map(v => v.getAttribute('data-view'))
+  const navs = Array.from(doc.querySelectorAll('.nav-item[data-view]')).map(n => n.getAttribute('data-view'))
+  check('侧栏导航与视图面板一一对应',
+    navs.length > 0 && navs.every(v => views.includes(v)) && views.every(v => navs.includes(v)),
+    `视图: ${views.join(',')}`)
 }
 
 console.log(failures === 0 ? '\n全部校验通过 ✓' : `\n${failures} 项校验失败 ✗`)
