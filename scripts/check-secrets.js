@@ -72,13 +72,80 @@ const ALLOW = [
   /ding\[0-9a-f\]/,
 ]
 
+/**
+ * 取受检文件清单。三条路，按优先级：
+ *   1. 命令行传一个 .txt 清单文件 —— scripts/pre-commit（shell 钩子）就是这条：
+ *      本机 node 无法 spawn 任何子进程（spawnSync git EBUSY，cmd.exe 同样），
+ *      所以清单必须由 shell 侧 `git diff --cached --name-only` 生成后再交给本脚本；
+ *   2. 自己 spawn git —— CI 与正常环境走这条；
+ *   3. git 拿不到时遍历工作区源码 —— 只影响手动执行的范围（多查不少查）。
+ *
+ * 为什么要兜底而不是让钩子崩：钩子一崩，提交被拒的原因显示成一段 Node 堆栈，
+ *      看不出是"检查没过"还是"检查器自己坏了"，人会习惯性 --no-verify，
+ *      防线就废了。兜底后检查语义不变（同一份 RULES / SKIP_PATH / ALLOW）。
+ *
+ * 用法：
+ *      git diff --cached --name-only --diff-filter=ACM > /tmp/staged.txt
+ *      node scripts/check-secrets.js /tmp/staged.txt
+ *      node scripts/check-secrets.js            # 暂存区（需要能 spawn git）
+ *      node scripts/check-secrets.js --all      # 全仓
+ */
 function listFiles() {
-  if (MODE_ALL) {
-    return execFileSync('git', ['ls-files'], { encoding: 'utf-8' }).split('\n').filter(Boolean)
+  // 任意非选项的位置参数都当作清单文件路径（scripts/pre-commit 传的是 mktemp
+  // 生成的临时文件，后缀不一定是 .txt，所以不能按扩展名认）
+  const listArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
+  if (listArg) return readList(listArg)
+  const gitArgs = MODE_ALL
+    ? ['ls-files']
+    : ['diff', '--cached', '--name-only', '--diff-filter=ACM']
+  try {
+    return execFileSync('git', gitArgs, { encoding: 'utf-8' }).split('\n').filter(Boolean)
+  } catch (e) {
+    if (e && (e.code === 'EBUSY' || e.status === null || /EBUSY/.test(String(e)))) {
+      // 本机 node 无法 spawn git（spawnSync git EBUSY）。
+      // 提交路径由 scripts/pre-commit（shell 钩子）负责生成清单再传进来；
+      // 走到这里说明是直接 `node scripts/check-secrets.js` / `npm run security:check`，
+      // 此时退化为遍历工作区源码 —— 宁可多查，也不能让门禁自己崩掉（崩了就会被 --no-verify）。
+      console.error('⚠️  本机 node 无法 spawn git（spawnSync EBUSY），退化为遍历工作区源码。')
+      console.error('    提交前的检查请交给 scripts/pre-commit：清单由 shell 生成，检查语义一致。')
+      return walkWorktree()
+    }
+    throw e
   }
-  // 暂存区：只检查将要提交的内容
-  const out = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'], { encoding: 'utf-8' })
-  return out.split('\n').filter(Boolean)
+}
+
+function readList(file) {
+  if (!fs.existsSync(file)) {
+    console.error(`❌ 清单文件不存在: ${file}`)
+    process.exit(2)
+  }
+  return fs.readFileSync(file, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
+}
+
+/**
+ * git 不可用时的兜底：直接遍历工作区源码文件。
+ * 只用于 `node scripts/check-secrets.js` / `npm run security:check` 这类手动执行；
+ * 提交钩子走 scripts/pre-commit，拿的是精确的暂存区清单，不经过这里。
+ */
+function walkWorktree() {
+  const out = []
+  const skipDirs = [/^\.git$/, /^node_modules$/, /^build$/, /^dist$/, /^\.qoder-credits$/, /^release$/]
+  const stack = ['.']
+  while (stack.length) {
+    const dir = stack.pop()
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { continue }
+    for (const ent of entries) {
+      const rel = dir === '.' ? ent.name : `${dir}/${ent.name}`
+      if (ent.isDirectory()) {
+        if (skipDirs.some(re => re.test(ent.name))) continue
+        stack.push(rel)
+      } else if (ent.isFile()) {
+        out.push(rel)
+      }
+    }
+  }
+  return out.sort()
 }
 
 const files = listFiles().filter(f => !SKIP_PATH.some(re => re.test(f)))
@@ -123,3 +190,7 @@ if (findings.length) {
 }
 
 console.log(`✅ 敏感信息检查通过（检查了 ${files.length} 个文件）`)
+if (files.length === 0) {
+  console.log('⚠️  受检数为 0 —— 清单是空的。空清单不等于干净，请确认清单生成命令是否用对。')
+  process.exitCode = 0
+}

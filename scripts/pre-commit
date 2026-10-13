@@ -1,15 +1,45 @@
 #!/bin/sh
-# 提交前自动检查敏感信息（由 scripts/check-secrets.js 提供规则）
+# 提交前自动检查敏感信息（规则由 scripts/check-secrets.js 提供）
 #
 # 背景：2026-09-19 曾把钉钉群机器人 webhook 与加签密钥提交进**公开仓库**
 # （commit e023445），删文件无法撤回历史。此钩子用于防止同类事故复发。
 #
-# 安装：把本文件复制到 .git/hooks/pre-commit 并赋予可执行权限。
+# 安装：把本文件复制到 .git/hooks/pre-commit 并赋予可执行权限：
+#     cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 # 临时跳过：git commit --no-verify
+#
+# ⚠️ 为什么清单要由本脚本（shell）生成，而不是让 check-secrets.js 自己去 git 拿：
+#    本机环境下 node 无法 spawn 任何子进程（spawnSync git EBUSY，连 cmd.exe 也是 EBUSY）。
+#    检查器自己跑 git 只会拿到 EBUSY、退出码非 0，钩子看起来像"检查没过"，
+#    实际是检查器自己坏了 —— 这种失败模式会训练人习惯 --no-verify，防线形同虚设。
+#    钩子是 shell 脚本、由 git 直接拉起，shell spawn git 是通的，
+#    所以在这里生成清单、再把路径交给 node：检查语义完全不变（同一份 RULES）。
 
-node scripts/check-secrets.js || {
+set -u
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || ROOT=.
+cd "$ROOT" || exit 2
+
+# 临时文件名固定带上 .txt：check-secrets.js 的位置参数即清单路径，后缀无关紧要，
+# 但保持可读，出问题时一眼能看出刚才查的是哪个清单。
+LIST=$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/cc-staged.$$").txt
+trap 'rm -f "$LIST"' EXIT INT TERM
+
+if ! git diff --cached --name-only --diff-filter=ACM > "$LIST"; then
+  echo ""
+  echo "  ❌ 无法读取暂存区清单（git diff --cached 失败），为安全起见阻止提交。"
+  echo ""
+  exit 2
+fi
+
+# 清单为空时不做判断：git 自己会在钩子前拦住"无暂存内容"的提交，
+# 能走到这里说明有暂存内容，空清单更可能是命令用错了（见 check-secrets.js 的告警）。
+node scripts/check-secrets.js "$LIST"
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
   echo ""
   echo "  如果确认是误报，可临时用：git commit --no-verify"
   echo ""
-  exit 1
-}
+fi
+exit "$rc"
