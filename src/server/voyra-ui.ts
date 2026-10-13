@@ -1,51 +1,56 @@
 /**
- * Voyra UI foundation v2 · 学习通自动签到专属设计系统
+ * Voyra UI foundation v3 · 学习通自动签到专属设计系统
  *
- * 定位：Grounded Quiet Utility（克制、静默的专业工具）。
- * 参考系：Apple macOS 系统设置（Ventura/Sonoma）+ CleanMyMac 状态监视器 + Home Assistant Dashboard。
+ * 定位：深空工作台（Deep Desk）—— 中性近黑画布 + 发丝线卡片 + 侧栏三段式 + 页头四要素，
+ * 保留超星暖橙作为品牌 accent。契约见主仓库 D:/Voyra 个人网站/docs/voyra-suite-design-language.md
+ * （Voyra 套件设计语言 v1），本文件落地该契约的「学习通自动签到」一份：
+ * 中性色阶 / 字阶 / 间距 / 圆角 / 动效按 §3 全套件规范，accent 暖橙按 §4 保留。
  *
  * 说明（Voyra 个人网站说明 §2.7，2026-10-03）：五款软件自 2026-10-03 起不再共用任何 UI 源文件或生成副本，
  * 每款软件的设计系统由各自仓库独立维护。本文件即本软件自己的唯一 UI 数值来源，
  * 不再是任何源的副本；是否改名 / 内联由本软件自行决定。
  *
  * 本文件只承载三样东西：
- *   1. 完整 Design Tokens（冷暖双模）——色彩 / 字阶 / 间距 / 圆角 / 阴影 / 动效；
+ *   1. 完整 Design Tokens（深浅双模，深色为默认档）——色彩 / 字阶 / 间距 / 圆角 / 阴影 / 动效；
  *   2. 无障碍基础层——focus-visible 默认、reduced-motion、sr-only；
  *   3. 模态框无障碍契约脚本（聚焦管理 / Esc 关闭 / Tab 循环）。
  * 组件样式一律写在 console-ui.ts 里，使用这里的 Token，不再有第二份数值。
+ *
+ * 对比度（按套件规范 §3 核算，WCAG AA）：正文 ≥ 4.5:1、图形 ≥ 3:1；
+ * 弱文字档（--ink-tertiary）是核算后刚好过线的值，不许再降。
  */
 
 export const VOYRA_UI_CSS = `/* ============================================================
-   Voyra UI foundation v2 · Design Tokens
+   Voyra UI foundation v3 · Design Tokens（深空工作台 Deep Desk）
+   默认深色档由 <html data-theme="dark"> + initTheme() 落定（见 console-ui.ts）
    ============================================================ */
 :root {
-  /* ================= 色彩体系 (Light Mode) ================= */
-  --bg-canvas: #F8F7F4;       /* 画布底色：暖白 */
-  --bg-surface: #FFFFFF;      /* 一级卡片/面板底色 */
-  --bg-surface-sub: #F2EFE9;  /* 二级沉底背景/输入框未聚焦底色 */
-  --bg-surface-hover: #ECE8E0;/* 悬停浅底 */
+  /* ================= 色彩体系（浅色档 · 对等档，不是深色的反转） ================= */
+  --bg-canvas: #F5F5F6;       /* 画布底色 */
+  --bg-surface: #FFFFFF;      /* 一级卡片/面板/侧栏 */
+  --bg-surface-sub: #EFEFF1;  /* 二级沉底背景/输入框未聚焦底色 */
+  --bg-surface-hover: #E9E9EC;/* 悬停提亮 */
 
-  --ink-primary: #1C1917;    /* 正文字体色：极深暖墨 */
-  --ink-secondary: #57534E;  /* 次级文本：石板灰 */
-  --ink-tertiary: #A8A29E;   /* 占位/弱化文本 */
+  --ink-primary: #18181B;    /* 主文字 */
+  --ink-secondary: #55565C;  /* 次级文本 */
+  --ink-tertiary: #77777F;   /* 弱化文本/元信息（4.6:1 on white，下限值不许再降） */
   --ink-inverse: #FFFFFF;    /* 反白文字 */
 
-  --line-dim: #E7E5E0;       /* 微弱分隔线 */
-  --line-strong: #D6D3CD;    /* 结构描边/输入框外边框 */
-  --line-focus: #F78A46;     /* 聚焦高亮线 */
-  --ring-focus: 0 0 0 2px rgba(239, 116, 41, 0.30);  /* 焦点环（输入框/课表格） */
+  --line-dim: #E3E3E7;       /* 发丝线（分区） */
+  --line-strong: #D4D4D9;    /* 结构描边/输入框外边框 */
+  --line-focus: rgba(24, 24, 27, 0.45);   /* 键盘聚焦描边 */
+  --ring-focus: 0 0 0 2px rgba(24, 24, 27, 0.45);  /* 焦点环：2px 实边 */
 
-  /* 单一品牌色（超星暖橙） */
+  /* 单一品牌色（超星暖橙，产品身份；浅色沿用已校对的深橙文字档） */
   --brand-50: #FFF7ED;
   --brand-100: #FFEDD5;
-  --brand-500: #F78A46;      /* 主品牌高亮 */
-  --brand-600: #EF7429;      /* 主品牌强调/按压态 */
+  --brand-500: #F78A46;
+  --brand-600: #EF7429;
   --brand-700: #C25E1A;
 
   /* 语义色（仅用于状态与警告）。
-     无障碍约束（Voyra 说明 §0.9 第 3 条）：-dot 系列是低对比度色
-     （--status-ok-dot #10B981 约 2.3:1、--status-warn-dot #F59E0B 约 2.0:1，均低于 WCAG AA 正文 4.5:1），
-     只可用于色块 / 描边 / 圆点 / 图标 / SVG 填充，**不承载小字**；
+     无障碍约束（Voyra 说明 §0.9 第 3 条）：-dot 系列是低对比度色，只可用于
+     色块 / 描边 / 圆点 / 图标 / SVG 填充，**不承载小字**；
      需要给文字着色时一律用对应的 -ink（深色高对比，如 #065F46 / #92400E）。 */
   --status-ok-bg: #EDFDF5;
   --status-ok-line: #A7F3D0;
@@ -67,20 +72,20 @@ export const VOYRA_UI_CSS = `/* ================================================
   --status-idle-ink: #78716C;
   --status-idle-dot: #A8A29E;
 
-  /* ================= 字阶体系 (Modular Type Scale) ================= */
+  /* ================= 字阶体系（套件规范 §3.3：8 档，不造第 9 档） ================= */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --text-2xs: 11px;
-  --text-xs: 12px;
-  --text-sm: 13px;
-  --text-base: 14px;
+  --text-2xs: 11px;   /* 元信息 */
+  --text-xs: 12px;    /* 卡标题辅助/标签 */
+  --text-sm: 13px;    /* 正文 */
+  --text-base: 14px;  /* 卡标题 */
   --text-md: 16px;
-  --text-lg: 18px;
-  --text-xl: 22px;
+  --text-lg: 20px;    /* 页标题 */
+  --text-xl: 24px;    /* 统计数字 */
   --text-2xl: 28px;
 
-  /* ================= 间距系统 (8pt 网格) ================= */
+  /* ================= 间距系统（套件规范 §3.3） ================= */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -90,21 +95,21 @@ export const VOYRA_UI_CSS = `/* ================================================
   --sp-8: 32px;
   --sp-10: 40px;
 
-  /* ================= 圆角体系 ================= */
-  --r-xs: 4px;
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
-  --r-xl: 20px;
-  --r-full: 9999px;
+  /* ================= 圆角体系（控件8 / 卡12 / 浮层16 / 胶囊999） ================= */
+  --r-xs: 8px;    /* 控件 */
+  --r-sm: 8px;    /* 控件 */
+  --r-md: 12px;   /* 卡片/卡内沉底 */
+  --r-lg: 12px;   /* 卡片 */
+  --r-xl: 16px;   /* 浮层（弹窗/抽屉/浮出卡片） */
+  --r-full: 999px;/* 胶囊 */
 
-  /* ================= 阴影体系 ================= */
-  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04);
-  --shadow-md: 0 3px 6px -1px rgba(28, 25, 23, 0.06), 0 2px 4px -2px rgba(28, 25, 23, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(28, 25, 23, 0.08), 0 4px 6px -4px rgba(28, 25, 23, 0.03);
-  --shadow-modal: 0 20px 25px -5px rgba(28, 25, 23, 0.12), 0 8px 10px -6px rgba(28, 25, 23, 0.08);
+  /* ================= 阴影体系（仅浮层允许阴影 + 1px 结构线；卡片只靠发丝线） ================= */
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 8px 24px -12px rgba(24, 24, 27, 0.18);
+  --shadow-lg: 0 16px 40px -12px rgba(24, 24, 27, 0.22);
+  --shadow-modal: 0 24px 60px -12px rgba(24, 24, 27, 0.24), 0 0 0 1px #D4D4D9;
 
-  /* ================= 动效时长与曲线 ================= */
+  /* ================= 动效时长与曲线（120 状态 / 180 入场显隐 / 240 浮层） ================= */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
   --dur-fast: 120ms;
@@ -114,28 +119,27 @@ export const VOYRA_UI_CSS = `/* ================================================
   color-scheme: light;
 }
 
-/* ================= Dark Mode Overrides ================= */
+/* ================= 深色档（默认主题 · 旗舰档） ================= */
 [data-theme="dark"] {
-  --bg-canvas: #141210;
-  --bg-surface: #211E1B;
-  --bg-surface-sub: #282420;
-  --bg-surface-hover: #332F2A;
+  --bg-canvas: #0B0B0E;      /* 应用画布：中性近黑 */
+  --bg-surface: #131318;     /* 卡片/面板/侧栏 */
+  --bg-surface-sub: #1A1B20; /* 卡内沉底、输入框、表头 */
+  --bg-surface-hover: #22242B;/* 悬停/按压提亮 */
 
-  --ink-primary: #F5F5F4;
-  --ink-secondary: #A8A29E;
-  /* 原 #78716C 在卡面上只有 3.58:1，承载的是节次/时间等小字，提到 4.9:1 才过 WCAG AA */
-  --ink-tertiary: #8E8880;
-  --ink-inverse: #1C1917;
+  --ink-primary: #F4F4F5;    /* 主文字（15.8:1 on canvas） */
+  --ink-secondary: #A7AAB1;  /* 次文字（8.5:1） */
+  --ink-tertiary: #80828B;   /* 弱文字/元信息（5.1:1 on canvas，下限值不许再降） */
+  --ink-inverse: #0B0B0E;    /* 实心面上的反相文字 */
 
-  --line-dim: #33302C;
-  --line-strong: #44403C;
-  --line-focus: #F78A46;
-  /* 焦点环：2px 实边比 3px 半透明晕圈更清晰，也不会在深色底上糊成一片光晕 */
-  --ring-focus: 0 0 0 2px rgba(247, 138, 70, 0.42);
+  --line-dim: rgba(255, 255, 255, 0.07);     /* 发丝线（分区） */
+  --line-strong: rgba(255, 255, 255, 0.13);  /* 输入框/结构描边 */
+  --line-focus: rgba(255, 255, 255, 0.55);
+  --ring-focus: 0 0 0 2px rgba(255, 255, 255, 0.55);
 
+  /* 品牌暖橙（产品身份）：深色档主 accent 提到 #F5884A 量级 */
   --brand-50: #241B14;
   --brand-100: #322117;
-  --brand-500: #F78A46;
+  --brand-500: #F5884A;
   --brand-600: #EF7429;
   --brand-700: #FF9B5E;
 
@@ -161,10 +165,10 @@ export const VOYRA_UI_CSS = `/* ================================================
   --status-idle-ink: #A8A29E;
   --status-idle-dot: #78716C;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.45);
-  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.60);
+  --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.66);
+  --shadow-modal: 0 24px 60px -12px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.13);
 
   color-scheme: dark;
 }
@@ -176,7 +180,7 @@ export const VOYRA_UI_CSS = `/* ================================================
 
 html { -webkit-text-size-adjust: 100%; }
 
-/* 键盘焦点可见：统一走品牌聚焦环；鼠标点击不显示（:focus-visible 语义） */
+/* 键盘焦点可见：2px 实边聚焦环；鼠标点击不显示（:focus-visible 语义） */
 :focus-visible {
   outline: 2px solid var(--line-focus);
   outline-offset: 2px;
@@ -206,7 +210,8 @@ html { -webkit-text-size-adjust: 100%; }
 *::-webkit-scrollbar-thumb:hover { background: var(--ink-tertiary); }
 
 /* ============================================================
-   动效规范（模块 12）：强制遵循 prefers-reduced-motion
+   动效规范：强制遵循 prefers-reduced-motion（降为 0.01ms，
+   入场动画元素随之落到终态 keyframe）
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

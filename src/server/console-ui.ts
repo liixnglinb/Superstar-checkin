@@ -1,8 +1,9 @@
 /**
- * 控制台 UI（软件主界面）—— 重构版
+ * 控制台 UI（软件主界面）—— 深空工作台版
  *
- * 设计气质：Grounded Quiet Utility（克制、静默的专业工具）。
- * 参考系：Apple macOS 系统设置（Ventura/Sonoma）+ CleanMyMac 状态监视器 + Home Assistant Dashboard。
+ * 设计气质：深空工作台（Deep Desk）—— 中性近黑画布 + 发丝线卡片 + 侧栏三段式 + 页头四要素，
+ * 保留超星暖橙作为品牌 accent，深色为默认主题。契约见主仓库
+ * D:/Voyra 个人网站/docs/voyra-suite-design-language.md（套件设计语言 v1）。
  *
  * 三条重构原则：
  *   1. 状态透明，责任清楚 —— 引擎状态 / 网络与凭据健康 / 课表时段命中，分层级展现；
@@ -202,6 +203,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
 
   const s = status
   const settingsCards = `
+    <div class="settings-pane active" data-pane="guard">
     <!-- 区域 1：监听与防风控 -->
     <div class="card settings-card">
       <div class="card-head">
@@ -255,37 +257,6 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
           <div class="input-range-group">${sw('setSmartPoll', s.smartPoll?.enabled !== false, '智能轮询')}<span class="form-help" style="margin:0">白天短间隔轮询，夜间 3 倍长间隔，减少无效请求</span></div>
         </div>
       </div>
-    </div>
-
-    <!-- 区域 2：钉钉群图通道 -->
-    <div class="card settings-card">
-      <div class="card-head">
-        <div><h3 class="card-title">钉钉群图通道（Stream 模式）</h3><p class="card-desc">群里发二维码图片即自动签到，走长连接，无需公网地址与端口映射</p></div>
-        <span class="status-chip ${s.dingtalkStreamConnected ? 'ok' : s.dingtalkStreamEnabled ? 'warn' : ''}" id="dingChip">${s.dingtalkStreamConnected ? '已连接' : s.dingtalkStreamEnabled ? '连接中' : '未启用'}</span>
-      </div>
-      <div class="card-body form-grid">
-        <div class="form-item">
-          <label class="form-label" for="dingKeyInput">AppKey</label>
-          <input class="field-input" id="dingKeyInput" type="text" placeholder="钉钉企业内部应用的 ClientID(AppKey)" spellcheck="false">
-          <span class="form-help">在钉钉开放平台创建企业内部应用 → 应用能力里添加机器人（接收模式选 Stream）→ 发布并拉进群</span>
-        </div>
-        <div class="form-item">
-          <label class="form-label" for="dingSecretInput">AppSecret</label>
-          <input class="field-input" id="dingSecretInput" type="password" placeholder="钉钉企业内部应用的 ClientSecret(AppSecret)" spellcheck="false">
-          <span class="form-help" id="dingStateHint"></span>
-        </div>
-        <div class="form-item">
-          <label class="form-label">启用状态</label>
-          <div class="input-range-group">
-            <label class="check-line"><input type="checkbox" id="dingEnabledInput"> 启用钉钉图片通道</label>
-            <button class="btn btn-primary" id="dingSaveBtn">保存钉钉设置</button>
-            <span class="cfg-msg" id="dingMsg"></span>
-          </div>
-          <span class="form-help">保存后需重启软件建立连接</span>
-        </div>
-      </div>
-    </div>
-
     <!-- 区域 3：地理位置与网络 -->
     <div class="card settings-card">
       <div class="card-head">
@@ -313,6 +284,37 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
             <span class="form-help" style="margin:0">依次检测公网 / 登录 / 课程 / 签到 / IM 通道，失败会给出原因与建议</span>
           </div>
           <div id="diagResult" class="diag-result" hidden></div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="settings-pane" data-pane="notify">
+    <!-- 区域 2：钉钉群图通道 -->
+    <div class="card settings-card">
+      <div class="card-head">
+        <div><h3 class="card-title">钉钉群图通道（Stream 模式）</h3><p class="card-desc">群里发二维码图片即自动签到，走长连接，无需公网地址与端口映射</p></div>
+        <span class="status-chip ${s.dingtalkStreamConnected ? 'ok' : s.dingtalkStreamEnabled ? 'warn' : ''}" id="dingChip">${s.dingtalkStreamConnected ? '已连接' : s.dingtalkStreamEnabled ? '连接中' : '未启用'}</span>
+      </div>
+      <div class="card-body form-grid">
+        <div class="form-item">
+          <label class="form-label" for="dingKeyInput">AppKey</label>
+          <input class="field-input" id="dingKeyInput" type="text" placeholder="钉钉企业内部应用的 ClientID(AppKey)" spellcheck="false">
+          <span class="form-help">在钉钉开放平台创建企业内部应用 → 应用能力里添加机器人（接收模式选 Stream）→ 发布并拉进群</span>
+        </div>
+        <div class="form-item">
+          <label class="form-label" for="dingSecretInput">AppSecret</label>
+          <input class="field-input" id="dingSecretInput" type="password" placeholder="钉钉企业内部应用的 ClientSecret(AppSecret)" spellcheck="false">
+          <span class="form-help" id="dingStateHint"></span>
+        </div>
+        <div class="form-item">
+          <label class="form-label">启用状态</label>
+          <div class="input-range-group">
+            <label class="check-line"><input type="checkbox" id="dingEnabledInput"> 启用钉钉图片通道</label>
+            <button class="btn btn-primary" id="dingSaveBtn">保存钉钉设置</button>
+            <span class="cfg-msg" id="dingMsg"></span>
+          </div>
+          <span class="form-help">保存后需重启软件建立连接</span>
         </div>
       </div>
     </div>
@@ -371,6 +373,9 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
       </div>
     </div>
 
+    </div>
+
+    <div class="settings-pane" data-pane="account">
     <!-- 区域 5：账号管理 -->
     <div class="card settings-card">
       <div class="card-head">
@@ -390,6 +395,9 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
       </div>
     </div>
 
+    </div>
+
+    <div class="settings-pane" data-pane="data">
     <!-- 区域 6：数据与维护（危险区） -->
     <div class="card settings-card is-danger-zone">
       <div class="card-head">
@@ -403,10 +411,11 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
         <button class="btn btn-danger" id="dangerClearHistoryBtn">${ICONS.trash}<span>清空全部签到记录</span></button>
         <span class="cfg-msg" id="cfgMsg"></span>
       </div>
+    </div>
     </div>`
 
   return `<!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -457,15 +466,31 @@ button{font-family:inherit}
 .status-chip.chip-update{background:var(--brand-100);border-color:var(--brand-500);color:var(--brand-700);cursor:pointer}
 .status-chip.chip-update:hover{background:var(--brand-50)}
 
-/* ===== 侧栏（模块 1） ===== */
+/* ===== 侧栏（模块 1 · 三段式：品牌块 / 分组导航 / 底部状态块） ===== */
 .app-body{display:flex;flex:1;overflow:hidden;min-height:0}
-.app-sidebar{width:200px;flex-shrink:0;background:var(--bg-surface);border-right:1px solid var(--line-dim);display:flex;flex-direction:column;justify-content:space-between;padding:var(--sp-3) var(--sp-2)}
-.nav-group{display:flex;flex-direction:column;gap:3px}
-.nav-item{display:flex;align-items:center;gap:var(--sp-3);height:36px;padding:0 var(--sp-3);border-radius:var(--r-md);border:1px solid transparent;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);font-weight:500;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);text-align:left;width:100%}
-.nav-item:hover{background:var(--bg-surface-sub);color:var(--ink-primary)}
-.nav-item.active{background:var(--bg-canvas);border-color:var(--line-strong);color:var(--brand-600);font-weight:600}
+.app-sidebar{width:232px;flex-shrink:0;background:var(--bg-surface);border-right:1px solid var(--line-dim);display:flex;flex-direction:column;padding:var(--sp-4) var(--sp-3);gap:var(--sp-4);min-height:0}
+.sidebar-brand{display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-2);min-width:0}
+.sidebar-brand .app-mark{width:22px;height:22px}
+.sidebar-brand-name{min-width:0;display:flex;flex-direction:column;gap:1px}
+.sidebar-brand-title{font-size:var(--text-sm);font-weight:600;color:var(--ink-primary);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-brand-ver{font-size:var(--text-2xs);color:var(--ink-tertiary);font-family:var(--font-mono)}
+.nav-groups{flex:1;display:flex;flex-direction:column;gap:var(--sp-4);overflow-y:auto;min-height:0;scrollbar-width:none}
+.nav-groups::-webkit-scrollbar{display:none}
+.nav-section{display:flex;flex-direction:column;gap:3px}
+.nav-section-label{font-size:var(--text-2xs);color:var(--ink-tertiary);font-weight:600;padding:0 var(--sp-3);margin-bottom:3px;letter-spacing:.02em}
+.nav-item{display:flex;align-items:center;gap:var(--sp-3);height:36px;padding:0 var(--sp-3);border-radius:var(--r-xs);border:1px solid transparent;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);font-weight:500;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);text-align:left;width:100%}
+.nav-item:hover{background:var(--bg-surface-hover);color:var(--ink-primary)}
+/* 激活态 = hover 级底色 + 主文字色（不加彩色左边条，参考图语言） */
+.nav-item.active{background:var(--bg-surface-hover);color:var(--ink-primary);font-weight:600}
 .nav-icon{width:16px;height:16px;flex-shrink:0}
 .nav-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 底部状态块：引擎心跳一行 + 主题切换 + 版本 */
+.sidebar-foot{display:flex;flex-direction:column;gap:var(--sp-3)}
+.sidebar-foot-row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);padding:0 var(--sp-1)}
+.sidebar-ver{font-size:var(--text-2xs);color:var(--ink-tertiary);font-family:var(--font-mono);white-space:nowrap}
+.theme-toggle{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--r-full);border:1px solid var(--line-dim);background:transparent;color:var(--ink-secondary);font-size:var(--text-2xs);font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.theme-toggle:hover{background:var(--bg-surface-hover);color:var(--ink-primary)}
+.theme-toggle svg{width:14px;height:14px;flex-shrink:0}
 /* 引擎心脏监视器 */
 .sidebar-heartbeat{background:var(--bg-surface-sub);border:1px solid var(--line-dim);border-radius:var(--r-md);padding:var(--sp-3)}
 .hb-status-row{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)}
@@ -481,13 +506,17 @@ button{font-family:inherit}
 
 /* ===== 主区 ===== */
 .app-main{flex:1;overflow-y:auto;overflow-x:hidden;padding:var(--sp-5) var(--sp-6);position:relative;min-width:0}
+/* 页头四要素：面包屑 / 标题 + 一句描述 / 右侧操作区 */
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-4);margin-bottom:var(--sp-5)}
-.page-title{font-size:var(--text-xl);font-weight:700;letter-spacing:-.02em;line-height:1.2}
-.page-sub{font-size:var(--text-sm);color:var(--ink-tertiary);margin-top:2px}
+.page-crumb{display:flex;align-items:center;gap:6px;font-size:var(--text-2xs);color:var(--ink-tertiary);margin-bottom:4px}
+.page-crumb .crumb-sep{color:var(--ink-tertiary);opacity:.7}
+.page-crumb .crumb-page{color:var(--ink-secondary);font-weight:600}
+.page-title{font-size:var(--text-lg);font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.page-sub{font-size:var(--text-sm);color:var(--ink-tertiary);margin-top:3px}
 .top-actions{display:flex;gap:var(--sp-2);flex-shrink:0}
 .view{display:none}
 .view.active{display:block;animation:fadeIn var(--dur-base) var(--ease-out)}
-@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
 /* ===== 服务通告（模块 10） ===== */
 .service-notice{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-5);border:1px solid var(--status-warn-line);border-radius:var(--r-lg);background:var(--status-warn-bg)}
@@ -530,6 +559,14 @@ button{font-family:inherit}
 .range-sep{font-size:var(--text-xs);color:var(--ink-tertiary);white-space:nowrap}
 .check-line{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--ink-secondary)}
 
+/* ===== 设置页二级分类（下划线 Tab + 面板） ===== */
+.settings-tabs{display:flex;gap:var(--sp-4);flex-wrap:wrap;border-bottom:1px solid var(--line-dim);margin-bottom:var(--sp-5)}
+.settings-tab{border:none;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);font-weight:600;padding:8px 2px;margin-bottom:-1px;border-bottom:2px solid transparent;cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.settings-tab:hover{color:var(--ink-primary)}
+.settings-tab.active{color:var(--ink-primary);border-bottom-color:var(--brand-500)}
+.settings-pane{display:none}
+.settings-pane.active{display:block;animation:fadeIn var(--dur-base) var(--ease-out)}
+
 /* ===== 开关 ===== */
 .switch{width:40px;height:22px;border-radius:var(--r-full);border:1px solid var(--line-strong);background:var(--bg-surface-sub);position:relative;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);flex-shrink:0;padding:0}
 .switch .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#FFF;box-shadow:0 1px 3px rgba(0,0,0,.22);transition:left var(--dur-fast) var(--ease-spring)}
@@ -544,10 +581,10 @@ button{font-family:inherit}
 .switch-control input:checked + .switch-track::before{transform:translateX(16px)}
 .switch-control input:focus-visible + .switch-track{outline:2px solid var(--brand-500);outline-offset:2px}
 
-/* ===== 卡片 / 面板 ===== */
-.card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);box-shadow:var(--shadow-sm);margin-bottom:var(--sp-5);overflow:hidden}
+/* ===== 卡片 / 面板（surface + 1px 发丝线 + r12，无阴影；阴影只归浮层） ===== */
+.card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);margin-bottom:var(--sp-5);overflow:hidden}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--line-dim)}
-.card-title{font-size:var(--text-md);font-weight:600;margin:0}
+.card-title{font-size:var(--text-base);font-weight:600;margin:0}
 .card-desc{font-size:var(--text-xs);color:var(--ink-secondary);margin:3px 0 0}
 .card-body{padding:var(--sp-4) var(--sp-5)}
 .card-foot{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;padding:var(--sp-3) var(--sp-5);border-top:1px solid var(--line-dim)}
@@ -555,18 +592,18 @@ button{font-family:inherit}
 .is-danger-zone{border-color:var(--status-err-line)}
 .is-danger-zone .card-title{color:var(--status-err-ink)}
 
-/* ===== 统计方块（模块 2） ===== */
+/* ===== 统计卡行（模块 2 · 严格等高：标签 12 弱 / 数字 24·600 / 注 11 最弱） ===== */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-4);margin-bottom:var(--sp-5)}
-.stat-box{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);padding:var(--sp-4);box-shadow:var(--shadow-sm);transition:transform var(--dur-base) var(--ease-out),box-shadow var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
-.stat-box:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--line-strong)}
-.stat-box-label{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);font-size:var(--text-xs);color:var(--ink-secondary);font-weight:500}
-.stat-box-ico{width:26px;height:26px;border-radius:var(--r-sm);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.stat-box{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);padding:var(--sp-4);display:flex;flex-direction:column;transition:border-color var(--dur-fast) var(--ease-out)}
+.stat-box:hover{border-color:var(--line-strong)}
+.stat-box-label{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);font-size:var(--text-xs);color:var(--ink-tertiary);font-weight:500}
+.stat-box-ico{width:26px;height:26px;border-radius:var(--r-xs);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .stat-box-ico svg{width:14px;height:14px}
-.stat-box-val{font-size:var(--text-2xl);font-weight:700;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-primary);margin-top:var(--sp-2);line-height:1}
-.stat-box-sub{font-size:var(--text-xs);color:var(--ink-tertiary);margin-top:6px}
+.stat-box-val{font-size:var(--text-xl);font-weight:600;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-primary);margin-top:auto;padding-top:var(--sp-3);line-height:1}
+.stat-box-sub{font-size:var(--text-2xs);color:var(--ink-tertiary);margin-top:6px}
 
 /* ===== 趋势图（模块 2） ===== */
-.trend-card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);padding:var(--sp-5);box-shadow:var(--shadow-sm);margin-bottom:var(--sp-5)}
+.trend-card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);padding:var(--sp-5);margin-bottom:var(--sp-5)}
 .trend-header{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--sp-3);margin-bottom:var(--sp-3)}
 .trend-title{font-size:var(--text-base);font-weight:600;margin:0}
 .trend-sub{font-size:var(--text-xs);color:var(--ink-secondary);margin:2px 0 0}
@@ -663,11 +700,11 @@ button{font-family:inherit}
 /* ===== 课表页统计卡 ===== */
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:var(--sp-3);padding:var(--sp-4) var(--sp-5)}
 .stat-card{background:var(--bg-surface-sub);border-radius:var(--r-md);padding:var(--sp-3);text-align:center;border:1px solid var(--line-dim)}
-.stat-num{font-size:var(--text-xl);font-weight:700;color:var(--brand-600);line-height:1.2;font-variant-numeric:tabular-nums}
+.stat-num{font-size:var(--text-lg);font-weight:600;color:var(--brand-600);line-height:1.2;font-variant-numeric:tabular-nums}
 .stat-label{font-size:var(--text-xs);color:var(--ink-tertiary);margin-top:4px}
 .course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--sp-3);padding:var(--sp-4) var(--sp-5)}
-.course-card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-md);padding:var(--sp-4);cursor:pointer;transition:border-color var(--dur-base),box-shadow var(--dur-base),transform var(--dur-base);position:relative;box-shadow:var(--shadow-sm)}
-.course-card:hover{border-color:var(--brand-500);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.course-card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-md);padding:var(--sp-4);cursor:pointer;transition:border-color var(--dur-fast) var(--ease-out);position:relative}
+.course-card:hover{border-color:var(--line-strong)}
 .course-card.watching{border-left:3px solid var(--brand-600)}
 .course-card.retired{opacity:.55;border-left:3px solid var(--ink-tertiary)}
 .course-card-name{font-size:var(--text-sm);font-weight:600;margin-bottom:4px;line-height:1.3}
@@ -684,12 +721,13 @@ button{font-family:inherit}
 .course-note:hover{background:var(--brand-100)}
 
 /* ===== 历史（模块 5） ===== */
-.table-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--line-dim)}
-.filter-pills{display:flex;gap:4px;flex-wrap:wrap;background:var(--bg-surface-sub);border:1px solid var(--line-dim);border-radius:var(--r-full);padding:3px}
-.filter-pill{border:none;background:transparent;color:var(--ink-secondary);font-size:var(--text-xs);font-weight:600;padding:5px 12px;border-radius:var(--r-full);cursor:pointer;transition:background var(--dur-fast),color var(--dur-fast)}
+.table-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;padding:var(--sp-3) var(--sp-5)}
+/* 二级分类 = 下划线 Tab（激活项主文字色 + 2px 下划线），替代旧的胶囊分段 */
+.filter-pills{display:flex;gap:var(--sp-4);flex-wrap:wrap;border-bottom:1px solid var(--line-dim)}
+.filter-pill{border:none;background:transparent;color:var(--ink-secondary);font-size:var(--text-xs);font-weight:600;padding:6px 2px;margin-bottom:-1px;border-bottom:2px solid transparent;cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .filter-pill:hover{color:var(--ink-primary)}
-.filter-pill.active{background:var(--bg-surface);color:var(--brand-600);box-shadow:var(--shadow-sm)}
-.toolbar-actions{display:flex;gap:var(--sp-2);flex-wrap:wrap}
+.filter-pill.active{color:var(--ink-primary);border-bottom-color:var(--brand-500)}
+.toolbar-actions{display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center}
 
 /* ===== 日历 ===== */
 .cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
@@ -708,12 +746,12 @@ button{font-family:inherit}
 .cal-detail-item{display:flex;gap:var(--sp-3);padding:8px 0;border-bottom:1px solid var(--line-dim);font-size:var(--text-sm);align-items:baseline}
 .cal-detail-item:last-child{border-bottom:none}
 
-/* ===== 日志（模块 6） ===== */
-.log-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--line-dim)}
-.log-levels{display:flex;gap:4px;flex-wrap:wrap}
-.log-lvl-btn{border:1px solid var(--line-dim);background:var(--bg-surface);color:var(--ink-secondary);font-size:var(--text-2xs);font-weight:600;padding:4px 10px;border-radius:var(--r-full);cursor:pointer;font-family:var(--font-mono);transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
+/* ===== 日志（模块 6 · 级别筛选同为下划线 Tab） ===== */
+.log-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;padding:var(--sp-3) var(--sp-5)}
+.log-levels{display:flex;gap:var(--sp-4);flex-wrap:wrap;border-bottom:1px solid var(--line-dim)}
+.log-lvl-btn{border:none;background:var(--bg-surface);color:var(--ink-secondary);font-size:var(--text-2xs);font-weight:600;padding:6px 2px;margin-bottom:-1px;border-bottom:2px solid transparent;cursor:pointer;font-family:var(--font-mono);transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .log-lvl-btn:hover{color:var(--ink-primary)}
-.log-lvl-btn.active{background:var(--ink-primary);color:var(--bg-surface);border-color:var(--ink-primary)}
+.log-lvl-btn.active{color:var(--ink-primary);border-bottom-color:var(--brand-500)}
 .log-scroll{position:relative}
 .log-box{background:#16130F;color:#D8D2C8;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.75;padding:var(--sp-4) var(--sp-5);max-height:56vh;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
 .log-box::-webkit-scrollbar-thumb{background:#3A342C;border-color:#16130F}
@@ -764,7 +802,7 @@ button{font-family:inherit}
 .tp-field{cursor:pointer;user-select:none;padding-right:28px;background-repeat:no-repeat;background-position:right 8px center;background-size:14px 14px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23EF7429' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5l3 2'/%3E%3C/svg%3E")}
 .tp-mask{position:fixed;inset:0;z-index:1200;display:none;background:rgba(20,18,16,.06)}
 .tp-mask.show{display:block}
-.tp-pop{position:absolute;width:236px;background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);padding:10px;animation:tpIn var(--dur-base) var(--ease-spring)}
+.tp-pop{position:absolute;width:236px;background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);padding:10px;animation:tpIn var(--dur-base) var(--ease-spring)}
 @keyframes tpIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
 .tp-head{display:flex;align-items:baseline;justify-content:space-between;padding:2px 4px 8px;font-size:var(--text-xs);color:var(--ink-tertiary)}
 .tp-head b{font-size:var(--text-md);color:var(--ink-primary);font-variant-numeric:tabular-nums}
@@ -833,7 +871,7 @@ button{font-family:inherit}
 .drag-box small{display:block;margin-top:6px;font-size:var(--text-sm);font-weight:400;color:var(--ink-secondary)}
 
 /* ===== 更新小框（模块 10） ===== */
-.upd-box{position:fixed;right:22px;bottom:22px;z-index:900;display:none;align-items:center;gap:10px;padding:10px 14px 10px 10px;border-radius:var(--r-lg);background:var(--bg-surface);border:1px solid var(--line-dim);box-shadow:var(--shadow-lg);cursor:pointer;transition:transform var(--dur-base) var(--ease-spring),box-shadow var(--dur-base)}
+.upd-box{position:fixed;right:22px;bottom:22px;z-index:900;display:none;align-items:center;gap:10px;padding:10px 14px 10px 10px;border-radius:var(--r-xl);background:var(--bg-surface);border:1px solid var(--line-dim);box-shadow:var(--shadow-lg);cursor:pointer;transition:transform var(--dur-base) var(--ease-spring),box-shadow var(--dur-base)}
 .upd-box.show{display:flex}
 .upd-box:hover{transform:translateY(-2px)}
 .upd-box.ready{border-color:var(--brand-500)}
@@ -845,7 +883,7 @@ button{font-family:inherit}
 .upd-meta{display:flex;flex-direction:column;gap:2px;min-width:0}
 .upd-title{font-size:var(--text-xs);font-weight:600;color:var(--ink-primary);white-space:nowrap}
 .upd-sub{font-size:var(--text-2xs);color:var(--ink-tertiary);white-space:nowrap}
-.upd-hover{position:fixed;z-index:901;width:330px;max-width:min(88vw,380px);display:none;padding:12px 14px;border-radius:var(--r-lg);background:var(--bg-surface);border:1px solid var(--line-dim);box-shadow:var(--shadow-lg);animation:tpIn var(--dur-fast) var(--ease-spring)}
+.upd-hover{position:fixed;z-index:901;width:330px;max-width:min(88vw,380px);display:none;padding:12px 14px;border-radius:var(--r-xl);background:var(--bg-surface);border:1px solid var(--line-dim);box-shadow:var(--shadow-lg);animation:tpIn var(--dur-fast) var(--ease-spring)}
 .upd-hover.show{display:block}
 .upd-hover h4{margin:0 0 6px;font-size:var(--text-sm);color:var(--ink-primary)}
 .upd-hover .upd-hover-meta{font-size:var(--text-2xs);color:var(--ink-tertiary);margin:0 0 8px}
@@ -879,10 +917,12 @@ button{font-family:inherit}
   .app-titlebar{display:none}
   .app-shell{height:100vh;height:100dvh}
   .app-body{flex-direction:column}
-  .app-sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;width:100%;flex-direction:row;align-items:stretch;padding:0 2px;padding-bottom:env(safe-area-inset-bottom,0px);border-right:0;border-top:1px solid var(--line-dim);background:var(--bg-surface)}
-  .sidebar-heartbeat{display:none}
-  .nav-group{flex-direction:row;flex:1;gap:0;justify-content:space-around;align-items:stretch;min-width:0;overflow-x:auto;scrollbar-width:none}
-  .nav-group::-webkit-scrollbar{display:none}
+  .app-sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:60;width:100%;flex-direction:row;align-items:stretch;padding:0 2px;padding-bottom:env(safe-area-inset-bottom,0px);border-right:0;border-top:1px solid var(--line-dim);background:var(--bg-surface);gap:0}
+  .sidebar-brand{display:none}
+  .sidebar-foot{display:none}
+  .nav-groups{flex:1;flex-direction:row;gap:0;justify-content:space-around;align-items:stretch;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .nav-section{display:contents}
+  .nav-section-label{display:none}
   .nav-item{flex:1 0 auto;flex-direction:column;gap:3px;justify-content:center;align-items:center;height:auto;min-width:52px;min-height:56px;padding:8px 2px 6px;font-size:var(--text-2xs);border-radius:0;text-align:center;border:none}
   .nav-item .nav-icon{width:20px;height:20px}
   .nav-item.active{background:none;color:var(--brand-600)}
@@ -974,27 +1014,49 @@ ${VOYRA_UI_CSS}
   </header>
 
   <div class="app-body">
-    <!-- 左侧导航 -->
+    <!-- 左侧导航：三段式（品牌块 / 分组导航 / 底部状态块） -->
     <aside class="app-sidebar">
-      <nav class="nav-group" id="nav" aria-label="主功能导航">
-        <button class="nav-item active" data-view="overview">${ICONS.appMark.replace('class="app-mark"', 'class="nav-icon app-mark"')}<span class="nav-label">总览</span></button>
-        <button class="nav-item" data-view="courses">${ICONS.courses.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">课程清单</span></button>
-        <button class="nav-item" data-view="schedule">${ICONS.calendar.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">课表扫描</span></button>
-        <button class="nav-item" data-view="history">${ICONS.history.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">历史记录</span></button>
-        <button class="nav-item" data-view="logs">${ICONS.log.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">实时日志</span></button>
-        <button class="nav-item" data-view="settings">${ICONS.settings.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">运行设置</span></button>
+      <div class="sidebar-brand">
+        ${ICONS.appMark}
+        <span class="sidebar-brand-name">
+          <span class="sidebar-brand-title">学习通自动签到</span>
+          <span class="sidebar-brand-ver">v${esc(version)}</span>
+        </span>
+      </div>
+      <nav class="nav-groups" id="nav" aria-label="主功能导航">
+        <div class="nav-section">
+          <div class="nav-section-label">工作台</div>
+          <button class="nav-item active" data-view="overview">${ICONS.appMark.replace('class="app-mark"', 'class="nav-icon app-mark"')}<span class="nav-label">总览</span></button>
+          <button class="nav-item" data-view="courses">${ICONS.courses.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">课程清单</span></button>
+          <button class="nav-item" data-view="schedule">${ICONS.calendar.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">课表扫描</span></button>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-label">档案</div>
+          <button class="nav-item" data-view="history">${ICONS.history.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">历史记录</span></button>
+          <button class="nav-item" data-view="logs">${ICONS.log.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">实时日志</span></button>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-label">系统</div>
+          <button class="nav-item" data-view="settings">${ICONS.settings.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">运行设置</span></button>
+        </div>
       </nav>
 
-      <!-- 引擎心脏监视器 -->
-      <div class="sidebar-heartbeat" id="sidebarHeartbeat" role="status" aria-live="polite">
-        <div class="hb-status-row">
-          <span class="hb-indicator ${engineTone}" id="footDot"></span>
-          <span class="hb-state-text" id="footState">${esc(engineState)}</span>
+      <div class="sidebar-foot">
+        <!-- 引擎心脏监视器 -->
+        <div class="sidebar-heartbeat" id="sidebarHeartbeat" role="status" aria-live="polite">
+          <div class="hb-status-row">
+            <span class="hb-indicator ${engineTone}" id="footDot"></span>
+            <span class="hb-state-text" id="footState">${esc(engineState)}</span>
+          </div>
+          <div class="hb-meta-row">
+            <span class="hb-meta-item" title="有效账号数">${ICONS.user}<span id="footAccounts">${accounts.length} 账号</span></span>
+            <span class="hb-meta-item" title="服务端口">${ICONS.server}<span id="footPort">:${esc(String(status.port || 3456))}</span></span>
+            <span class="hb-meta-item" title="轮询周期">${ICONS.clock}<span id="hbCountdown">${Math.round((status.pollInterval || 30000) / 1000)}s</span></span>
+          </div>
         </div>
-        <div class="hb-meta-row">
-          <span class="hb-meta-item" title="有效账号数">${ICONS.user}<span id="footAccounts">${accounts.length} 账号</span></span>
-          <span class="hb-meta-item" title="服务端口">${ICONS.server}<span id="footPort">:${esc(String(status.port || 3456))}</span></span>
-          <span class="hb-meta-item" title="轮询周期">${ICONS.clock}<span id="hbCountdown">${Math.round((status.pollInterval || 30000) / 1000)}s</span></span>
+        <div class="sidebar-foot-row">
+          <button type="button" class="theme-toggle" id="themeToggle" aria-label="主题：深色（点击切换）" title="主题：深色（点击切换）"><span class="theme-toggle-ico" id="themeToggleIco">${ICONS.moon}</span><span id="themeToggleText">深色</span></button>
+          <span class="sidebar-ver">v${esc(version)}</span>
         </div>
       </div>
     </aside>
@@ -1003,6 +1065,7 @@ ${VOYRA_UI_CSS}
     <main class="app-main" id="mainContentScroll">
       <div class="page-head">
         <div>
+          <div class="page-crumb" aria-label="面包屑"><span id="crumbRoot">工作台</span><span class="crumb-sep">/</span><span class="crumb-page" id="crumbPage">总览</span></div>
           <div class="page-title" id="pageTitle">总览</div>
           <div class="page-sub" id="pageSub">自动监听签到活动，发现后自动完成签到</div>
         </div>
@@ -1192,10 +1255,18 @@ ${VOYRA_UI_CSS}
         </div>
       </section>
 
-      <!-- ===== 设置（模块 7） ===== -->
+      <!-- ===== 设置（模块 7 · 二级分类用下划线 Tab） ===== -->
       <section class="view" data-view="settings" id="panel-settings">
+        <div class="settings-tabs" role="tablist" aria-label="设置分类">
+          <button type="button" class="settings-tab active" data-pane="guard" role="tab" aria-selected="true">监听与防风控</button>
+          <button type="button" class="settings-tab" data-pane="notify" role="tab" aria-selected="false">通知与推送</button>
+          <button type="button" class="settings-tab" data-pane="account" role="tab" aria-selected="false">账号管理</button>
+          <button type="button" class="settings-tab" data-pane="data" role="tab" aria-selected="false">数据与维护</button>
+          <button type="button" class="settings-tab" data-pane="about" role="tab" aria-selected="false">关于</button>
+        </div>
         ${settingsCards}
 
+        <div class="settings-pane" data-pane="about">
         <div class="card">
           <div class="card-head"><div><h3 class="card-title">支持的签到方式</h3></div></div>
           <div class="feature-grid">
@@ -1225,6 +1296,7 @@ ${VOYRA_UI_CSS}
             <div class="about-line"><span class="about-key">说明</span><span>仅用于个人学习场景的自动签到辅助，请遵守学校考勤规定。</span></div>
             <div class="about-line"><span class="about-key">声明</span><button class="btn btn-secondary btn-sm" id="disclaimerView">${ICONS.shield}<span>查看免责声明</span></button></div>
           </div>
+        </div>
         </div>
       </section>
     </main>
@@ -1380,6 +1452,8 @@ ${VOYRA_UI_CSS}
   var VIEWS = ['overview','courses','schedule','history','logs','settings']
   var TITLES = {overview:'总览',courses:'课程清单',schedule:'课表扫描',history:'历史记录',logs:'实时日志',settings:'运行设置'}
   var SUBS = {overview:'自动监听签到活动，发现后自动完成签到',courses:'逐课管控监听范围，状态一眼可辨',schedule:'课表是扫描的唯一依据，请务必填满',history:'签到日历与全部签到记录',logs:'服务运行日志，排查问题时查看',settings:'监听参数、通道与通知配置'}
+  /* 面包屑根分组（与侧栏分组导航一致） */
+  var CRUMB_ROOTS = {overview:'工作台',courses:'工作台',schedule:'工作台',history:'档案',logs:'档案',settings:'系统'}
   function $(id){return document.getElementById(id)}
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
   function fmtTime(ts){if(!ts)return '—';var d=new Date(ts),n=new Date();var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');if(d.toDateString()===n.toDateString())return '今天 '+hm;var y=new Date(n.getTime()-86400000);if(d.toDateString()===y.toDateString())return '昨天 '+hm;return (d.getMonth()+1)+'月'+d.getDate()+'日 '+hm}
@@ -1442,6 +1516,8 @@ ${VOYRA_UI_CSS}
     document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===v);el.setAttribute('aria-current',el.dataset.view===v?'page':'false')})
     var pt=$('pageTitle');if(pt)pt.textContent=TITLES[v]
     var ps=$('pageSub');if(ps)ps.textContent=SUBS[v]||''
+    var cr=$('crumbPage');if(cr)cr.textContent=TITLES[v]||''
+    var crRoot=$('crumbRoot');if(crRoot)crRoot.textContent=CRUMB_ROOTS[v]||'工作台'
     if(v==='logs')loadLogs()
     if(v==='schedule')loadSchedule()
     restoreScroll(v)
@@ -1460,18 +1536,46 @@ ${VOYRA_UI_CSS}
   if(location.hash&&VIEWS.indexOf(location.hash.slice(1))>=0)show(location.hash.slice(1))
   window.addEventListener('hashchange',function(){var v=location.hash.slice(1);if(VIEWS.indexOf(v)>=0)show(v)})
 
-  /* ===== 主题系统（模块 11） ===== */
+  /* ===== 主题系统（模块 11 · 深空工作台：深色为默认主题） ===== */
   function applyTheme(pref){
     var dark = pref==='dark' || (pref==='auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
     document.documentElement.setAttribute('data-theme', dark?'dark':'light')
   }
   function initTheme(){
-    var saved='auto'
-    try{saved=localStorage.getItem('theme_preference')||'auto'}catch(e){}
+    var saved='dark'
+    try{saved=localStorage.getItem('theme_preference')||'dark'}catch(e){}
     applyTheme(saved)
-    try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme_preference')||'auto')==='auto')applyTheme('auto')})}catch(e){}
+    try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme_preference')||'dark')==='auto')applyTheme('auto')})}catch(e){}
   }
   initTheme()
+
+  /* ===== 主题切换（侧栏底部）：深色（默认）→ 浅色 → 跟随系统 循环 ===== */
+  var ICON_MOON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+  var ICON_SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+  var THEME_ORDER=['dark','light','auto']
+  var THEME_LABELS={dark:'深色',light:'浅色',auto:'跟随系统'}
+  function themePref(){
+    var p='dark'
+    try{p=localStorage.getItem('theme_preference')||'dark'}catch(e){}
+    return (p==='dark'||p==='light'||p==='auto')?p:'dark'
+  }
+  function syncThemeToggle(){
+    var btn=$('themeToggle'),txt=$('themeToggleText'),ico=$('themeToggleIco')
+    if(!btn)return
+    var pref=themePref(),label=THEME_LABELS[pref]
+    if(txt)txt.textContent=label
+    if(ico)ico.innerHTML=pref==='light'?ICON_SUN:ICON_MOON
+    var desc='主题：'+label+'（点击切换）'
+    btn.setAttribute('aria-label',desc);btn.setAttribute('title',desc)
+  }
+  var themeToggleBtn=$('themeToggle')
+  if(themeToggleBtn)themeToggleBtn.addEventListener('click',function(){
+    var cur=themePref(),next=THEME_ORDER[(THEME_ORDER.indexOf(cur)+1)%THEME_ORDER.length]
+    try{localStorage.setItem('theme_preference',next)}catch(e){}
+    applyTheme(next)
+    syncThemeToggle()
+  })
+  syncThemeToggle()
 
   /* ===== 免责声明 ===== */
   function ensureDisclaimer(){
@@ -2131,6 +2235,15 @@ ${VOYRA_UI_CSS}
   })
   function bindSwitch(id){var el=$(id);if(el)el.addEventListener('click',function(){var on=!el.classList.contains('on');el.classList.toggle('on',on);el.setAttribute('aria-checked',String(on))})}
   ;['setDesktop','setQuiet','setReport','setVerify','setWeeklyReport','setPreCheck','setSmartPoll','setHumanDelay','setConfirmBefore'].forEach(bindSwitch)
+
+  /* ===== 设置页二级分类（下划线 Tab 切面板） ===== */
+  var settingsTabsEl=document.querySelector('.settings-tabs')
+  if(settingsTabsEl)settingsTabsEl.addEventListener('click',function(e){
+    var tab=e.target.closest('.settings-tab');if(!tab)return
+    var pane=tab.getAttribute('data-pane')||''
+    settingsTabsEl.querySelectorAll('.settings-tab').forEach(function(b){var on=b===tab;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on))})
+    document.querySelectorAll('#panel-settings .settings-pane').forEach(function(p){p.classList.toggle('active',p.getAttribute('data-pane')===pane)})
+  })
 
   /* ===== 时刻滚轮选择器 ===== */
   var tpState=null

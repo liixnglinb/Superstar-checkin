@@ -191,24 +191,24 @@ npx electron-builder --win nsis --x64
 桌面端与手机上传页共用同一套 Design Tokens（源码：`src/server/voyra-ui.ts`，本软件唯一 UI 数值来源），
 所有颜色、字号、间距、圆角、阴影均可一处调整、全局生效。
 
-**气质定位：Grounded Quiet Utility（克制、静默的专业工具）**，参考系为 Apple macOS 系统设置 / CleanMyMac 状态监视器 / Home Assistant Dashboard。
-**安静运作**：正常运行时主色收敛在冷灰与暖墨之间，辅以低饱和品牌橙（`#EF7429`），不用跳跃色彩打扰；
+**气质定位：深空工作台（Deep Desk，中性、静默、信息分层清晰的专业控制台）**，参考系为 Apple macOS 系统设置 / CleanMyMac 状态监视器 / Home Assistant Dashboard 的深色形态。深色为默认档（中性近黑画布 #0B0B0E，卡片只靠 1px 发丝线分层），浅色为对等档而非深色反转；超星暖橙（深色档主高亮 #F5884A / 强调 #EF7429）作为品牌 accent 只做关键点缀。
+**安静运作**：正常运行时主色收敛在中性灰阶之间，辅以低饱和品牌橙，不用跳跃色彩打扰；
 **异常显眼**：一旦发生异常（登录失效、课表未填满、连续扫描失败），用精准语义色（红/黄）在核心视线第一落点给出明确提示与一键修复入口。
 
 | 类别 | token | 规格 |
 |---|---|---|
-| 画布 / 表面 | `--bg-canvas` / `--bg-surface` / `--bg-surface-sub` | 暖白画布 + 白色卡片 + 二级沉底 |
-| 文字 | `--ink-primary` / `--ink-secondary` / `--ink-tertiary` | 极深暖墨 / 石板灰 / 弱化文本 |
-| 描边 | `--line-dim` / `--line-strong` / `--line-focus` | 分隔线 / 结构描边 / 聚焦高亮 |
-| 品牌色 | `--brand-50` ~ `--brand-700` | 超星暖橙 5 档（主高亮 `#F78A46` / 强调 `#EF7429`） |
-| 语义色 | `--status-ok/warn/err/idle-*` | 每态 4 值（bg / line / ink / dot） |
-| 字阶 | `--text-2xs` ~ `--text-2xl` | 8 档（11–28px） |
+| 画布 / 表面 | `--bg-canvas` / `--bg-surface` / `--bg-surface-sub` | 深色默认：近黑画布 #0B0B0E + 面板 #131318 + 二级沉底 #1A1B20；浅色档 #F5F5F6 / #FFFFFF / #EFEFF1 |
+| 文字 | `--ink-primary` / `--ink-secondary` / `--ink-tertiary` | 深色档 15.8 / 8.5 / 5.1:1 三级对比；弱化档为核算下限，不再降 |
+| 描边 | `--line-dim` / `--line-strong` / `--line-focus` | 发丝线 rgba(255,255,255,.07) / 结构描边 .13 / 聚焦描边 2px |
+| 品牌色 | `--brand-50` ~ `--brand-700` | 超星暖橙；深色档主高亮 #F5884A、强调 #EF7429，浅色档沿用 #F78A46 / #EF7429 |
+| 语义色 | `--status-ok/warn/err/idle-*` | 每态 4 值（bg / line / ink / dot），深色档底色降彩度防发光 |
+| 字阶 | `--text-2xs` ~ `--text-2xl` | 8 档（11–28px，页标题 20 / 统计数字 24） |
 | 间距 | `--sp-1` ~ `--sp-10` | 8pt 网格（4/8/12/16/20/24/32/40） |
-| 圆角 | `--r-xs` ~ `--r-full` | 4 / 6 / 10 / 14 / 20 / 9999px |
-| 阴影 | `--shadow-sm/md/lg/modal` | 4 级暖调阴影 |
+| 圆角 | `--r-xs` ~ `--r-full` | 控件 8 / 卡片 12 / 浮层 16 / 胶囊 999px |
+| 阴影 | `--shadow-sm/md/lg/modal` | 中性阴影，仅浮层允许；卡片只靠发丝线 |
 | 动效 | `--dur-fast` / `--dur-base` / `--dur-slow` | 120 / 180 / 240ms，配 spring / out 曲线 |
 
-**主题系统**：支持浅色 / 深色 / 跟随系统三态（`html[data-theme]` 切换，偏好写入 `localStorage`），所有组件颜色均取自 token，不写死单组件内联色。
+**主题系统**：支持深色 / 浅色 / 跟随系统三态（`html[data-theme]` 切换，偏好写入 `localStorage`，深色为默认档，侧栏底部一键循环切换），所有组件颜色均取自 token，不写死单组件内联色。
 **无障碍**：键盘焦点可见（`:focus-visible` 品牌聚焦环）、弹窗焦点闭环 + `Esc` 关闭、`prefers-reduced-motion` 全面降级。
 **零依赖自绘**：图表与进度环全部使用轻量内联 SVG 计算，不引入任何外部图表库，SSR 模板字符串架构不变。
 **语义色无障碍**：低对比度的 `--status-*-dot`（`#10B981` 约 2.3:1、`#F59E0B` 约 2.0:1，低于 WCAG AA 4.5:1）只用于色块 / 描边 / 圆点 / 图标 / SVG 填充，**不承载小字**；文字着色一律用深色高对比的 `--status-*-ink`。
