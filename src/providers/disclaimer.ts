@@ -53,15 +53,11 @@ export function getConsent(): ConsentRecord & { currentVersion: number } {
 
 export function acceptDisclaimer(): { accepted: boolean; acceptedAt: string; version: number } {
   const acceptedAt = new Date().toISOString()
-  record = { accepted: true, acceptedAt, version: CONSENT_VERSION }
-  try {
-    if (file) {
-      fs.mkdirSync(path.dirname(file), { recursive: true })
-      writeFileAtomic(file, JSON.stringify(record, null, 2))
-    }
-  } catch (e: any) {
-    logger.warn(`免责声明记录保存失败（本次会话内仍视为已接受）: ${e.message}`)
-  }
+  if (!file) throw new Error('免责声明存储尚未初始化')
+  const next: ConsentRecord = { accepted: true, acceptedAt, version: CONSENT_VERSION }
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  writeFileAtomic(file, JSON.stringify(next, null, 2))
+  record = next
   logger.info(`用户已接受免责声明（版本 ${CONSENT_VERSION}，${acceptedAt}）`)
   return { accepted: true, acceptedAt, version: CONSENT_VERSION }
 }

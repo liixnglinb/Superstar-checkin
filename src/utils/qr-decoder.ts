@@ -95,14 +95,14 @@ async function decodeViaTencentOcr(
       const url = item.Url || item.Symbol || ''
       const payload = extractPayload(url)
       if (payload) {
-        logger.info(`腾讯云 OCR 解析成功: enc=${payload.enc} aid=${payload.aid || '无'}`)
+        logger.info(`腾讯云 OCR 解析成功: aid=${payload.aid || '无'}`)
         return payload
       }
       // 也检查原始文本内容
       const text = JSON.stringify(item)
       const textMatch = text.match(/enc=([\dA-Fa-f]+)/)
       if (textMatch) {
-        logger.info(`腾讯云 OCR 解析成功(文本): enc=${textMatch[1]}`)
+        logger.info('腾讯云 OCR 解析成功(文本)')
         return { aid: undefined, enc: textMatch[1] }
       }
     }
@@ -181,7 +181,7 @@ async function decodeViaJsQR(buffer: Buffer): Promise<QrPayload | null> {
     )
 
     if (code?.data) {
-      logger.info(`jsQR 解析结果: ${code.data.slice(0, 100)}`)
+      logger.info('jsQR 已识别二维码内容')
       const payload = extractPayload(code.data)
       if (payload) return payload
     }

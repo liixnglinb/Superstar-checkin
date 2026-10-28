@@ -13,6 +13,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { writeFileAtomic } from '../utils/fs'
+import { logger } from '../utils/logger'
 
 const processedAids = new Set<string>()
 
@@ -121,7 +122,7 @@ function scheduleStatePersist(): void {
   if (statePersistTimer) return
   statePersistTimer = setTimeout(() => {
     statePersistTimer = null
-    persistState()
+    try { persistState() } catch (e: any) { logger.error(`保存签到状态失败: ${e.message}`) }
   }, 1000)
 }
 
@@ -181,6 +182,17 @@ export function takeLatestPendingQr(): { aid: string; info: PendingQr } | null {
   pendingQr.delete(aid)
   scheduleStatePersist()
   return { aid, info }
+}
+
+/** 有活动编号时只移除匹配项；没有编号且仅有一个待办时才允许推断。 */
+export function resolvePendingQr(aid?: string): { aid: string; info: PendingQr } | null {
+  sweepPending(pendingQr)
+  const id = aid ? String(aid) : pendingQr.size === 1 ? pendingQr.keys().next().value : undefined
+  if (!id || !pendingQr.has(id)) return null
+  const info = pendingQr.get(id)!
+  pendingQr.delete(id)
+  scheduleStatePersist()
+  return { aid: id, info }
 }
 
 

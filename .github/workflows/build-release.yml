@@ -47,15 +47,18 @@ jobs:
       - name: 解析并校验版本号
         id: ver
         shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            V="${{ github.event.inputs.version }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            V="$INPUT_VERSION"
           else
             V="${GITHUB_REF_NAME}"
           fi
           V="${V#v}"
-          if [ -z "$V" ]; then
-            echo "::error::未能解析出版本号"
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::版本号必须为 x.y.z"
             exit 1
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -63,7 +66,8 @@ jobs:
           echo "发布版本：$V"
           echo "package.json：$PKG"
           if [ "$PKG" != "$V" ]; then
-            echo "::warning title=版本号不一致::package.json 为 $PKG，发布版本为 $V；安装包文件名与内部版本号以 package.json 为准"
+            echo "::error title=版本号不一致::package.json 为 $PKG，发布版本为 $V"
+            exit 1
           fi
 
       - name: 缓存 Electron 与 electron-builder 二进制
@@ -81,6 +85,9 @@ jobs:
 
       - name: 编译 TypeScript
         run: npm run build
+
+      - name: 验证界面结构
+        run: npm run validate:ui
 
       - name: 测试（node:test 全量）
         # 测试不过就不打包：坏版本不该被装进用户机器
@@ -116,6 +123,9 @@ jobs:
           fi
           echo "--- 待上传资产 ---"
           ls -lh dist-electron/*.exe dist-electron/latest.yml dist-electron/*.blockmap
+
+      - name: 校验更新资产一致性
+        run: node scripts/verify-release.js dist-electron "${{ steps.ver.outputs.version }}"
 
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2

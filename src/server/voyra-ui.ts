@@ -2,9 +2,9 @@
  * Voyra UI foundation v3 · 学习通自动签到专属设计系统
  *
  * 定位：深空工作台（Deep Desk）—— 中性近黑画布 + 发丝线卡片 + 侧栏三段式 + 页头四要素，
- * 保留超星暖橙作为品牌 accent。契约见主仓库 D:/Voyra 个人网站/docs/voyra-suite-design-language.md
+ * 使用低饱和蓝灰作为强调色。契约见主仓库 D:/Voyra 个人网站/docs/voyra-suite-design-language.md
  * （Voyra 套件设计语言 v1），本文件落地该契约的「学习通自动签到」一份：
- * 中性色阶 / 字阶 / 间距 / 圆角 / 动效按 §3 全套件规范，accent 暖橙按 §4 保留。
+ * 中性色阶 / 字阶 / 间距 / 圆角 / 动效沿用统一规范，强调色按本软件独立维护。
  *
  * 说明（Voyra 个人网站说明 §2.7，2026-10-03）：五款软件自 2026-10-03 起不再共用任何 UI 源文件或生成副本，
  * 每款软件的设计系统由各自仓库独立维护。本文件即本软件自己的唯一 UI 数值来源，
@@ -26,27 +26,27 @@ export const VOYRA_UI_CSS = `/* ================================================
    ============================================================ */
 :root {
   /* ================= 色彩体系（浅色档 · 对等档，不是深色的反转） ================= */
-  --bg-canvas: #F5F5F6;       /* 画布底色 */
+  --bg-canvas: #F3F5F6;       /* 画布底色 */
   --bg-surface: #FFFFFF;      /* 一级卡片/面板/侧栏 */
-  --bg-surface-sub: #EFEFF1;  /* 二级沉底背景/输入框未聚焦底色 */
-  --bg-surface-hover: #E9E9EC;/* 悬停提亮 */
+  --bg-surface-sub: #EDF1F3;  /* 二级沉底背景/输入框未聚焦底色 */
+  --bg-surface-hover: #E6EBEE;/* 悬停提亮 */
 
   --ink-primary: #18181B;    /* 主文字 */
   --ink-secondary: #55565C;  /* 次级文本 */
-  --ink-tertiary: #77777F;   /* 弱化文本/元信息（4.6:1 on white，下限值不许再降） */
+  --ink-tertiary: #676C73;   /* 弱化文本/元信息，兼顾浅色面板上的可读性 */
   --ink-inverse: #FFFFFF;    /* 反白文字 */
 
   --line-dim: #E3E3E7;       /* 发丝线（分区） */
   --line-strong: #D4D4D9;    /* 结构描边/输入框外边框 */
-  --line-focus: rgba(24, 24, 27, 0.45);   /* 键盘聚焦描边 */
-  --ring-focus: 0 0 0 2px rgba(24, 24, 27, 0.45);  /* 焦点环：2px 实边 */
+  --line-focus: rgba(24, 24, 27, 0.55);   /* 键盘聚焦描边 */
+  --ring-focus: 0 0 0 2px rgba(24, 24, 27, 0.55);  /* 焦点环：2px 实边 */
 
-  /* 单一品牌色（超星暖橙，产品身份；浅色沿用已校对的深橙文字档） */
-  --brand-50: #FFF7ED;
-  --brand-100: #FFEDD5;
-  --brand-500: #F78A46;
-  --brand-600: #EF7429;
-  --brand-700: #C25E1A;
+  /* 蓝灰强调色：浅色模式的实心按钮同时满足白色文字对比度 */
+  --brand-50: #EFF4F7;
+  --brand-100: #E1EBF1;
+  --brand-500: #426987;
+  --brand-600: #355B7D;
+  --brand-700: #284C6B;
 
   /* 语义色（仅用于状态与警告）。
      无障碍约束（Voyra 说明 §0.9 第 3 条）：-dot 系列是低对比度色，只可用于
@@ -69,7 +69,7 @@ export const VOYRA_UI_CSS = `/* ================================================
 
   --status-idle-bg: #F5F5F4;
   --status-idle-line: #E7E5E4;
-  --status-idle-ink: #78716C;
+  --status-idle-ink: #69635E;
   --status-idle-dot: #A8A29E;
 
   /* ================= 字阶体系（套件规范 §3.3：8 档，不造第 9 档） ================= */
@@ -104,10 +104,10 @@ export const VOYRA_UI_CSS = `/* ================================================
   --r-full: 999px;/* 胶囊 */
 
   /* ================= 阴影体系（仅浮层允许阴影 + 1px 结构线；卡片只靠发丝线） ================= */
-  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
-  --shadow-md: 0 8px 24px -12px rgba(24, 24, 27, 0.18);
-  --shadow-lg: 0 16px 40px -12px rgba(24, 24, 27, 0.22);
-  --shadow-modal: 0 24px 60px -12px rgba(24, 24, 27, 0.24), 0 0 0 1px #D4D4D9;
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05), 0 3px 8px rgba(24, 24, 27, 0.03);
+  --shadow-md: 0 2px 6px rgba(24, 24, 27, 0.05), 0 8px 24px -12px rgba(24, 24, 27, 0.16);
+  --shadow-lg: 0 3px 10px rgba(24, 24, 27, 0.06), 0 16px 40px -12px rgba(24, 24, 27, 0.20);
+  --shadow-modal: 0 3px 12px rgba(24, 24, 27, 0.07), 0 24px 60px -12px rgba(24, 24, 27, 0.22), 0 0 0 1px #D4D4D9;
 
   /* ================= 动效时长与曲线（120 状态 / 180 入场显隐 / 240 浮层） ================= */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
@@ -121,14 +121,14 @@ export const VOYRA_UI_CSS = `/* ================================================
 
 /* ================= 深色档（默认主题 · 旗舰档） ================= */
 [data-theme="dark"] {
-  --bg-canvas: #0B0B0E;      /* 应用画布：中性近黑 */
-  --bg-surface: #131318;     /* 卡片/面板/侧栏 */
-  --bg-surface-sub: #1A1B20; /* 卡内沉底、输入框、表头 */
-  --bg-surface-hover: #22242B;/* 悬停/按压提亮 */
+  --bg-canvas: #10151B;      /* 应用画布：蓝灰近黑 */
+  --bg-surface: #171E25;     /* 卡片/面板/侧栏 */
+  --bg-surface-sub: #202932; /* 卡内沉底、输入框、表头 */
+  --bg-surface-hover: #2A3540;/* 悬停/按压提亮 */
 
   --ink-primary: #F4F4F5;    /* 主文字（15.8:1 on canvas） */
   --ink-secondary: #A7AAB1;  /* 次文字（8.5:1） */
-  --ink-tertiary: #80828B;   /* 弱文字/元信息（5.1:1 on canvas，下限值不许再降） */
+  --ink-tertiary: #9BA8B2;   /* 弱文字/元信息 */
   --ink-inverse: #0B0B0E;    /* 实心面上的反相文字 */
 
   --line-dim: rgba(255, 255, 255, 0.07);     /* 发丝线（分区） */
@@ -136,12 +136,12 @@ export const VOYRA_UI_CSS = `/* ================================================
   --line-focus: rgba(255, 255, 255, 0.55);
   --ring-focus: 0 0 0 2px rgba(255, 255, 255, 0.55);
 
-  /* 品牌暖橙（产品身份）：深色档主 accent 提到 #F5884A 量级 */
-  --brand-50: #241B14;
-  --brand-100: #322117;
-  --brand-500: #F5884A;
-  --brand-600: #EF7429;
-  --brand-700: #FF9B5E;
+  /* 深色模式用明亮但低饱和的蓝灰，保证文字与深色实心字可辨 */
+  --brand-50: #1B2A35;
+  --brand-100: #263B49;
+  --brand-500: #BDD1E0;
+  --brand-600: #A3BED3;
+  --brand-700: #C5D9E8;
 
   /* 语义底色降彩度：深色模式下高彩度的橙/绿/红底会把整块面板照成"发光"，
      这里只保留可辨识的色相倾向，状态本身由 -dot / -ink 承担。 */
@@ -165,10 +165,10 @@ export const VOYRA_UI_CSS = `/* ================================================
   --status-idle-ink: #A8A29E;
   --status-idle-dot: #78716C;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
-  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.60);
-  --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.66);
-  --shadow-modal: 0 24px 60px -12px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.13);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 3px 8px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.22), 0 8px 24px -12px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 3px 10px rgba(0, 0, 0, 0.25), 0 16px 40px -12px rgba(0, 0, 0, 0.60);
+  --shadow-modal: 0 3px 12px rgba(0, 0, 0, 0.30), 0 24px 60px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.13);
 
   color-scheme: dark;
 }
@@ -197,7 +197,7 @@ html { -webkit-text-size-adjust: 100%; }
 }
 
 /* 文本选择与滚动条主题化（Chromium） */
-::selection { background: rgba(247, 138, 70, 0.18); }
+::selection { background: rgba(87, 129, 160, 0.25); }
 
 /* 统一滚动条：与画布同族，弱化存在感 */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -216,8 +216,10 @@ html { -webkit-text-size-adjust: 100%; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
   }
 }

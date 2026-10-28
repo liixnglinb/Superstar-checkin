@@ -24,10 +24,12 @@ process.env.CONFIG_FILE = cfgFile
 const { DingTalkServer } = require('../build/server/dingtalk-server.js')
 const { before, after } = require('node:test')
 
+let suggestedDraft
 const srv = new DingTalkServer(0, '', {
   token: 'test-token-123',
   // 生产里由 index.ts 注入；测试只关心入参契约，给个最小桩
   setListening: (on) => ({ ok: true, listening: on, listeningCount: 0 }),
+  suggestTimetable: (draft) => { suggestedDraft = draft; return { filled: 0, details: [] } },
 })
 let base = ''
 
@@ -60,6 +62,23 @@ test('坏 JSON 与空请求体：400 且说明原因（旧实现回 500）', asy
   const empty = await call('POST', '/api/settings', undefined)
   assert.equal(empty.status, 400)
   assert.match(empty.json.message, /请求体为空/)
+})
+
+test('课表建议接收草稿并对损坏的 JSON 返回 400', async () => {
+  const draft = { 1: ['c1', null] }
+  const ok = await call('POST', '/api/timetable/suggest', { table: draft })
+  assert.equal(ok.status, 200)
+  assert.deepEqual(suggestedDraft, draft)
+  const bad = await call('POST', '/api/timetable/suggest', '{ broken')
+  assert.equal(bad.status, 400)
+  assert.match(bad.json.message, /JSON/)
+})
+
+test('免责声明存储未接入时不会虚报同意成功', async () => {
+  const result = await call('POST', '/api/disclaimer/accept', {})
+  assert.equal(result.status, 500)
+  assert.equal(result.json.ok, false)
+  assert.match(result.json.message, /未接入/)
 })
 
 test('越界值明确拒绝且不动旧值（旧实现静默丢弃仍回保存成功）', async () => {

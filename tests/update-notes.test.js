@@ -80,7 +80,7 @@ test('两个小标题的 ** 不许跨行配对（否则结尾会剩一个孤立 
 // —— 下载链守卫：v3.8.0~v3.11.0 的实测故障就是少了这一步 ——
 test('main.js 里 downloadUpdate 之前必须先 checkForUpdates', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8')
-  const at = src.indexOf('async function startUpdateDownload')
+  const at = src.indexOf('async function performUpdateDownload')
   assert.ok(at > 0, '找不到 startUpdateDownload')
   const body = src.slice(at, src.indexOf('\n  autoUpdater.on(', at))
   const c = body.indexOf('autoUpdater.checkForUpdates()')

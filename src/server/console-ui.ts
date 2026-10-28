@@ -2,7 +2,7 @@
  * 控制台 UI（软件主界面）—— 深空工作台版
  *
  * 设计气质：深空工作台（Deep Desk）—— 中性近黑画布 + 发丝线卡片 + 侧栏三段式 + 页头四要素，
- * 保留超星暖橙作为品牌 accent，深色为默认主题。契约见主仓库
+ * 使用低饱和蓝灰强调色，深色为默认主题。契约见主仓库
  * D:/Voyra 个人网站/docs/voyra-suite-design-language.md（套件设计语言 v1）。
  *
  * 三条重构原则：
@@ -422,7 +422,7 @@ export function getConsolePage(status: ConsoleStatus, token: string, options?: {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>学习通自动签到</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#EF7429">
+<meta name="theme-color" content="#10151B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -469,27 +469,28 @@ button{font-family:inherit}
 
 /* ===== 侧栏（模块 1 · 三段式：品牌块 / 分组导航 / 底部状态块） ===== */
 .app-body{display:flex;flex:1;overflow:hidden;min-height:0}
-.app-sidebar{width:232px;flex-shrink:0;background:var(--bg-surface);border-right:1px solid var(--line-dim);display:flex;flex-direction:column;padding:var(--sp-4) var(--sp-3);gap:var(--sp-4);min-height:0}
-.sidebar-brand{display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-2);min-width:0}
+.app-sidebar{width:232px;flex-shrink:0;background:var(--bg-surface);border-right:1px solid var(--line-dim);display:flex;flex-direction:column;padding:var(--sp-4) var(--sp-3);gap:var(--sp-5);min-height:0}
+.sidebar-brand{display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-3);min-height:44px;min-width:0}
 .sidebar-brand .app-mark{width:22px;height:22px}
 .sidebar-brand-name{min-width:0;display:flex;flex-direction:column;gap:1px}
 .sidebar-brand-title{font-size:var(--text-sm);font-weight:600;color:var(--ink-primary);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sidebar-brand-ver{font-size:var(--text-2xs);color:var(--ink-tertiary);font-family:var(--font-mono)}
-.nav-groups{flex:1;display:flex;flex-direction:column;gap:var(--sp-4);overflow-y:auto;min-height:0;scrollbar-width:none}
+.nav-groups{flex:1;display:flex;flex-direction:column;gap:var(--sp-5);overflow-y:auto;min-height:0;scrollbar-width:none}
 .nav-groups::-webkit-scrollbar{display:none}
-.nav-section{display:flex;flex-direction:column;gap:3px}
-.nav-section-label{font-size:var(--text-2xs);color:var(--ink-tertiary);font-weight:600;padding:0 var(--sp-3);margin-bottom:3px;letter-spacing:.02em}
-.nav-item{display:flex;align-items:center;gap:var(--sp-3);height:36px;padding:0 var(--sp-3);border-radius:var(--r-xs);border:1px solid transparent;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);font-weight:500;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);text-align:left;width:100%}
+.nav-section{display:flex;flex-direction:column;gap:var(--sp-1)}
+.nav-section-label{font-size:var(--text-2xs);color:var(--ink-tertiary);font-weight:600;padding:0 var(--sp-3);margin-bottom:var(--sp-1);letter-spacing:.02em}
+.nav-item{display:flex;align-items:center;gap:var(--sp-3);min-height:44px;padding:10px var(--sp-3);border-radius:var(--r-xs);border:1px solid transparent;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);line-height:1.5;font-weight:500;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);text-align:left;width:100%}
 .nav-item:hover{background:var(--bg-surface-hover);color:var(--ink-primary)}
+.nav-item:focus-visible,.theme-toggle:focus-visible{outline:2px solid var(--brand-500);outline-offset:2px}
 /* 激活态 = hover 级底色 + 主文字色（不加彩色左边条，参考图语言） */
 .nav-item.active{background:var(--bg-surface-hover);color:var(--ink-primary);font-weight:600}
-.nav-icon{width:16px;height:16px;flex-shrink:0}
+.nav-icon{width:12px;height:12px;flex-shrink:0}
 .nav-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 底部状态块：引擎心跳一行 + 主题切换 + 版本 */
 .sidebar-foot{display:flex;flex-direction:column;gap:var(--sp-3)}
-.sidebar-foot-row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);padding:0 var(--sp-1)}
+.sidebar-foot-row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);padding:0 var(--sp-3)}
 .sidebar-ver{font-size:var(--text-2xs);color:var(--ink-tertiary);font-family:var(--font-mono);white-space:nowrap}
-.theme-toggle{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--r-full);border:1px solid var(--line-dim);background:transparent;color:var(--ink-secondary);font-size:var(--text-2xs);font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.theme-toggle{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 10px;border-radius:var(--r-full);border:1px solid var(--line-dim);background:transparent;color:var(--ink-secondary);font-size:var(--text-2xs);font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .theme-toggle:hover{background:var(--bg-surface-hover);color:var(--ink-primary)}
 .theme-toggle svg{width:14px;height:14px;flex-shrink:0}
 /* 引擎心脏监视器 */
@@ -512,12 +513,17 @@ button{font-family:inherit}
 .page-crumb{display:flex;align-items:center;gap:6px;font-size:var(--text-2xs);color:var(--ink-tertiary);margin-bottom:4px}
 .page-crumb .crumb-sep{color:var(--ink-tertiary);opacity:.7}
 .page-crumb .crumb-page{color:var(--ink-secondary);font-weight:600}
-.page-title{font-size:var(--text-lg);font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.page-title{font-size:var(--text-lg);font-weight:600;letter-spacing:-.02em;line-height:1.2;text-wrap:balance}
 .page-sub{font-size:var(--text-sm);color:var(--ink-tertiary);margin-top:3px}
 .top-actions{display:flex;gap:var(--sp-2);flex-shrink:0}
 .view{display:none}
 .view.active{display:block;animation:fadeIn var(--dur-base) var(--ease-out)}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.view.is-leaving{display:block;position:fixed;z-index:3;pointer-events:none;overflow:hidden}
+@keyframes fadeIn{from{opacity:.94;transform:translateY(3px)}to{opacity:1;transform:none}}
+.view.active>.card,.view.active>.stats-grid,.view.active>#trendChart,.view.active>.overview-lower-grid{animation:contentIn var(--dur-slow) var(--ease-out) backwards}
+.view.active>:is(.card,.stats-grid,#trendChart,.overview-lower-grid):nth-child(2){animation-delay:100ms}
+.view.active>:is(.card,.stats-grid,#trendChart,.overview-lower-grid):nth-child(n+3){animation-delay:200ms}
+@keyframes contentIn{from{opacity:.96;transform:translateY(3px)}to{opacity:1;transform:none}}
 
 /* ===== 服务通告（模块 10） ===== */
 .service-notice{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-5);border:1px solid var(--status-warn-line);border-radius:var(--r-lg);background:var(--status-warn-bg)}
@@ -562,8 +568,9 @@ button{font-family:inherit}
 
 /* ===== 设置页二级分类（下划线 Tab + 面板） ===== */
 .settings-tabs{display:flex;gap:var(--sp-4);flex-wrap:wrap;border-bottom:1px solid var(--line-dim);margin-bottom:var(--sp-5)}
-.settings-tab{border:none;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);font-weight:600;padding:8px 2px;margin-bottom:-1px;border-bottom:2px solid transparent;cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.settings-tab{border:none;background:transparent;color:var(--ink-secondary);font-size:var(--text-sm);font-weight:600;min-height:44px;padding:8px 2px;margin-bottom:-1px;border-bottom:2px solid transparent;cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .settings-tab:hover{color:var(--ink-primary)}
+.settings-tab:focus-visible{outline:2px solid var(--brand-500);outline-offset:-2px}
 .settings-tab.active{color:var(--ink-primary);border-bottom-color:var(--brand-500)}
 .settings-pane{display:none}
 .settings-pane.active{display:block;animation:fadeIn var(--dur-base) var(--ease-out)}
@@ -572,6 +579,7 @@ button{font-family:inherit}
 .switch{width:40px;height:22px;border-radius:var(--r-full);border:1px solid var(--line-strong);background:var(--bg-surface-sub);position:relative;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);flex-shrink:0;padding:0}
 .switch .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#FFF;box-shadow:0 1px 3px rgba(0,0,0,.22);transition:left var(--dur-fast) var(--ease-spring)}
 .switch.on{background:var(--brand-600);border-color:var(--brand-600)}
+.switch.on .knob{background:var(--ink-inverse)}
 .switch.on .knob{left:20px}
 /* 课程行开关（原生 checkbox + 轨道） */
 .switch-control{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0}
@@ -579,11 +587,15 @@ button{font-family:inherit}
 .switch-track{position:absolute;inset:0;cursor:pointer;background-color:var(--line-strong);transition:background-color var(--dur-fast) var(--ease-out);border-radius:var(--r-full)}
 .switch-track::before{position:absolute;content:"";height:16px;width:16px;left:2px;bottom:2px;background-color:#FFF;transition:transform var(--dur-fast) var(--ease-spring);border-radius:var(--r-full);box-shadow:0 1px 2px rgba(0,0,0,.2)}
 .switch-control input:checked + .switch-track{background-color:var(--brand-600)}
+.switch-control input:checked + .switch-track::before{background-color:var(--ink-inverse)}
 .switch-control input:checked + .switch-track::before{transform:translateX(16px)}
 .switch-control input:focus-visible + .switch-track{outline:2px solid var(--brand-500);outline-offset:2px}
 
 /* ===== 卡片 / 面板（surface + 1px 发丝线 + r12，无阴影；阴影只归浮层） ===== */
 .card{background:var(--bg-surface);border:1px solid var(--line-dim);border-radius:var(--r-lg);margin-bottom:var(--sp-5);overflow:hidden}
+.card .stat-card,.card .course-card,.card .acct-stat-card{border-radius:var(--r-xs)}
+.card-title,.card-desc{text-wrap:balance}
+.status-chip,.hb-meta-row,.data-table,.stat-num,.stat-box-val,.sidebar-ver{font-variant-numeric:tabular-nums}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--line-dim)}
 .card-title{font-size:var(--text-base);font-weight:600;margin:0}
 .card-desc{font-size:var(--text-xs);color:var(--ink-secondary);margin:3px 0 0}
@@ -754,18 +766,18 @@ button{font-family:inherit}
 .log-lvl-btn:hover{color:var(--ink-primary)}
 .log-lvl-btn.active{color:var(--ink-primary);border-bottom-color:var(--brand-500)}
 .log-scroll{position:relative}
-.log-box{background:#16130F;color:#D8D2C8;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.75;padding:var(--sp-4) var(--sp-5);max-height:56vh;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
-.log-box::-webkit-scrollbar-thumb{background:#3A342C;border-color:#16130F}
+.log-box{background:#101820;color:#D4DFE6;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.75;padding:var(--sp-4) var(--sp-5);max-height:56vh;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.log-box::-webkit-scrollbar-thumb{background:#40505C;border-color:#101820}
 .log-line{padding:1px 0}
-.log-line .log-ts{color:#8A8175;margin-right:8px}
+.log-line .log-ts{color:#A0AFBA;margin-right:8px}
 .log-line .log-lvl{font-weight:700;margin-right:8px}
-.log-line.level-debug .log-lvl{color:#8A8175}
+.log-line.level-debug .log-lvl{color:#A0AFBA}
 .log-line.level-info .log-lvl{color:#7FB3E8}
 .log-line.level-warn .log-lvl{color:#F0C040}
 .log-line.level-error .log-lvl{color:#FF8A80}
 .log-line.level-warn .log-msg{color:#F3DFA8}
 .log-line.level-error .log-msg{color:#FFB4AE}
-.log-empty{color:#6B7280;text-align:center;padding:24px 0}
+.log-empty{color:#A0AFBA;text-align:center;padding:24px 0}
 .log-pin{position:absolute;right:18px;bottom:18px;display:none;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:var(--r-full);border:1px solid var(--line-strong);background:var(--bg-surface);color:var(--ink-secondary);font-size:var(--text-xs);font-weight:600;cursor:pointer;box-shadow:var(--shadow-md);z-index:5}
 .log-pin.show{display:inline-flex}
 .log-pin:hover{color:var(--ink-primary)}
@@ -866,7 +878,7 @@ button{font-family:inherit}
 .qr-mobile-warn{font-size:var(--text-xs);color:var(--status-warn-ink);background:var(--status-warn-bg);border-radius:var(--r-xs);padding:8px 10px;margin-top:var(--sp-2);line-height:1.65}
 
 /* ===== 拖拽遮罩 ===== */
-.drag-mask{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;background:rgba(247,138,70,.07);pointer-events:none}
+.drag-mask{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;background:rgba(87,129,160,.09);pointer-events:none}
 .drag-mask.show{display:flex}
 .drag-box{border:2px dashed var(--brand-600);border-radius:var(--r-lg);background:var(--bg-surface);padding:36px 60px;text-align:center;color:var(--brand-700);font-size:var(--text-lg);font-weight:600;box-shadow:var(--shadow-lg)}
 .drag-box small{display:block;margin-top:6px;font-size:var(--text-sm);font-weight:400;color:var(--ink-secondary)}
@@ -924,9 +936,11 @@ button{font-family:inherit}
   .nav-groups{flex:1;flex-direction:row;gap:0;justify-content:space-around;align-items:stretch;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
   .nav-section{display:contents}
   .nav-section-label{display:none}
-  .nav-item{flex:1 0 auto;flex-direction:column;gap:3px;justify-content:center;align-items:center;height:auto;min-width:52px;min-height:56px;padding:8px 2px 6px;font-size:var(--text-2xs);border-radius:0;text-align:center;border:none}
+  .nav-item{flex:1 1 0;width:auto;flex-direction:column;gap:3px;justify-content:center;align-items:center;height:auto;min-width:48px;min-height:56px;padding:8px 2px 6px;font-size:var(--text-2xs);border-radius:0;text-align:center;border:none}
   .nav-item .nav-icon{width:20px;height:20px}
   .nav-item.active{background:none;color:var(--brand-600)}
+  .settings-tabs{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+  .settings-tab{flex:0 0 auto;white-space:nowrap}
   .app-main{padding:var(--sp-4) var(--sp-4) calc(76px + env(safe-area-inset-bottom,0px))}
   .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3)}
   .stat-box-val{font-size:var(--text-xl)}
@@ -1027,7 +1041,7 @@ ${VOYRA_UI_CSS}
       <nav class="nav-groups" id="nav" aria-label="主功能导航">
         <div class="nav-section">
           <div class="nav-section-label">工作台</div>
-          <button class="nav-item active" data-view="overview">${ICONS.appMark.replace('class="app-mark"', 'class="nav-icon app-mark"')}<span class="nav-label">总览</span></button>
+          <button class="nav-item active" data-view="overview" aria-current="page">${ICONS.appMark.replace('class="app-mark"', 'class="nav-icon app-mark"')}<span class="nav-label">总览</span></button>
           <button class="nav-item" data-view="courses">${ICONS.courses.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">课程清单</span></button>
           <button class="nav-item" data-view="schedule">${ICONS.calendar.replace('<svg', '<svg class="nav-icon"')}<span class="nav-label">课表扫描</span></button>
         </div>
@@ -1378,6 +1392,7 @@ ${VOYRA_UI_CSS}
         <p>2. 如使用者不同意本声明的任何条款，请点击「不同意并退出」，停止使用并卸载本软件。</p>
       </div>
     </div>
+    <div id="disclaimerError" role="alert" style="display:none;padding:0 20px 12px;color:var(--status-err-ink)"></div>
     <div class="modal-foot">
       <button class="btn btn-danger" id="disclaimerRefuse">不同意并退出</button>
       <button class="btn btn-primary" id="disclaimerAgree">同意并继续</button>
@@ -1459,7 +1474,7 @@ ${VOYRA_UI_CSS}
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
   function fmtTime(ts){if(!ts)return '—';var d=new Date(ts),n=new Date();var hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');if(d.toDateString()===n.toDateString())return '今天 '+hm;var y=new Date(n.getTime()-86400000);if(d.toDateString()===y.toDateString())return '昨天 '+hm;return (d.getMonth()+1)+'月'+d.getDate()+'日 '+hm}
   function typeText(t){var m={normal:'普通',qr:'二维码',location:'位置'};return m[t]||t}
-  function isOk(r){return /成功|✅|已签到/.test(String(r==null?'':r))}
+  function isOk(r){var t=String(r==null?'':r);return !/失败|未确认|未签到|unsuccessful|^failed\\b/i.test(t)&&(/^success(?:\\s|\\[|$)/i.test(t)||/签到成功|您已签到|✅/.test(t))}
   /**
    * 统一请求出口：超时 + 取消 + 有限重试。
    * · 没有超时的 fetch 在后端挂起时会永远 pending，按钮停在 busy 态只能刷新页面救回来；
@@ -1509,11 +1524,38 @@ ${VOYRA_UI_CSS}
   function restoreScroll(v) {
     try { if (appMain) appMain.scrollTop = Number(sessionStorage.getItem('cx-scroll-' + v) || 0) } catch (e) { }
   }
+  // 离开的面板只负责视觉过渡，不占布局，也不能接收输入；再次切换时立即取消。
+  var leavingPanel = null
+  var leavingAnimation = null
+  function clearLeavingPanel() {
+    if(leavingAnimation){leavingAnimation.onfinish=null;leavingAnimation.cancel();leavingAnimation=null}
+    if(!leavingPanel)return
+    leavingPanel.classList.remove('is-leaving')
+    leavingPanel.removeAttribute('aria-hidden')
+    leavingPanel.removeAttribute('inert')
+    ;['top','left','width','max-height'].forEach(function(prop){leavingPanel.style.removeProperty(prop)})
+    leavingPanel=null
+  }
   function show(v){
     if(VIEWS.indexOf(v)<0)v='overview'
     if(v!==activeView)saveScroll()
+    clearLeavingPanel()
+    var previous=document.querySelector('.view.active')
+    var shouldAnimate=previous && previous.dataset.view!==v && previous.animate && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    if(shouldAnimate){
+      var rect=previous.getBoundingClientRect()
+      leavingPanel=previous
+      previous.style.top=rect.top+'px';previous.style.left=rect.left+'px';previous.style.width=rect.width+'px'
+      previous.style.maxHeight=Math.max(0,window.innerHeight-Math.max(rect.top,0))+'px'
+      previous.setAttribute('aria-hidden','true');previous.setAttribute('inert','')
+      previous.classList.add('is-leaving')
+    }
     activeView=v
     document.querySelectorAll('.view').forEach(function(el){el.classList.toggle('active',el.dataset.view===v)})
+    if(shouldAnimate){
+      leavingAnimation=previous.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(-3px)'}],{duration:130,easing:'ease-out'})
+      leavingAnimation.onfinish=clearLeavingPanel
+    }
     document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.dataset.view===v);el.setAttribute('aria-current',el.dataset.view===v?'page':'false')})
     var pt=$('pageTitle');if(pt)pt.textContent=TITLES[v]
     var ps=$('pageSub');if(ps)ps.textContent=SUBS[v]||''
@@ -1587,7 +1629,11 @@ ${VOYRA_UI_CSS}
   var disAgree=$('disclaimerAgree')
   if(disAgree)disAgree.addEventListener('click',function(){
     disAgree.disabled=true
-    apiFetch('/api/disclaimer/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(function(){}).then(function(){disAgree.disabled=false;closeDisclaimer()})
+    var err=$('disclaimerError');if(err){err.style.display='none';err.textContent=''}
+    apiFetch('/api/disclaimer/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(d){
+      if(!d.ok||!d.accepted)throw new Error(d.message||'未能保存同意记录')
+      closeDisclaimer()
+    }).catch(function(e){if(err){err.textContent='保存失败：'+((e&&e.message)||'请重试');err.style.display=''}}).finally(function(){disAgree.disabled=false})
   })
   var disRefuse=$('disclaimerRefuse')
   if(disRefuse)disRefuse.addEventListener('click',function(){
@@ -1652,7 +1698,7 @@ ${VOYRA_UI_CSS}
   function updateActionFor(s){
     if(s.phase==='downloading')return{label:'下载中…',disabled:true}
     if(s.phase==='ready')return{label:'安装并重启',disabled:false,act:'install'}
-    if(s.phase==='error')return{label:'重试更新',disabled:false,act:'download'}
+    if(s.phase==='error')return s.latest?{label:'重试下载',disabled:false,act:'download'}:{label:'重新检查',disabled:false,act:'check'}
     if(s.phase==='available')return{label:'更新并重启',disabled:false,act:'download'}
     return null
   }
@@ -1737,6 +1783,7 @@ ${VOYRA_UI_CSS}
   }
   function showUpdateConfirm(){
     if(!window.updateCtl){toast('自动更新只在安装版里可用（浏览器打开时无效）','err');return}
+    if(upd.phase==='error'&&!upd.latest){openUpdateModal();return}
     if(!hasNewVersion(upd)&&upd.phase!=='error'){openUpdateModal();return}
     var size=upd.total?'（更新包约 '+fmtSize(upd.total)+'）':''
     var head=upd.phase==='ready'
@@ -1764,17 +1811,18 @@ ${VOYRA_UI_CSS}
     updBox.addEventListener('blur',hideUpdHover)
   }
   if(chipUpdate)chipUpdate.addEventListener('click',function(){showUpdateConfirm()})
-  if(updateGo)updateGo.addEventListener('click',function(){var a=updateActionFor(upd);if(!a||a.disabled)return;showUpdateConfirm()})
+  if(updateGo)updateGo.addEventListener('click',function(){var a=updateActionFor(upd);if(!a||a.disabled)return;if(a.act==='check'){requestUpdateCheck();return}showUpdateConfirm()})
   if(updateLater)updateLater.addEventListener('click',function(){if(updateModal)updateModal.classList.remove('show');hideUpdHover()})
   var updateClose=$('updateClose')
   if(updateClose)updateClose.addEventListener('click',function(){if(updateModal)updateModal.classList.remove('show');hideUpdHover()})
   var updateCheckBtn=$('updateCheckBtn')
-  if(updateCheckBtn)updateCheckBtn.addEventListener('click',function(){
+  function requestUpdateCheck(){
     if(!window.updateCtl){toast('自动更新只在安装版里可用（浏览器打开时无效）','err');return}
     openUpdateModal()
     renderUpd({phase:'checking',current:upd.current,latest:upd.latest,notes:upd.notes,source:upd.source})
     window.updateCtl.check().then(function(){refreshUpdState()}).catch(function(){toast('检查更新失败，请检查网络后重试','err');refreshUpdState()})
-  })
+  }
+  if(updateCheckBtn)updateCheckBtn.addEventListener('click',requestUpdateCheck)
   if(window.updateCtl&&window.updateCtl.onState)window.updateCtl.onState(function(s){renderUpd(s)})
   refreshUpdState()
   setInterval(refreshUpdState,20000)
@@ -2467,7 +2515,7 @@ ${VOYRA_UI_CSS}
   })
 
   /* ===== 填写课表（模块 4） ===== */
-  var ttState={table:null,slots:[],weekdays:[],courses:[],suggested:{}}
+  var ttState={table:null,savedTable:null,savedComplete:false,slots:[],weekdays:[],courses:[],suggested:{}}
   function ttEsc(s){return esc(String(s==null?'':s))}
   function ttRender(){
     var body=$('ttBody');if(!body)return
@@ -2482,7 +2530,8 @@ ${VOYRA_UI_CSS}
         var cur=(ttState.table&&ttState.table[String(d.value)])?ttState.table[String(d.value)][s.index]:''
         var sug=ttState.suggested[String(d.value)+'-'+s.index]
         var cls='tt-cell '+(cur?'tt-filled':'tt-empty')+(sug&&String(sug)===String(cur)?' tt-suggested':'')
-        html+='<td><select class="'+cls+'" data-dow="'+d.value+'" data-slot="'+s.index+'">'+opts+'</select></td>'
+        var missing=cur&&!ttState.courses.some(function(c){return String(c.courseId)===String(cur)})
+        html+='<td><select class="'+cls+'" data-dow="'+d.value+'" data-slot="'+s.index+'">'+opts+(missing?'<option value="'+ttEsc(cur)+'">'+ttEsc(cur)+'（课程已不在列表中）</option>':'')+'</select></td>'
       })
       html+='</tr>'
     })
@@ -2514,34 +2563,30 @@ ${VOYRA_UI_CSS}
     if(bar)bar.style.width=pct+'%'
     if(wrap)wrap.setAttribute('aria-valuenow',String(pct))
     if(wrap)wrap.className='tt-progress '+(filled===all.length&&all.length?'is-ok':pct>0?'is-warn':'')
-    if(badge)badge.textContent=all.length?(filled===all.length?(all.length+'/'+all.length+' 已填满 · 严格按节扫描'):('未填满（'+filled+'/'+all.length+'）· 当前走全天兜底轮询')):'正在读取课表…'
+    var draft=ttCollect(),dirty=ttState.weekdays.some(function(d){return ttState.slots.some(function(s){
+      var day=String(d.value),saved=ttState.savedTable&&ttState.savedTable[day]
+      return String((draft[day]||[])[s.index]||'')!==String((saved||[])[s.index]||'')
+    })})
+    var missingSaved=ttState.weekdays.some(function(d){return (ttState.savedTable&&ttState.savedTable[String(d.value)]||[]).some(function(id){return id&&!ttState.courses.some(function(c){return String(c.courseId)===String(id)})})})
+    var mode=missingSaved?'已保存课表含失效课程，该时段兜底轮询':ttState.savedComplete?'当前按已保存课表扫描':'当前在扫描时段内兜底轮询'
+    if(badge)badge.textContent=all.length?(filled+'/'+all.length+' 已填'+(dirty?' · 未保存 · ':' · ')+mode):'正在读取课表…'
     var warn=$('ttWarn'),ok=$('ttOk')
-    if(warn)warn.style.display=(all.length&&filled<all.length)?'':'none'
-    if(ok)ok.style.display=(all.length>0&&filled===all.length)?'':'none'
+    if(warn){warn.style.display=(all.length&&(filled<all.length||dirty||missingSaved))?'':'none';warn.textContent=missingSaved?'已保存课表含失效课程，请重新选择并保存；'+mode+'。':dirty?'课表修改尚未保存；'+mode+'。请填满全部格子后保存。':('课表尚未填满；'+mode+'。请填满全部格子后保存。')}
+    if(ok){ok.style.display=(all.length>0&&filled===all.length&&!dirty&&ttState.savedComplete&&!missingSaved)?'':'none';ok.textContent='课表已保存，扫描将按已保存的课表进行。'}
   }
   function ttLoad(){
     apiFetch('/api/timetable').then(function(r){return r.json()}).then(function(d){
       if(!d.ok){var b=$('ttBody');if(b)b.innerHTML='<tr><td colspan="6" class="cell-empty">'+ttEsc(d.message||'加载失败')+'</td></tr>';return}
-      ttState.table=d.table||{};ttState.slots=d.slots||[];ttState.weekdays=d.weekdays||[];ttState.courses=d.courses||[]
+      ttState.table=d.table||{};ttState.savedTable=d.table||{};ttState.savedComplete=!!(d.status&&d.status.complete);ttState.slots=d.slots||[];ttState.weekdays=d.weekdays||[];ttState.courses=d.courses||[]
       ttState.suggested={}
       ttRender()
-      var st=d.status||{}
-      var warn=$('ttWarn'),ok=$('ttOk')
-      if(warn){
-        warn.style.display=st.complete?'none':''
-        if(!st.complete){
-          var names=(st.emptySlots||[]).slice(0,12).map(function(e){return e.weekdayName+e.label}).join('、')
-          var more=(st.emptySlots||[]).length>12?' 等 '+(st.emptySlots.length-12)+' 处':''
-          warn.innerHTML='<b>⚠ 课表未填完（'+st.filled+'/'+st.total+'）</b>务必把所有格子填完，否则该时段的签到无法被识别，只能手动签到。<br>未填：'+ttEsc(names)+ttEsc(more)
-        }
-      }
-      if(ok&&st.complete)ok.innerHTML='✅ 课表已填完（'+st.filled+'/'+st.total+'），扫描将严格按这张课表进行'
     }).catch(function(){var b=$('ttBody');if(b)b.innerHTML='<tr><td colspan="6" class="cell-empty">加载失败</td></tr>'})
   }
   var ttBodyEl=$('ttBody')
   if(ttBodyEl){
     ttBodyEl.addEventListener('change',function(e){
       var sel=e.target.closest('select.tt-cell');if(!sel)return
+      delete ttState.suggested[String(sel.getAttribute('data-dow'))+'-'+sel.getAttribute('data-slot')]
       sel.className='tt-cell '+(sel.value?'tt-filled':'tt-empty')
       ttUpdateCount()
     })
@@ -2551,13 +2596,17 @@ ${VOYRA_UI_CSS}
   if(ttAutoBtn)ttAutoBtn.addEventListener('click',function(){
     var msg=$('ttMsg')
     ttAutoBtn.disabled=true
-    apiFetch('/api/timetable/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(d){
+    apiFetch('/api/timetable/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:ttCollect()})}).then(function(r){return r.json()}).then(function(d){
       ttAutoBtn.disabled=false
       if(!d.ok){if(msg){msg.textContent='❌ '+(d.message||'生成失败');msg.style.color='var(--status-err-ink)'}return}
-      ttState.table=d.table||ttState.table
-      var det=(d.details||[])
-      ttState.suggested={}
-      det.forEach(function(x){ttState.suggested[String(x.weekday)+'-'+x.slot]=true})
+      // 请求期间用户可能继续编辑；只向此刻仍为空的格子写入建议。
+      ttState.table=ttCollect()
+      var det=[]
+      ;(d.details||[]).forEach(function(x){
+        var day=String(x.weekday),slot=Number(x.slot),id=String(x.courseId||'')
+        if(!ttState.table[day]||slot<0||slot>=ttState.slots.length||ttState.table[day][slot]||!ttState.courses.some(function(c){return String(c.courseId)===id}))return
+        ttState.table[day][slot]=id;ttState.suggested[day+'-'+slot]=id;det.push(x)
+      })
       ttRender()
       if(msg){
         msg.style.color='var(--status-ok-ink)'
@@ -2579,10 +2628,7 @@ ${VOYRA_UI_CSS}
         if(d.ok){ttState.table=table;ttState.suggested={};ttLoad()}
       }).catch(function(e){ttSaveBtn.disabled=false;ttSaveBtn.textContent='保存课表';if(msg){msg.textContent='❌ 保存失败：' + ((e&&e.message)||'未知错误');msg.style.color='var(--status-err-ink)'}})
     }
-    if(filled<all){
-      askConfirm({title:'课表尚未填满',text:'当前仍有 '+(all-filled)+' 个时段未选择课程。保存未填满的课表将导致轮询无法按节次精确锁定，只能走全天兜底轮询。是否仍要提交？',okText:'仍要保存',danger:true}).then(function(yes){if(yes)doSave()})
-      return
-    }
+    if(filled<all){if(msg){msg.textContent='❌ 还有 '+(all-filled)+' 个时段未选择课程，请填满后保存。';msg.style.color='var(--status-err-ink)'}return}
     doSave()
   })
   var ttClearBtn=$('ttClearBtn')

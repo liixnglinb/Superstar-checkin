@@ -175,6 +175,36 @@ test('填满后保存成功，且状态显示 40/40', () => {
   assert.equal(getTimetableStatus().emptySlots.length, 0)
 })
 
+test('写入失败时报告失败，保留旧课表和磁盘文件', () => {
+  const dir = freshStore()
+  const original = fullTable({ '1-0': 'old-course' })
+  assert.equal(saveTimetable(original).ok, true)
+  const filename = path.join(dir, 'timetable.json')
+  const before = fs.readFileSync(filename, 'utf8')
+  const rename = fs.renameSync
+  try {
+    fs.renameSync = () => { throw new Error('模拟磁盘写入失败') }
+    const result = saveTimetable(fullTable({ '1-0': 'new-course' }))
+    assert.equal(result.ok, false)
+    assert.match(result.message, /保存失败/)
+    assert.equal(getTimetable()['1'][0], 'old-course')
+    assert.equal(fs.readFileSync(filename, 'utf8'), before)
+  } finally {
+    fs.renameSync = rename
+  }
+})
+
+test('对象与空白不能充当课程 ID 或使课表显示已填满', () => {
+  freshStore()
+  const invalid = fullTable()
+  invalid['1'][0] = { id: 'course' }
+  invalid['1'][1] = '   '
+  const result = saveTimetable(invalid)
+  assert.equal(result.ok, false)
+  assert.equal(result.status.filled, 38)
+  assert.equal(isTimetableComplete(), false)
+})
+
 test('保存会把结构规整为完整 5×8（缺的补 null、非法值剔除）', () => {
   freshStore()
   const messy = { 1: ['a', 'b'], 3: [null, '', 'c'] }

@@ -10,6 +10,7 @@ import { PollListener } from './listeners/poll-listener'
 import { CheckinHandler } from './handlers/checkin-handler'
 import { NotificationManager } from './notifiers'
 import { CheckinEngine } from './core/checkin-engine'
+import { isSuccessfulRecord } from './utils/checkin-result'
 import { getCourseList, getCourseActivities, shouldPollActivity, type CourseInfo } from './core/course'
 import { initLocationStore } from './utils/location'
 import {
@@ -40,7 +41,7 @@ import {
   shouldRetryFail,
   setPendingQr,
   initSignState,
-  takeLatestPendingQr,
+  resolvePendingQr,
   hasPendingQr,
   isProcessed,
 } from './providers/sign-state'
@@ -201,14 +202,13 @@ async function main() {
     }
     try {
       const history = checkinHandler.getHistory()
-      const okRe = /成功|✅|已签到/
-      const successCount = history.filter((r: any) => okRe.test(r.message || r.result)).length
+      const successCount = history.filter(isSuccessfulRecord).length
       // 课程签到统计（每门课成功/失败次数，供课程页展示）
       const statsMap = new Map<string, { success: number; fail: number }>()
       for (const r of history as any[]) {
         const k = r.courseName || '未知课程'
         const e = statsMap.get(k) || { success: 0, fail: 0 }
-        if (okRe.test((r as any).message || (r as any).result)) e.success++
+        if (isSuccessfulRecord(r)) e.success++
         else e.fail++
         statsMap.set(k, e)
       }
@@ -222,7 +222,7 @@ async function main() {
       for (const r of history as any[]) {
         const uname = r.account || r.accountName || '未知账号'
         const e = acctStatsMap.get(uname) || { username: uname, name: uname, success: 0, fail: 0, lastTime: 0 }
-        if (okRe.test(r.message || r.result)) e.success++
+        if (isSuccessfulRecord(r)) e.success++
         else e.fail++
         if ((r.timestamp || 0) > e.lastTime) e.lastTime = r.timestamp || 0
         acctStatsMap.set(uname, e)
@@ -237,7 +237,7 @@ async function main() {
         const d = new Date(ts)
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         const e = dayMap.get(key) || { success: 0, fail: 0 }
-        if (okRe.test(r.message || r.result)) e.success++
+        if (isSuccessfulRecord(r)) e.success++
         else e.fail++
         dayMap.set(key, e)
       }
@@ -262,7 +262,7 @@ async function main() {
       dayStart.setHours(0, 0, 0, 0)
       const dayStartTs = dayStart.getTime()
       const todayRecords = history.filter((r: any) => (r.timestamp || 0) >= dayStartTs)
-      const todaySuccess = todayRecords.filter((r: any) => okRe.test(r.message || r.result)).length
+      const todaySuccess = todayRecords.filter(isSuccessfulRecord).length
       const todayStats = { total: todayRecords.length, success: todaySuccess, fail: todayRecords.length - todaySuccess }
       return {
         ...base,
@@ -293,7 +293,7 @@ async function main() {
         successCount,
         failCount: history.length - successCount,
         todayStats,
-        cookieValid: !!primaryMeta.cookie,
+        cookieValid: getPrimaryCookieValid(),
         imConnected: watchdog.imConnected,
         /** 钉钉图片通道（Stream 模式）状态：是否已启用 / 已配置凭据 / 已连接 */
         dingtalkStreamEnabled: !!config.dingtalk?.stream?.enabled,
@@ -318,13 +318,14 @@ async function main() {
 
   // 重新拉取课程列表：小课程/新课程未出现时手动刷新，并重建轮询监听
   async function refreshCourses(): Promise<{ ok: boolean; count: number; message: string }> {
-    if (!config.accounts.length || !primaryMeta.cookie) {
+    if (!config.accounts.length || !getPrimaryMeta().cookie) {
       return { ok: false, count: 0, message: '未配置账号，无法刷新课程列表' }
     }
     try {
-      const freshResults = await Promise.allSettled(
-        configuredMetas.filter(meta => meta.cookie).map(meta => getCourseList(meta.cookie)),
-      )
+      const activeAccounts = config.accounts.filter(a => accountManager.getMeta(a.username).cookie)
+      const freshResults = await Promise.allSettled(activeAccounts.map(a => getCourseList(accountManager.getMeta(a.username).cookie)))
+      const failures = freshResults.filter(r => r.status === 'rejected')
+      if (failures.length) return { ok: false, count: courses.length, message: '部分账号课程刷新失败，已保留原课程列表，请稍后重试' }
       const refreshMap = new Map<string, CourseInfo>()
       for (const result of freshResults) {
         if (result.status !== 'fulfilled') {
@@ -334,6 +335,11 @@ async function main() {
         for (const course of result.value) refreshMap.set(`${course.courseId}:${course.classId}`, course)
       }
       const fresh = Array.from(refreshMap.values())
+      const nextAccountCourses = new Map<string, Set<string>>()
+      freshResults.forEach((result, i) => {
+        if (result.status === 'fulfilled') nextAccountCourses.set(activeAccounts[i].username, new Set(result.value.map(c => `${c.courseId}:${c.classId}`)))
+      })
+      accountCourses = nextAccountCourses
       /**
        * 已结课课程不进 courses：随后重建轮询监听器时它们自然被排除，
        * 不必再走「写回 config.watchCourses」那条老路（那要求必须是白名单模式才生效）。
@@ -358,14 +364,14 @@ async function main() {
       for (const listener of pollListeners) listener.stop()
       pollListeners.length = 0
       if (config.listener.mode === 'poll' || config.listener.mode === 'hybrid') {
-        for (const meta of configuredMetas.filter(item => item.cookie)) {
+        for (const account of config.accounts) {
           const pl = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
           pl.onActivity((aid, courseId, classId, courseName) => {
             watchdog.lastActivityAt = Date.now()
             processCheckin(aid, courseId, classId, courseName)
           })
           attachHealth(pl)
-          pl.start(meta.cookie, courses, shouldListenCourse)
+          pl.start(() => accountManager.getMeta(account.username).cookie, courses.filter(c => accountCourses.get(account.username)?.has(`${c.courseId}:${c.classId}`)), shouldListenCourse)
           pollListeners.push(pl)
         }
       }
@@ -447,13 +453,18 @@ async function main() {
       }
     },
     /** 课表：依据每门课最近一次签到时间，推断它排在哪一节 */
-    suggestTimetable: () => {
+    suggestTimetable: (draft?: any) => {
       const nameOf = (id: string) => courses.find(c => String(c.courseId) === id)?.courseName || id
-      const s = suggestFromObservations(getObservations(), nameOf)
+      const s = suggestFromObservations(getObservations(), nameOf, draft)
       return { table: s.table, filled: s.filled, details: s.details, status: getTimetableStatus() }
     },
     /** 课表：保存（未填满会拒绝，避免"填一半以为在工作"导致的静默漏签） */
-    saveTimetable: (table: any) => saveTimetable(table),
+    saveTimetable: (table: any) => {
+      const known = new Set(courses.map(c => String(c.courseId)))
+      const unknown = Object.values(table || {}).flatMap((v: any) => Array.isArray(v) ? v : []).filter(v => v != null && String(v).trim() && !known.has(String(v).trim()))
+      if (unknown.length) return { ok: false, message: '课表含已不存在的课程，请重新选择后保存' }
+      return saveTimetable(table)
+    },
     /** 免责声明：读取接受状态 / 记录接受（服务端持久化，桌面与手机共用一份） */
     getConsent: () => getConsent(),
     acceptDisclaimer: () => acceptDisclaimer(),
@@ -468,7 +479,7 @@ async function main() {
      * 但**保留已结课排除**（那些课查了也只会返回空，纯浪费）。
      */
     scanNow: async () => {
-      const metas = configuredMetas.filter(m => m.cookie)
+      const metas = getConfiguredMetas().filter(m => m.cookie)
       if (!metas.length) return { ok: false, scanned: 0, found: 0, message: '没有可用账号（请先在设置页登录）' }
       const targets = courses.filter(c => !c.isRetired)
       if (!targets.length) return { ok: false, scanned: 0, found: 0, message: '没有可扫描的课程（请先拉取课程列表）' }
@@ -506,7 +517,7 @@ async function main() {
       return { ok: true, scanned, found, message: msg }
     },
     getLogFile: () => config.log.file || '',
-    getPrimaryCookie: () => primaryMeta.cookie || '',
+    getPrimaryCookie: () => getPrimaryMeta().cookie || '',
   })
   dtServer.start()
   logger.info(`上传页服务已启动: http://${config.web?.host || '127.0.0.1'}:${dtPort}`)
@@ -562,18 +573,26 @@ async function main() {
   const checkinHandler = new CheckinHandler(config, accountManager)
 
   // 6. 获取课程列表（courses/watchedCourses 可被「重新拉取课程列表」运行时刷新）
-  const configuredMetas = config.accounts.map(a => accountManager.getMeta(a.username))
-  const primaryMeta = configuredMetas.find(meta => meta.cookie) ||
+  const getConfiguredMetas = () => config.accounts.map(a => accountManager.getMeta(a.username))
+  const getPrimaryMeta = () => getConfiguredMetas().find(meta => meta.cookie) ||
     { cookie: '', name: '', schoolname: '', uid: 0, fid: 0 }
-  const courseResults = await Promise.allSettled(
-    configuredMetas.filter(meta => meta.cookie).map(meta => getCourseList(meta.cookie)),
-  )
+  const getPrimaryCookieValid = () => {
+    const account = config.accounts.find(a => accountManager.getMeta(a.username).cookie)
+    if (!account) return config.accounts.length ? false : undefined
+    const state = accountManager.getCookieState(account.username)
+    return state === 'valid' ? true : state === 'invalid' ? false : undefined
+  }
+  const startupCookies = getConfiguredMetas().map(m => m.cookie)
+  const activeAccountsAtStartup = config.accounts.filter(a => accountManager.getMeta(a.username).cookie)
+  const courseResults = await Promise.allSettled(activeAccountsAtStartup.map(a => getCourseList(accountManager.getMeta(a.username).cookie)))
+  let accountCourses = new Map<string, Set<string>>()
   const courseMap = new Map<string, CourseInfo>()
-  for (const result of courseResults) {
+  for (const [accountIndex, result] of courseResults.entries()) {
     if (result.status !== 'fulfilled') {
       logger.error(`获取课程列表失败（不影响上传页）: ${result.reason?.message || result.reason}`)
       continue
     }
+    accountCourses.set(activeAccountsAtStartup[accountIndex].username, new Set(result.value.map(c => `${c.courseId}:${c.classId}`)))
     for (const course of result.value) {
       // 已结课（isretire=1）的课程直接不进监听列表：它们不可能再发布签到，
       // 留着只会每轮白问一次（实测 26 门里 15 门已结课，占 58% 的无效请求）。
@@ -624,7 +643,7 @@ async function main() {
     // 避免用户还没填课表就完全扫不到签到。
     const scan = coursesToScanNow(new Date())
     if (!scan.allowed) return false
-    if (scan.configured && !scan.courseIds.includes(String(course.courseId))) return false
+    if (scan.configured && scan.courseIds.some(id => courses.some(c => String(c.courseId) === id)) && !scan.courseIds.includes(String(course.courseId))) return false
     return true
   }
 
@@ -650,6 +669,7 @@ async function main() {
     courseId: number,
     classId: number,
     courseName: string,
+    manual = false,
   ) => {
     // 跨监听器去重：IM 与轮询可能同时捕获同一次签到
     if (markProcessed(aid)) {
@@ -658,7 +678,7 @@ async function main() {
     }
 
     try {
-      const detailMetas = configuredMetas.filter(meta => meta.cookie)
+      const detailMetas = getConfiguredMetas().filter(meta => meta.cookie)
       let checkinInfo: CheckinInfo | null = null
       let detailError: Error | null = null
       for (const meta of detailMetas) {
@@ -701,10 +721,8 @@ async function main() {
         await new Promise(r => setTimeout(r, waitSec * 1000))
         if (cancelledAids.has(aid)) {
           cancelledAids.delete(aid)
-          // 解除已处理标记：用户反悔时，下一轮轮询/IM 消息仍可重新触发该签到（带失败次数上限兜底）
-          unmarkProcessed(aid)
           logger.warn(`${courseName} 用户取消了签到`)
-          await notifier.notify(`已取消签到`, `${courseName} 的签到已取消（aid: ${aid}），如想恢复自动签到请等待下一轮检测`).catch(() => {})
+          await notifier.notify(`已取消签到`, `${courseName} 的签到已取消（aid: ${aid}）`).catch(() => {})
           return
         }
       }
@@ -718,6 +736,7 @@ async function main() {
         await new Promise(r => setTimeout(r, delay * 1000))
       }
 
+      if (!manual && (!listening || disabledCourses.has(String(courseId)))) { unmarkProcessed(aid); return }
       const results = await checkinHandler.handle(aid, courseId, classId, courseName, checkinInfo)
       const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
       await notifier.notify(`✅ ${courseName} 签到结果`, summary)
@@ -778,7 +797,7 @@ async function main() {
 
     if (config.accounts.length > 0) {
       try {
-        await imListener.connect(primaryMeta.cookie, primaryMeta.uid)
+        await imListener.connect(getPrimaryMeta().cookie, getPrimaryMeta().uid)
       } catch (e: any) {
         logger.error(`IM 连接失败（轮询/上传页仍可用）: ${e.message}`)
       }
@@ -805,7 +824,7 @@ async function main() {
           .catch(() => {})
       }
     }
-    for (const meta of configuredMetas.filter(item => item.cookie)) {
+    for (const account of config.accounts) {
       const pl = new PollListener(config.listener.pollInterval, (config.listener.pollJitter || 0) * 1000)
       pl.onActivity((aid, courseId, classId, courseName) => {
         watchdog.lastActivityAt = Date.now()
@@ -813,7 +832,7 @@ async function main() {
       })
       attachHealth(pl)
       try {
-        pl.start(meta.cookie, courses, shouldListenCourse)
+        pl.start(() => accountManager.getMeta(account.username).cookie, courses.filter(c => accountCourses.get(account.username)?.has(`${c.courseId}:${c.classId}`)), shouldListenCourse)
         pollListeners.push(pl)
       } catch (e: any) {
         logger.error(`轮询监听器启动失败（不影响上传页）: ${e.message}`)
@@ -827,6 +846,20 @@ async function main() {
       }
     }
   }
+  // 登录恢复后重新加载课程；轮询每次读取最新 Cookie，避免一直使用启动时的快照。
+  let refreshAfterLogin = false, refreshQueued = false
+  accountManager.onRefreshSuccess = () => {
+    if (refreshAfterLogin) { refreshQueued = true; return }
+    refreshAfterLogin = true
+    ;(async () => {
+      do {
+        refreshQueued = false
+        const result = await refreshCourses()
+        if (!result.ok) logger.warn(`登录恢复后刷新课程失败: ${result.message}`)
+      } while (refreshQueued)
+    })().catch(e => logger.error(`登录恢复后刷新课程失败: ${e.message}`)).finally(() => { refreshAfterLogin = false })
+  }
+  if (getConfiguredMetas().some((m, i) => m.cookie !== startupCookies[i])) accountManager.onRefreshSuccess('')
 
   /**
    * 二维码图片的统一处理入口。
@@ -846,28 +879,28 @@ async function main() {
     }
 
     // 优先使用软件已检测到的待处理签到；否则直接用二维码自带的 aid
-    const pending = hasPendingQr() ? takeLatestPendingQr() : null
-    const aid = pending?.aid || payload.aid
+    const pending = resolvePendingQr(payload.aid)
+    const aid = payload.aid || pending?.aid
     if (!aid) {
       logger.warn('未检测到待处理签到，且二维码未包含活动编号，无法确定签到活动')
       await notifier.notify(
         '⚠️ 无法确定签到活动',
         '当前没有检测到待处理的签到，且该二维码未包含活动编号，请等签到发布后再发二维码',
       )
-      return '⚠️ 二维码已识别，但不含活动编号且当前没有待处理签到，无法确定签到哪个活动'
+      return '⚠️ 二维码不含活动编号，且待处理签到不是唯一一个，无法确定签到活动'
     }
 
     logger.info(`二维码已识别（来源: ${source}，aid=${aid}），开始签到...`)
-    const results = await checkinHandler.handleQr(aid, payload.enc)
+    const results = await checkinHandler.handleQr(aid, payload.enc, pending?.info.courseName)
     const summary = results.map(r => `${r.accountName}: ${r.success ? '✅' : '❌'} ${r.message}`).join('\n')
     await notifier.notify('✅ 二维码签到结果', summary)
     const allFailed = results.length > 0 && results.every(r => !r.success)
+    if (pending && (results.length === 0 || results.some(r => !r.success))) setPendingQr(aid, { courseName: pending.info.courseName })
     if (allFailed) allowRetryOnFailure(aid)
     else clearFail(aid)
 
-    const first = results[0]
-    return first
-      ? `${first.success ? '✅ 签到成功' : '❌ 签到失败'}: ${first.message}`
+    return results.length
+      ? `${results.every(r => r.success) ? '✅ 签到成功' : '❌ 部分或全部账号签到失败'}: ${summary}`
       : '⚠️ 没有可用账号，未能提交签到'
   }
 
@@ -950,10 +983,9 @@ async function main() {
       const history = checkinHandler.getHistory()
       const dayStart = new Date()
       dayStart.setHours(0, 0, 0, 0)
-      const okRe2 = /成功|✅|已签到/
       const today = history.filter((r: any) => (r.timestamp || 0) >= dayStart.getTime())
-      const okCount = today.filter((r: any) => okRe2.test(r.message || r.result)).length
-      const failList = today.filter((r: any) => !okRe2.test(r.message || r.result)).slice(0, 10)
+      const okCount = today.filter(isSuccessfulRecord).length
+      const failList = today.filter((r: any) => !isSuccessfulRecord(r)).slice(0, 10)
       if (today.length === 0) {
         logger.info('日报：今天还没有签到记录')
         await notifier.notify('📊 今日签到日报', `今天（${dayStart.getMonth() + 1}月${dayStart.getDate()}日）还没有签到记录\n一切正常时表示今天无签到活动`)
@@ -998,20 +1030,19 @@ async function main() {
       const dow = (now.getDay() + 6) % 7 // 周一=0
       weekStart.setDate(now.getDate() - dow)
       weekStart.setHours(0, 0, 0, 0)
-      const okRe2 = /成功|✅|已签到/
       const week = history.filter((r: any) => (r.timestamp || 0) >= weekStart.getTime())
       if (week.length === 0) {
         logger.info('周报：本周还没有签到记录')
         await notifier.notify('📈 本周签到周报', `本周（${weekStart.getMonth() + 1}月${weekStart.getDate()}日起）还没有签到记录\n一切正常时表示本周暂无签到活动`)
         return
       }
-      const okCount = week.filter((r: any) => okRe2.test(r.result)).length
+      const okCount = week.filter(isSuccessfulRecord).length
       // 本周有签到记录的课程里，按课程统计
       const perCourse = new Map<string, { ok: number; fail: number }>()
       for (const r of week as any[]) {
         const k = r.courseName || '未知课程'
         const e = perCourse.get(k) || { ok: 0, fail: 0 }
-        if (okRe2.test(r.result)) e.ok++
+        if (isSuccessfulRecord(r)) e.ok++
         else e.fail++
         perCourse.set(k, e)
       }
@@ -1141,13 +1172,13 @@ async function main() {
       case 'checkin': {
         const aid = parts[1]
         if (!aid) { logger.info('用法: 签到 <aid> [enc|courseId]'); return }
-        const checkinInfo = await CheckinEngine.getDetail(primaryMeta.cookie, aid)
+        const checkinInfo = await CheckinEngine.getDetail(getPrimaryMeta().cookie, aid)
         if (checkinInfo.type === 'qr' && parts[2]) {
           const results = await checkinHandler.handleQr(aid, parts[2])
           results.forEach(r => logger.info(`${r.accountName}: ${r.message}`))
         } else {
           const courseId = parts[2] ? Number(parts[2]) : 0
-          await processCheckin(aid, courseId, 0, '手动签到')
+          await processCheckin(aid, courseId, 0, '手动签到', true)
         }
         break
       }

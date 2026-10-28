@@ -12,7 +12,7 @@ import { getProxyConfig } from '../providers/runtime-config'
  */
 export async function login(username: string, password: string): Promise<LoginResult> {
   const jar = new CookieJar()
-  const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
+  const client = wrapper(axios.create({ jar, proxy: getProxyConfig(), timeout: 20000 }))
 
   logger.info(`正在登录 ${username}...`)
 
@@ -47,6 +47,8 @@ export async function login(username: string, password: string): Promise<LoginRe
 export async function getUserInfo(cookie: string): Promise<UserInfo> {
   const res = await axios.get(API.USER_INFO, {
     headers: { Cookie: cookie, 'User-Agent': PC_AGENT },
+    proxy: getProxyConfig(),
+    timeout: 10000,
   })
 
   if (res.data.result !== 1) {
@@ -84,7 +86,8 @@ export async function checkCookie(cookie: string): Promise<CookieCheck> {
       timeout: 10000,
       proxy: getProxyConfig(),
     })
-    return res.data?.result === 1 ? 'valid' : 'invalid'
+    if (!res.data || typeof res.data !== 'object' || !('result' in res.data)) return 'unknown'
+    return res.data.result === 1 ? 'valid' : 'invalid'
   } catch (e) {
     logger.error('Cookie 验证请求失败', e)
     return 'unknown'

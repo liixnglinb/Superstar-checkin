@@ -4,7 +4,7 @@ process.env.NO_OPEN_BROWSER = '1' // 禁止服务层调用系统浏览器
 
 const path = require('path')
 const fs = require('fs')
-const { updateNotesToPlainText } = require('./update-utils.cjs')
+const { updateNotesToPlainText, parseUpdateManifest, sameUpdateManifest, sha512File, spawnInstaller } = require('./update-utils.cjs')
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard } = require('electron')
 
 // 单实例：防止重复启动
@@ -196,7 +196,7 @@ const updateState = {
   notes: '',
   source: '',
   // 下载完成后 electron-updater 返回的安装包绝对路径；拉起安装向导用。
-  // 空串表示没拿到路径，那时才退回静默安装。
+  // 空串表示没有可安装文件，不能启动安装程序。
   installerPath: '',
   pct: 0, transferred: 0, total: 0, speedBps: 0,
   message: '',
@@ -256,8 +256,8 @@ function openWindow() {
     icon: ICON,
     // 无边框自绘标题栏：去掉系统深色标题栏（大黑边），标题栏与内置 UI 融为一体
     frame: false,
-    // 与设计令牌 --bg-canvas（暖白）一致，避免加载瞬间露出白底闪一下
-    backgroundColor: '#F8F7F4',
+    // 与深色画布一致，避免加载瞬间闪色
+    backgroundColor: '#10151B',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -426,18 +426,15 @@ app.whenReady().then(() => {
   }
 
   autoUpdater.autoDownload = false          // 下载时机由本进程控制（要先按实测速度挑源）
-  autoUpdater.autoInstallOnAppQuit = true   // 已下载未安装时，退出软件兜底安装
+  autoUpdater.autoInstallOnAppQuit = false   // 用户选择稍后安装时，退出不得擅自安装
   autoUpdater.logger = silentLogger
 
   /** 语义化版本比较：a 是否比 b 新 */
   function isNewerVersion(a, b) {
-    const pa = String(a || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
-    const pb = String(b || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0)
-    for (let i = 0; i < 3; i++) {
-      if ((pa[i] || 0) > (pb[i] || 0)) return true
-      if ((pa[i] || 0) < (pb[i] || 0)) return false
-    }
-    return false
+    const semver = require('semver')
+    const va = semver.valid(String(a || '').replace(/^v/i, ''))
+    const vb = semver.valid(String(b || '').replace(/^v/i, ''))
+    return !!va && !!vb && semver.gt(va, vb)
   }
 
   /** 把底层异常翻译成用户看得懂的话 */
@@ -499,13 +496,15 @@ app.whenReady().then(() => {
   }
 
   /** 单个源的实测：先取清单拿 exe 名，再 Range 拉一小段算吞吐 */
-  async function measureSource(c) {
-    const yml = await netGet(c.base + '/latest.yml', { timeoutMs: 9000 })
+  async function measureSource(c, trusted) {
+    const yml = await netGet(c.base + '/latest.yml', { timeoutMs: 9000, maxBytes: 256 * 1024 })
     if (!yml.ok || !yml.body || !yml.body.length) return { ...c, ok: false, reason: '清单不可达' }
     let info = null
     try { info = YAML.parse(yml.body.toString('utf8')) } catch (_) { info = null }
-    const exeName = info ? (info.path || (Array.isArray(info.files) && info.files[0] && info.files[0].url) || '') : ''
-    if (!exeName) return { ...c, ok: false, reason: '清单里没有文件项' }
+    let manifest
+    try { manifest = parseUpdateManifest(info) } catch (_) { return { ...c, ok: false, reason: '清单无效' } }
+    if (!sameUpdateManifest(manifest, trusted)) return { ...c, ok: false, reason: '版本或校验值与 GitHub 不一致' }
+    const exeName = manifest.name
     const probe = await netGet(c.base + '/' + encodeURIComponent(exeName), {
       timeoutMs: SPEED_TIMEOUT, maxBytes: SPEED_CHUNK, headers: { Range: `bytes=0-${SPEED_CHUNK - 1}` },
     })
@@ -560,12 +559,39 @@ app.whenReady().then(() => {
     } catch (_) {}
   }
 
-  /** 检查更新：并行实测所有候选源 → 取最快 → 有新版就自动开始下载 */
-  async function runUpdateCheck() {
+  /** 检查官方清单，再实测可信候选源；只提示，由用户决定是否下载。 */
+  let checkFlight = null
+  let downloadFlight = null
+  let trustedManifest = null
+  async function performUpdateCheck() {
     updateState.phase = 'checking'
     updateState.message = ''
     pushUpdateState()
-    const results = await Promise.all(CANDIDATES.map(measureSource))
+    // 镜像自身的清单不能证明安装包可信；必须先取得 GitHub 官方清单作为基准。
+    const official = await netGet(GH_DIRECT + '/latest.yml', { timeoutMs: 9000, maxBytes: 256 * 1024 })
+    try {
+      if (!official.ok || !official.body || !official.body.length) throw new Error('不可达')
+      trustedManifest = parseUpdateManifest(YAML.parse(official.body.toString('utf8')))
+    } catch (_) {
+      trustedManifest = null
+      rankedSources = []
+      updateState.latest = ''
+      updateState.phase = 'error'
+      updateState.message = '无法获取 GitHub 官方更新清单，无法安全校验更新包；请检查网络后重试。'
+      pushUpdateState()
+      return updateState
+    }
+    if (!isNewerVersion(trustedManifest.version, app.getVersion())) {
+      rankedSources = []
+      updateState.phase = 'uptodate'
+      updateState.latest = trustedManifest.version
+      updateState.source = 'GitHub 官方清单'
+      updateState.checkedAt = Date.now()
+      pushUpdateState()
+      return updateState
+    }
+    updateState.latest = trustedManifest.version
+    const results = await Promise.all(CANDIDATES.map((c) => measureSource(c, trustedManifest)))
     rankedSources = results.filter((r) => r.ok).sort((a, b) => b.bps - a.bps)
     if (!rankedSources.length) {
       updateState.phase = 'error'
@@ -576,13 +602,6 @@ app.whenReady().then(() => {
     const best = rankedSources[0]
     updateState.source = `${best.label}（实测 ${(best.bps / 1048576).toFixed(1)}MB/s）`
     updateState.checkedAt = Date.now()
-    if (!isNewerVersion(best.version, app.getVersion())) {
-      updateState.phase = 'uptodate'
-      updateState.latest = best.version || app.getVersion()
-      pushUpdateState()
-      return updateState
-    }
-    updateState.latest = best.version
     updateState.notes = await fetchNotes(best.notes)
     updateState.phase = 'available'
     updateState.current = app.getVersion()
@@ -591,17 +610,22 @@ app.whenReady().then(() => {
     return updateState
   }
 
+  function runUpdateCheck() {
+    if (downloadFlight || ['downloading', 'ready', 'installing'].includes(updateState.phase)) return Promise.resolve(updateState)
+    if (checkFlight) return checkFlight
+    checkFlight = performUpdateCheck().finally(() => { checkFlight = null })
+    return checkFlight
+  }
+
   /** 下载：用最快的源，失败自动降级下一名 */
-  async function startUpdateDownload() {
-    if (!rankedSources.length) await runUpdateCheck()
+  async function performUpdateDownload() {
+    if (checkFlight) await checkFlight
+    if (!rankedSources.length) await performUpdateCheck()
     if (updateState.phase === 'downloading' || updateState.phase === 'ready') return false
     if (!updateState.latest || !isNewerVersion(updateState.latest, app.getVersion())) return false
     let lastErr = ''
     for (let i = 0; i < rankedSources.length; i++) {
       const c = rankedSources[i]
-      autoUpdater.setFeedURL(c.provider === 'github'
-        ? { provider: 'github', owner: GH_OWNER, repo: GH_REPO }
-        : { provider: 'generic', url: c.base })
       updateState.phase = 'downloading'
       updateState.source = c.label
       updateState.pct = 0
@@ -611,6 +635,9 @@ app.whenReady().then(() => {
       updateState.message = i === 0 ? '' : `已切换到备用下载源：${c.label}`
       pushUpdateState()
       try {
+        autoUpdater.setFeedURL(c.provider === 'github'
+          ? { provider: 'github', owner: GH_OWNER, repo: GH_REPO }
+          : { provider: 'generic', url: c.base })
         // 换过 feed 后必须让库自己再查一次：downloadUpdate() 用的是 checkForUpdates() 缓存的
         // updateInfoAndProvider（provider 按当次 feed 绑定），少了这一步它直接抛
         // "Please check update first"。实测 v3.8.0~v3.11.0 这 8 个已发布版本的软件内更新
@@ -621,15 +648,16 @@ app.whenReady().then(() => {
           if (i < rankedSources.length - 1) continue
           break
         }
+        if (!sameUpdateManifest(parseUpdateManifest(chk.updateInfo), trustedManifest)) {
+          throw new Error('下载源更新清单与 GitHub 官方清单不一致')
+        }
         // downloadUpdate() 返回下载好的文件绝对路径数组（NSIS 安装包）。
         // 拿到它才能在「安装」这一步把安装向导交回给用户，而不是自己静默装完。
         const files = await autoUpdater.downloadUpdate()
-        updateState.installerPath = ''
-        try {
-          const first = Array.isArray(files) && files.length ? String(files[0]) : ''
-          if (first && fs.existsSync(first)) updateState.installerPath = first
-        } catch (_) {}
-        markPendingInstall()
+        const first = Array.isArray(files) && files.length ? String(files[0]) : ''
+        if (!first || !fs.existsSync(first)) throw new Error('更新安装包未找到')
+        if (await sha512File(first) !== trustedManifest.sha512) throw new Error('安装包 SHA512 校验失败')
+        updateState.installerPath = first
         updateState.phase = 'ready'
         updateState.pct = 100
         updateState.message = ''
@@ -646,6 +674,12 @@ app.whenReady().then(() => {
     return false
   }
 
+  function startUpdateDownload() {
+    if (downloadFlight) return downloadFlight
+    downloadFlight = performUpdateDownload().finally(() => { downloadFlight = null })
+    return downloadFlight
+  }
+
   /**
    * 「安装」这一步：把安装向导交回给用户。
    *
@@ -654,24 +688,32 @@ app.whenReady().then(() => {
    * nsis.oneClick=false，拉起来就是有「下一步」的向导），再退出本进程。
    * 顺序必须「先拉起、后退」：反过来的话进程一退出，spawn 的安装器会被一起收掉；
    * 退出前留 400ms 是让安装器先把窗口建起来，避开 NSIS 检测旧进程占用的那一下。
-   * 只有拿不到安装包路径时才退回静默安装，保证更新不会卡在最后一步。
+   * 启动失败时保留当前程序并提示重试，不回退到静默安装。
    */
-  function launchInstallerAndQuit() {
+  async function launchInstallerAndQuit() {
     const file = updateState.installerPath
-    if (file && fs.existsSync(file)) {
-      try {
-        require('child_process').spawn(file, [], { detached: true, stdio: 'ignore' }).unref()
-        updateState.phase = 'installing'
-        pushUpdateState()
-        quitting = true
-        setTimeout(() => { try { app.quit() } catch (_) {} }, 400)
-        return
-      } catch (_) {}
+    if (updateState.phase !== 'ready' || !file || !fs.existsSync(file) || !trustedManifest) {
+      if (updateState.phase === 'ready') { updateState.phase = 'error'; updateState.installerPath = ''; updateState.message = '更新包已丢失，请重新下载。'; pushUpdateState() }
+      return { ok: false, message: '更新包尚未准备好，请重新下载后再安装。' }
     }
-    quitting = true
-    setImmediate(() => {
-      try { autoUpdater.quitAndInstall(true, true) } catch (_) {}
-    })
+    updateState.phase = 'installing'
+    pushUpdateState()
+    try {
+      if (await sha512File(file) !== trustedManifest.sha512) throw new Error('安装包 SHA512 校验失败')
+      await spawnInstaller(file)
+      markPendingInstall()
+      quitting = true
+      setTimeout(() => { try { app.quit() } catch (_) {} }, 400)
+      return { ok: true }
+    } catch (e) {
+      // 已变更或丢失的安装包应重新下载；启动失败则保留已验证文件供重试。
+      const invalidPackage = /SHA512|ENOENT|不存在/i.test(String(e && e.message || e))
+      updateState.phase = invalidPackage ? 'error' : 'ready'
+      if (invalidPackage) updateState.installerPath = ''
+      updateState.message = '无法启动安装程序：' + friendlyUpdateError(e)
+      pushUpdateState()
+      return { ok: false, message: updateState.message }
+    }
   }
 
   autoUpdater.on('download-progress', (p) => {
@@ -702,8 +744,7 @@ app.whenReady().then(() => {
   ipcMain.handle('update-install', async () => {
     // 用户视角：下载完成后软件关掉、弹出安装向导，自己点「下一步」装完自动重开。
     // 与 quitAndInstall 的差别就在这里 —— 后者全程无界面。
-    launchInstallerAndQuit()
-    return { ok: true }
+    return await launchInstallerAndQuit()
   })
 
   // 启动签到服务（构建产物，与窗口同进程）

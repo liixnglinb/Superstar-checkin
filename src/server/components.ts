@@ -9,8 +9,8 @@
  */
 
 export const ICONS = {
-  // 应用标记：与安装图标同源的小尺寸矢量版（实心橙块 + 粗白勾）。
-  appMark: '<svg class="app-mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="104" fill="#EF7429"/><path d="M148 264l74 78 142-168" fill="none" stroke="#fff" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // 矢量标记跟随当前主题，保证实心背景与勾选图案对比清晰。
+  appMark: '<svg class="app-mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="104" fill="var(--brand-600)"/><path d="M148 264l74 78 142-168" fill="none" stroke="var(--ink-inverse)" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   courses: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
@@ -71,7 +71,8 @@ export function typeText(t: string): string {
 }
 
 export function isSuccess(result: any): boolean {
-  return /成功|✅|已签到/.test(String(result ?? ''))
+  const text = String(result ?? '')
+  return !/失败|未确认|未签到|unsuccessful|^failed\b/i.test(text) && (/^success(?:\s|\[|$)/i.test(text) || /签到成功|您已签到|✅/.test(text))
 }
 
 /** 统计方块：数值用等宽数字，配轻量次级上下文（如「成功率 98.4%」） */

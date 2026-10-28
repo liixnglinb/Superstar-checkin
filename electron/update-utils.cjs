@@ -36,4 +36,46 @@ function updateNotesToPlainText(md) {
   return s.trim()
 }
 
-module.exports = { updateNotesToPlainText }
+/** Extract the version and installer digest from an updater manifest. */
+function parseUpdateManifest(info) {
+  const semver = require('semver')
+  if (!info || typeof info !== 'object') throw new Error('更新清单格式无效')
+  const version = semver.valid(String(info.version || ''))
+  if (!version) throw new Error('更新清单缺少有效版本号')
+  const files = Array.isArray(info.files) ? info.files : []
+  const name = String(info.path || (files.find((f) => f && /\.exe$/i.test(String(f.url || ''))) || {}).url || '')
+  if (!name || name.includes('/') || name.includes('\\') || !/\.exe$/i.test(name)) throw new Error('更新清单中的安装包名称无效')
+  const entry = files.find((f) => f && String(f.url) === name)
+  const sha512 = String((entry && entry.sha512) || info.sha512 || '')
+  if (!/^[A-Za-z0-9+/]{86}==$/.test(sha512) || Buffer.from(sha512, 'base64').length !== 64 || Buffer.from(sha512, 'base64').toString('base64') !== sha512) {
+    throw new Error('更新清单缺少有效的 SHA-512 校验值')
+  }
+  return { version, name, sha512 }
+}
+
+function sameUpdateManifest(a, b) {
+  return !!a && !!b && a.version === b.version && a.name === b.name && a.sha512 === b.sha512
+}
+
+function sha512File(filename) {
+  const fs = require('fs')
+  const crypto = require('crypto')
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha512')
+    const stream = fs.createReadStream(filename)
+    stream.on('error', reject)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.on('end', () => resolve(hash.digest('base64')))
+  })
+}
+
+function spawnInstaller(filename, spawn = require('child_process').spawn) {
+  return new Promise((resolve, reject) => {
+    let child
+    try { child = spawn(filename, [], { detached: true, stdio: 'ignore' }) } catch (error) { reject(error); return }
+    child.once('error', reject)
+    child.once('spawn', () => { child.unref(); resolve() })
+  })
+}
+
+module.exports = { updateNotesToPlainText, parseUpdateManifest, sameUpdateManifest, sha512File, spawnInstaller }

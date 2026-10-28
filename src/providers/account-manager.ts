@@ -1,4 +1,4 @@
-import { login, checkCookie, getUserInfo } from '../core/login'
+import { login, checkCookie, getUserInfo, type CookieCheck } from '../core/login'
 import * as storage from './storage'
 import { logger } from '../utils/logger'
 import { retry } from '../utils/retry'
@@ -7,8 +7,10 @@ import type { Account, AccountMetaData } from '../types'
 export class AccountManager {
   private accounts: Account[]
   private refreshTimer: NodeJS.Timeout | null = null
+  private cookieStates = new Map<string, CookieCheck>()
   /** 刷新失败回调（看门狗/通知用） */
   onRefreshFail: ((username: string, err: Error) => void) | null = null
+  onRefreshSuccess: ((username: string) => void) | null = null
 
   constructor(accounts: Account[]) {
     this.accounts = accounts
@@ -19,10 +21,15 @@ export class AccountManager {
    */
   async checkAll(): Promise<void> {
     logger.info(`开始检查 ${this.accounts.length} 个账号的 Cookie...`)
-
+    let failed = 0
     for (const account of this.accounts) {
-      await this.refreshIfNeeded(account)
+      try { await this.refreshIfNeeded(account) } catch (e: any) {
+        failed++
+        logger.error(`账号 ${account.username} 刷新失败: ${e.message}`)
+        this.onRefreshFail?.(account.username, e)
+      }
     }
+    if (failed) throw new Error(`${failed} 个账号检查失败`)
   }
 
   /**
@@ -34,6 +41,7 @@ export class AccountManager {
 
     if (!force && meta?.cookie) {
       const state = await checkCookie(meta.cookie)
+      this.cookieStates.set(account.username, state)
       if (state === 'valid') {
         logger.success(`${meta.name} 的 Cookie 仍然有效`)
         return
@@ -53,9 +61,11 @@ export class AccountManager {
       storage.set(`fid_${account.username}`, account.fid || 0)
 
       const state = await checkCookie(account.cookie)
+      this.cookieStates.set(account.username, state)
       if (state === 'unknown') {
         // 配置里手填的 Cookie 本来就是用来绕开登录风控的：校验请求失败时保留它，别去动密码登录
         logger.warn(`配置 Cookie 校验请求未成功（网络或风控），暂按有效继续使用`)
+        if (!meta.cookie) this.onRefreshSuccess?.(account.username)
         return
       }
       if (state === 'valid') {
@@ -64,10 +74,12 @@ export class AccountManager {
           storage.set(`name_${account.username}`, userInfo.name)
           storage.set(`schoolname_${account.username}`, userInfo.schoolname)
           logger.success(`${userInfo.name} 的配置 Cookie 已生效`)
+          if (!meta.cookie) this.onRefreshSuccess?.(account.username)
           return
         } catch (e: any) {
           logger.warn(`获取用户信息失败: ${e.message}，使用用户名代替`)
           storage.set(`name_${account.username}`, account.username)
+          if (!meta.cookie) this.onRefreshSuccess?.(account.username)
           return
         }
       }
@@ -83,13 +95,19 @@ export class AccountManager {
     storage.set(`cookie_${account.username}`, loginResult.cookie)
     storage.set(`uid_${account.username}`, loginResult.uid)
     storage.set(`fid_${account.username}`, loginResult.fid)
+    this.cookieStates.set(account.username, 'valid')
 
     // 获取用户信息
-    const userInfo = await getUserInfo(loginResult.cookie)
-    storage.set(`name_${account.username}`, userInfo.name)
-    storage.set(`schoolname_${account.username}`, userInfo.schoolname)
-
-    logger.success(`${userInfo.name} 的凭据已刷新`)
+    try {
+      const userInfo = await getUserInfo(loginResult.cookie)
+      storage.set(`name_${account.username}`, userInfo.name)
+      storage.set(`schoolname_${account.username}`, userInfo.schoolname)
+      logger.success(`${userInfo.name} 的凭据已刷新`)
+    } catch (e: any) {
+      storage.set(`name_${account.username}`, account.username)
+      logger.warn(`登录成功但用户信息获取失败: ${e.message}`)
+    }
+    this.onRefreshSuccess?.(account.username)
   }
 
   /**
@@ -103,6 +121,10 @@ export class AccountManager {
       name: storage.get<string>(`name_${username}`) || username,
       schoolname: storage.get<string>(`schoolname_${username}`) || '',
     }
+  }
+
+  getCookieState(username: string): CookieCheck {
+    return this.cookieStates.get(username) || 'unknown'
   }
 
   /**

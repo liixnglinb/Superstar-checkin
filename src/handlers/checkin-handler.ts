@@ -8,10 +8,11 @@ import { DEFAULTS } from '../constants'
 import type { AccountMetaData, CheckinInfo, CheckinResult, AppConfig } from '../types'
 import type { AccountManager } from '../providers/account-manager'
 import * as storage from '../providers/storage'
+import { isSuccessfulMessage } from '../utils/checkin-result'
 
 /** 统一成功判定：成功 / 签到成功 / 您已签到（重复提交但已签过，视同成功） */
 function isSuccessMessage(result: string): boolean {
-  return result.includes('success') || result.includes('签到成功') || result.includes('您已签到')
+  return isSuccessfulMessage(result)
 }
 
 /**
@@ -123,12 +124,15 @@ export class CheckinHandler {
           },
         )
 
-        const verifiedMsg = await this.verifyAfterCheckin(meta, aid, courseId, classId, checkinInfo, '', result)
+        // 只有提交成功才进行二次核对；失败结果不能标成“已提交”，也不能触发补交。
+        const verifiedMsg = isSuccessMessage(result)
+          ? await this.verifyAfterCheckin(meta, aid, courseId, classId, checkinInfo, '', result)
+          : result
 
         const cr: CheckinResult = {
           account: account.username,
           accountName: meta.name,
-          success: isSuccessMessage(result),
+          success: isSuccessMessage(verifiedMsg),
           message: verifiedMsg,
           type: checkinInfo.type,
           courseName,
@@ -194,7 +198,7 @@ export class CheckinHandler {
   /**
    * 处理二维码签到
    */
-  async handleQr(aid: string, enc: string): Promise<CheckinResult[]> {
+  async handleQr(aid: string, enc: string, courseName = '二维码签到'): Promise<CheckinResult[]> {
     const results: CheckinResult[] = []
 
     for (const account of this.accountManager.getAccounts()) {
@@ -208,13 +212,16 @@ export class CheckinHandler {
             label: `二维码签到 ${meta.name}`,
           },
         )
-        const finalMsg = await this.verifyAfterCheckin(meta, aid, 0, 0, { type: 'qr' } as CheckinInfo, enc, result)
+        const finalMsg = isSuccessMessage(result)
+          ? await this.verifyAfterCheckin(meta, aid, 0, 0, { type: 'qr' } as CheckinInfo, enc, result)
+          : result
         results.push({
           account: account.username,
           accountName: meta.name,
-          success: isSuccessMessage(result),
+          success: isSuccessMessage(finalMsg),
           message: finalMsg,
           type: 'qr',
+          courseName,
           aid,
           timestamp: Date.now(),
         })
@@ -225,12 +232,18 @@ export class CheckinHandler {
           success: false,
           message: e.message,
           type: 'qr',
+          courseName,
           aid,
           timestamp: Date.now(),
         })
       }
     }
 
+    if (results.length) {
+      this.history.push(...results)
+      if (this.history.length > DEFAULTS.MAX_HISTORY) this.history = this.history.slice(-DEFAULTS.MAX_HISTORY)
+      storage.set('checkinHistory', this.history)
+    }
     return results
   }
 

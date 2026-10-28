@@ -9,6 +9,7 @@ import { encryptPassword, isEncrypted } from '../utils/crypto'
 import { getConsolePage, ConsoleStatus } from './console-ui'
 import { writeFileAtomic } from '../utils/fs'
 import { BadRequestError, boolFlag, intInRange, proxyUrl, requiredText, textField, timeOfDay } from '../utils/validate'
+import { isSuccessfulRecord } from '../utils/checkin-result'
 
 export interface DingTalkMessage {
   msgtype: string
@@ -88,7 +89,7 @@ export interface DingTalkServerOptions {
   /** 读取课表（含节次定义、可填课程、完整度状态） */
   getTimetablePayload?: () => any
   /** 依据签到观测时间生成课表填充建议（用于「自动填充」按钮） */
-  suggestTimetable?: () => any
+  suggestTimetable?: (draft?: any) => any
   /** 保存课表；未填满时返回 ok=false 与提示（不落盘） */
   saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
   /** 免责声明：读取接受状态（含当前声明版本） */
@@ -143,7 +144,7 @@ export class DingTalkServer {
   private resetCourses?: () => { ok: boolean; listeningCount: number }
   private applyWatchCourses?: (ids: string[]) => { ok: boolean; listeningCount: number }
   private getTimetablePayload?: () => any
-  private suggestTimetable?: () => any
+  private suggestTimetable?: (draft?: any) => any
   private saveTimetable?: (table: any) => { ok: boolean; message: string; status?: any }
   private getConsent?: () => { accepted: boolean; acceptedAt?: string; version?: number; currentVersion: number }
   private acceptDisclaimer?: () => { accepted: boolean; acceptedAt: string; version: number }
@@ -301,8 +302,8 @@ export class DingTalkServer {
           scope: '/',
           display: 'standalone',
           orientation: 'portrait',
-          background_color: '#F6F5F1',
-          theme_color: '#F27B34',
+          background_color: '#F3F5F6',
+          theme_color: '#355B7D',
           lang: 'zh-CN',
           icons: [
             { src: '/assets/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -572,7 +573,7 @@ export class DingTalkServer {
         let csv = '\uFEFF时间,课程,类型,结果,账号\n'
         for (const r of rows) {
           const cell = (v: any) => `"${String(v ?? '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
-          csv += [cell(r.time || r.timestamp || ''), cell(r.courseName || ''), cell(r.type || ''), cell(r.result || ''), cell(r.accountName || r.account || '')].join(',') + '\n'
+          csv += [cell(r.time || r.timestamp || ''), cell(r.courseName || ''), cell(r.type || ''), cell(r.message || r.result || ''), cell(r.accountName || r.account || '')].join(',') + '\n'
         }
         res.writeHead(200, {
           'Content-Type': 'text/csv; charset=utf-8',
@@ -741,7 +742,7 @@ export class DingTalkServer {
             logger.info('用户取消签到: aid=' + aid)
           }
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-          res.end('<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f4f1"><div style="text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08)"><div style="font-size:48px;margin-bottom:12px">✋</div><h2 style="color:#333;margin:0 0 8px">已取消签到</h2><p style="color:#888;margin:0">可以关闭此页面了</p></div></body></html>')
+          res.end('<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f6"><div style="text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(17,24,39,.08)"><div style="font-size:48px;margin-bottom:12px">✋</div><h2 style="color:#18181b;margin:0 0 8px">已取消签到</h2><p style="color:#55565c;margin:0">可以关闭此页面了</p></div></body></html>')
         } catch (e: any) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: false, message: e.message }))
@@ -959,7 +960,7 @@ export class DingTalkServer {
             if (d.getFullYear() !== year || d.getMonth() + 1 !== mon) continue
             const day = String(d.getDate())
             const e = days[day] || { success: 0, fail: 0, items: [] }
-            if (okRe.test(r.message || r.result || '')) e.success++
+            if (isSuccessfulRecord(r)) e.success++
             else e.fail++
             if (e.items.length < 20) e.items.push({ course: r.courseName || '未知课程', type: r.type || '普通', result: r.message || r.result || '', time: r.time || '' })
             days[day] = e
@@ -1182,14 +1183,14 @@ export class DingTalkServer {
       // 课表：按「最近签到时间」生成填充建议
       if (req.method === 'POST' && routePath === '/api/timetable/suggest') {
         try {
+          const body = await this.parseJsonBody(req, { allowEmpty: true })
           if (!this.suggestTimetable) throw new Error('课表未接入')
-          const r = this.suggestTimetable()
+          const r = this.suggestTimetable(body.table)
           logger.info(`课表自动填充建议：${r.filled} 个格子（依据最近签到时间）`)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, ...r }))
         } catch (e: any) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ ok: false, message: `生成建议失败: ${e.message}` }))
+          this.fail(res, e, '生成建议失败: ')
         }
         return
       }
@@ -1240,7 +1241,8 @@ export class DingTalkServer {
       // 免责声明：记录已接受（服务端持久化，留存时间与版本）
       if (req.method === 'POST' && routePath === '/api/disclaimer/accept') {
         try {
-          const r = this.acceptDisclaimer ? this.acceptDisclaimer() : { accepted: true, acceptedAt: new Date().toISOString(), version: 1 }
+          if (!this.acceptDisclaimer) throw new Error('免责声明未接入')
+          const r = this.acceptDisclaimer()
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, ...r }))
         } catch (e: any) {
@@ -1523,7 +1525,7 @@ export class DingTalkServer {
   /**
    * 手机端上传页面（二维码签到专用，自动携带 token）
    *
-   * 设计（模块 9）：与桌面控制台复用同一套 Design Tokens（暖白画布 + 超星暖橙）；
+   * 设计（模块 9）：延续桌面控制台的蓝灰配色，并跟随手机系统深浅主题；
    *   · 不加 capture 属性 —— 二维码常常是群里分享的截图 / 相册原图，强制开摄像头会让人传不了；
    *   · 选中即上传（一步完成），状态直接回显成功或具体失败原因，不做「正在处理」静默遮蔽。
    */
@@ -1537,23 +1539,47 @@ export class DingTalkServer {
 <title>超星签到码快捷上传</title>
 <style>
 :root {
-  --bg-canvas: #F8F7F4;
+  --bg-canvas: #F3F5F6;
   --bg-surface: #FFFFFF;
-  --bg-surface-sub: #F2EFE9;
-  --ink-primary: #1C1917;
-  --ink-secondary: #57534E;
-  --ink-tertiary: #A8A29E;
-  --brand-50: #FFF7ED;
-  --brand-500: #F78A46;
-  --brand-600: #EF7429;
-  --brand-700: #C25E1A;
-  --line-dim: #E7E5E0;
+  --bg-surface-sub: #EDF1F3;
+  --ink-primary: #18181B;
+  --ink-secondary: #55565C;
+  --ink-tertiary: #696B72;
+  --brand-50: #EFF4F7;
+  --brand-500: #426987;
+  --brand-600: #355B7D;
+  --brand-700: #284C6B;
+  --brand-on: #FFFFFF;
+  --line-dim: #E3E3E7;
   --status-ok-bg: #EDFDF5;
   --status-ok-ink: #065F46;
   --status-ok-line: #A7F3D0;
   --status-err-bg: #FEF2F2;
   --status-err-ink: #991B1B;
   --status-err-line: #FECACA;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg-canvas: #10151B;
+    --bg-surface: #171E25;
+    --bg-surface-sub: #202932;
+    --ink-primary: #F4F4F5;
+    --ink-secondary: #A7AAB1;
+    --ink-tertiary: #A7AAB1;
+    --brand-50: #1B2A35;
+    --brand-500: #BDD1E0;
+    --brand-600: #A3BED3;
+    --brand-700: #C5D9E8;
+    --brand-on: #0B0B0E;
+    --line-dim: rgba(255,255,255,.13);
+    --status-ok-bg: #16241E;
+    --status-ok-ink: #6EE7B7;
+    --status-ok-line: #2E463C;
+    --status-err-bg: #271918;
+    --status-err-ink: #FCA5A5;
+    --status-err-line: #4A2C29;
+  }
 }
 * { box-sizing: border-box; }
 body {
@@ -1573,7 +1599,7 @@ body {
   border: 1px solid var(--line-dim);
   border-radius: 16px;
   padding: 24px 20px;
-  box-shadow: 0 4px 12px rgba(28,25,23,0.05);
+  box-shadow: 0 4px 12px rgba(17,24,39,0.08);
   text-align: center;
 }
 .app-icon { width: 44px; height: 44px; margin: 0 auto 12px; display: block; }
@@ -1585,13 +1611,13 @@ p.sub { font-size: 13px; color: var(--ink-secondary); margin: 0 0 20px; line-hei
   height: 48px;
   line-height: 48px;
   background: var(--brand-600);
-  color: #FFF;
+  color: var(--brand-on);
   font-size: 16px;
   font-weight: 600;
   border-radius: 12px;
   border: none;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(239,116,41,0.30);
+  box-shadow: 0 2px 6px rgba(53,91,125,0.22);
   transition: filter .15s ease, transform .12s ease;
 }
 .file-btn:active { transform: scale(.98); filter: brightness(.97); }
@@ -1617,7 +1643,7 @@ p.sub { font-size: 13px; color: var(--ink-secondary); margin: 0 0 20px; line-hei
 <body>
   <div class="upload-card">
     <svg class="app-icon" viewBox="0 0 512 512" fill="none" aria-hidden="true">
-      <rect width="512" height="512" rx="104" fill="#EF7429"/>
+      <rect width="512" height="512" rx="104" fill="#355B7D"/>
       <path d="M148 264l74 78 142-168" stroke="#FFFFFF" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <h1>提交二维码签到</h1>

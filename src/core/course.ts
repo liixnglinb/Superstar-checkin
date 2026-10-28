@@ -79,7 +79,7 @@ export async function getCourseList(cookie: string): Promise<CourseInfo[]> {
       const data = course.data?.[0]
       if (!data) continue
 
-      const courseId = String(channel.key || data.courseId || '')
+      const courseId = String(data.courseId || data.id || channel.key || '')
       /**
        * classId 必须取 channel.content.id（老结构里等同于 channel.key，两者实测一致）。
        *
@@ -108,7 +108,7 @@ export async function getCourseList(cookie: string): Promise<CourseInfo[]> {
     if (res.data.hasMore && page < 5) {
       page++
       res = await fetchPage(page)
-      if (!res.data || typeof res.data !== 'object' || res.data.result !== 1) break
+      if (!res.data || typeof res.data !== 'object' || res.data.result !== 1) throw new Error('获取课程列表分页失败: ' + describeApiError(res.data))
     } else {
       break
     }
@@ -174,9 +174,10 @@ export async function getCourseActivities(
       fid: 0,
     },
     proxy: getProxyConfig(),
+    timeout: 20000,
   })
 
-  if (!res.data || typeof res.data !== 'object' || res.data.result !== 1) return []
+  if (!res.data || typeof res.data !== 'object' || res.data.result !== 1) throw new Error('获取活动列表失败: ' + describeApiError(res.data))
 
   const activeList = res.data.data?.activeList || []
   return activeList.map((a: any) => ({

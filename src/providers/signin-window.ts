@@ -37,21 +37,48 @@ interface CourseWindowData {
 
 let store: Record<string, CourseWindowData> = {}
 let storeFile = ''
+let writesAllowed = true
 
 export function initWindowStore(dataDir: string): void {
+  // A new data directory must never inherit observations from the previous one.
+  store = {}
+  writesAllowed = true
   storeFile = path.join(dataDir, 'signin-windows.json')
   try {
     if (fs.existsSync(storeFile)) {
-      store = JSON.parse(fs.readFileSync(storeFile, 'utf-8')) || {}
+      const raw: unknown = JSON.parse(fs.readFileSync(storeFile, 'utf-8'))
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('数据不是对象')
+      let invalid = false
+      for (const [id, value] of Object.entries(raw)) {
+        if (!value || typeof value !== 'object' || !Array.isArray((value as any).samples)) {
+          invalid = true
+          continue
+        }
+        const samples = (value as any).samples.filter((t: unknown) => typeof t === 'number' && Number.isFinite(t) && t > 0)
+        if (samples.length !== (value as any).samples.length) invalid = true
+        store[id] = { samples: samples.slice(-MAX_SAMPLES), updatedAt: typeof (value as any).updatedAt === 'number' ? (value as any).updatedAt : 0 }
+      }
+      if (invalid) {
+        // Preserve the source before the next observation rewrites the store.
+        fs.copyFileSync(storeFile, `${storeFile}.corrupt-${Date.now()}`)
+        logger.warn('签到时段数据包含无效记录，已保留原件并跳过无效记录')
+      }
     }
   } catch (e: any) {
     logger.warn(`签到时段数据读取失败（将从零积累）: ${e.message}`)
+    if (fs.existsSync(storeFile)) {
+      try { fs.copyFileSync(storeFile, `${storeFile}.corrupt-${Date.now()}`) } catch (_) {
+        // Never overwrite a damaged source that could not be backed up.
+        writesAllowed = false
+        logger.warn('签到时段原件无法备份，已暂停写入以保留原文件')
+      }
+    }
     store = {}
   }
 }
 
 function persist(): void {
-  if (!storeFile) return
+  if (!storeFile || !writesAllowed) return
   try {
     fs.mkdirSync(path.dirname(storeFile), { recursive: true })
     writeFileAtomic(storeFile, JSON.stringify(store, null, 2))
@@ -63,7 +90,7 @@ function persist(): void {
 /** 记录一次「这门课在这个时间发过签到」。重复时间戳不会重复计入。 */
 export function recordSigninTime(courseId: string | number, timestamp: number): void {
   const id = String(courseId)
-  if (!id || !timestamp || timestamp <= 0) return
+  if (!id || !Number.isFinite(timestamp) || timestamp <= 0) return
   const cur = store[id] || { samples: [], updatedAt: 0 }
   // 同一分钟内只记一次，避免轮询反复读到同一个活动时灌爆样本
   const bucket = Math.floor(timestamp / 60000)

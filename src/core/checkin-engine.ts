@@ -34,6 +34,7 @@ export class CheckinEngine {
         headers: { Cookie: cookie, 'User-Agent': this.mobileUA() },
         params: { activeId },
         proxy: getProxyConfig(),
+        timeout: 20000,
       })
       if (res.data.result !== 1) {
         logger.warn(`二次核对失败: 活动详情接口返回异常 activeId=${activeId}`)
@@ -65,6 +66,7 @@ export class CheckinEngine {
       headers: { Cookie: cookie, 'User-Agent': this.mobileUA() },
       params: { activeId },
       proxy: getProxyConfig(),
+      timeout: 20000,
     })
 
     if (res.data.result !== 1) {
@@ -200,7 +202,7 @@ export class CheckinEngine {
     extra?: { courseId?: number | string; classId?: number | string },
   ): Promise<string> {
     const jar = new CookieJar()
-    const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
+    const client = wrapper(axios.create({ jar, proxy: getProxyConfig(), timeout: 20000 }))
 
     await this.preSign(client, account.cookie, { activeId, uid: account.uid }, extra)
     return this.submitSign(client, account.cookie, {
@@ -220,7 +222,7 @@ export class CheckinEngine {
     enc: string,
   ): Promise<string> {
     const jar = new CookieJar()
-    const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
+    const client = wrapper(axios.create({ jar, proxy: getProxyConfig(), timeout: 20000 }))
 
     await this.preSign(client, account.cookie, { activeId, uid: account.uid })
     return this.submitSign(client, account.cookie, {
@@ -248,7 +250,7 @@ export class CheckinEngine {
     options?: { gpsDrift?: boolean },
   ): Promise<string> {
     const jar = new CookieJar()
-    const client = wrapper(axios.create({ jar, proxy: getProxyConfig() }))
+    const client = wrapper(axios.create({ jar, proxy: getProxyConfig(), timeout: 20000 }))
 
     // preSign
     await this.preSign(client, account.cookie,

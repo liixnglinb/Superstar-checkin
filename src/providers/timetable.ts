@@ -84,7 +84,11 @@ function normalize(raw: any): Timetable {
     const arr = Array.isArray(raw?.[d]) ? raw[d] : (Array.isArray(raw?.[String(d)]) ? raw[String(d)] : [])
     out[String(d)] = SLOTS.map((_, i) => {
       const v = arr[i]
-      return v === undefined || v === null || v === '' ? null : String(v)
+      // 不要把对象、数组或纯空白转换成看似有效的课程 ID；那会让课表错误地
+      // 显示已填满，并在该时段只扫描一个不存在的课程。
+      if (typeof v !== 'string' && !(typeof v === 'number' && Number.isFinite(v))) return null
+      const id = String(v).trim()
+      return id || null
     })
   }
   return out
@@ -145,8 +149,13 @@ export function saveTimetable(input: any): { ok: boolean; message: string; statu
       status,
     }
   }
+  try {
+    persist(normalized)
+  } catch (e: any) {
+    logger.warn(`课表保存失败: ${e.message}`)
+    return { ok: false, message: `课表保存失败：${e.message}；原课表未更改。`, status }
+  }
   table = normalized
-  persist()
   logger.success(`课表已保存：${status.filled}/${status.total} 格全部填完`)
   return { ok: true, message: `课表已保存（${status.filled}/${status.total} 格），扫描将严格按课表进行`, status }
 }
@@ -165,14 +174,10 @@ function getTimetableStatusOf(tb: Timetable) {
   return { total, filled, complete: emptySlots.length === 0, emptySlots }
 }
 
-function persist(): void {
-  if (!tableFile) return
-  try {
-    fs.mkdirSync(path.dirname(tableFile), { recursive: true })
-    writeFileAtomic(tableFile, JSON.stringify(table, null, 2))
-  } catch (e: any) {
-    logger.warn(`课表保存失败: ${e.message}`)
-  }
+function persist(next: Timetable): void {
+  if (!tableFile) throw new Error('课表存储尚未初始化')
+  fs.mkdirSync(path.dirname(tableFile), { recursive: true })
+  writeFileAtomic(tableFile, JSON.stringify(next, null, 2))
 }
 
 /** 当前时刻落在第几节（不在任何节次内返回 -1） */
@@ -216,8 +221,9 @@ export function coursesToScanNow(
 export function suggestFromObservations(
   observations: Record<string, number[]>,
   courseNameOf: (courseId: string) => string,
+  draft?: Timetable,
 ): { table: Timetable; filled: number; details: Array<{ weekday: number; slot: number; courseId: string; courseName: string; from: string }> } {
-  const tb = normalize(getTimetable())
+  const tb = normalize(draft === undefined ? getTimetable() : draft)
   const details: Array<{ weekday: number; slot: number; courseId: string; courseName: string; from: string }> = []
   for (const [courseId, times] of Object.entries(observations)) {
     const latest = (times || []).slice().sort((a, b) => b - a)[0]

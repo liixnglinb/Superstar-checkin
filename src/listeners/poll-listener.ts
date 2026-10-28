@@ -61,7 +61,7 @@ export class PollListener {
     }
   }
 
-  start(cookie: string, courses: CourseInfo[], shouldPoll?: (course: CourseInfo) => boolean) {
+  start(cookie: string | (() => string), courses: CourseInfo[], shouldPoll?: (course: CourseInfo) => boolean) {
     this.shouldPoll = shouldPoll || null
     logger.info(`轮询监听已启动, 间隔 ${this.interval / 1000}s, 监控 ${courses.length} 门课程`)
 
@@ -72,11 +72,15 @@ export class PollListener {
         // 运行时过滤：控制台关掉的课、已结课、当前不在签到时段内的课都不发请求
         if (this.shouldPoll && !this.shouldPoll(course)) continue
         try {
-          const activities = await this.fetchWithRetry(cookie, course)
+          const currentCookie = typeof cookie === 'function' ? cookie() : cookie
+          if (!currentCookie) throw new Error('账号尚未登录')
+          const activities = await this.fetchWithRetry(currentCookie, course)
+          if (!this.running || (this.shouldPoll && !this.shouldPoll(course))) continue
 
           this.healthHandler?.(course.courseId, true)
 
           for (const act of activities) {
+            if (!this.running || (this.shouldPoll && !this.shouldPoll(course))) break
             // 只处理签到活动（activeType=2 或 activeType=0 但名字含"签到"）
             const isCheckin = act.activeType === 2 ||
               (act.activeType === 0 && act.name?.includes('签到'))
